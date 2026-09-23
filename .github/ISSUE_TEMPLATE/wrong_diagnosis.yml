@@ -1,0 +1,31 @@
+name: Wrong diagnosis
+description: The investigator reached the wrong root cause, or asked for a poor measurement
+labels: ["diagnosis"]
+body:
+  - type: input
+    id: truth
+    attributes:
+      label: What the fault actually was
+      placeholder: "looseness, severity 0.35, rig, 1798 rpm"
+    validations:
+      required: true
+  - type: input
+    id: said
+    attributes:
+      label: What it concluded
+      placeholder: "misalignment at 71%"
+    validations:
+      required: true
+  - type: textarea
+    id: transcript
+    attributes:
+      label: Transcript and ledger
+      description: Paste the output of `hypengine demo`, or the investigation id from the API.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: guess
+    attributes:
+      label: Where you think it went wrong
+      placeholder: "The half-order prediction for looseness looks too high compared with the rig."

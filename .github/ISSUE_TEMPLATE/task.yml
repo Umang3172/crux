@@ -1,0 +1,31 @@
+name: Task
+description: A piece of work from docs/TASKS.md
+labels: ["task"]
+body:
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      options:
+        - A · Physics & investigation
+        - B · Agent & coach
+        - C · Rig, API & UI
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What is true when this is done
+      placeholder: "The rig streams real vibration into an Observation and the demo runs on it."
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: The test that proves it
+      placeholder: "tests/test_ingest.py: a posted batch becomes an Observation with the right sample rate."
+  - type: input
+    id: deadline
+    attributes:
+      label: Needed by
+      placeholder: "5 Oct (kill-switch date)"

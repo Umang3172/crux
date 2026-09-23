@@ -1,0 +1,35 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# secrets and local config
+.env
+.env.local
+*.key
+service-account*.json
+
+# data: never commit datasets or captures
+data/cwru/*
+!data/cwru/.gitkeep
+data/rig/*
+!data/rig/.gitkeep
+*.mat
+*.npz
+captures/
+
+# node
+node_modules/
+web/dist/
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/
