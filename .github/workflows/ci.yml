@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 # No secrets here, on purpose: if a change breaks the offline path, it breaks CI.
 jobs:
   test:
@@ -33,3 +36,58 @@ jobs:
         run: |
           hypengine demo --fault outer_race --no-verify
           hypengine demo --fault misalignment --no-verify
+
+  web:
+    # The deployed link is a submission requirement, and the image builds the UI
+    # inside itself. A UI that does not compile is a broken deploy discovered on
+    # the day, so it fails here instead.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+        working-directory: web
+
+      - name: Build
+        run: npm run build
+        working-directory: web
+
+  image:
+    # Builds the real Dockerfile, so a broken lockfile or a missing file in the
+    # build context is caught here rather than in Cloud Build. Nothing is pushed
+    # and no cloud credentials are involved.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: hypothesis-engine:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: It serves the UI and the API
+        run: |
+          docker run -d --name hypengine -p 8080:8080 hypothesis-engine:ci
+          for _ in $(seq 1 45); do
+            if curl -sf http://localhost:8080/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:8080/health
+          curl -sf http://localhost:8080/ | grep -q '<div id="root">'
+          curl -sf -X POST http://localhost:8080/replay \
+            -H 'content-type: application/json' \
+            -d '{"fault":"looseness","severity":0.35}' | grep -q '"root_cause"'
+          docker rm -f hypengine

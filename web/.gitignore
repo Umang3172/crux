@@ -1,0 +1,7 @@
+# Build output and incremental state. package-lock.json is committed on purpose:
+# the image installs with `npm ci`, so the lockfile is what makes the UI in a
+# deployed container the UI the team tested.
+node_modules/
+dist/
+*.tsbuildinfo
+.env.local

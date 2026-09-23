@@ -1,0 +1,98 @@
+name: Deploy
+
+# Deploys the container to Cloud Run on every push to main.
+#
+# It is a deliberate no-op until somebody sets the four repository secrets
+# below. A fork, a clone, or a teammate who has never touched Google Cloud gets
+# a green check and a note saying it was skipped — never a red X for something
+# they cannot fix. Nothing here is required for CI to pass; that is ci.yml.
+#
+# Create these under Settings → Secrets and variables → Actions → Secrets:
+#
+#   GCP_PROJECT_ID                  e.g. mechnova-hypothesis
+#   GCP_WORKLOAD_IDENTITY_PROVIDER  the full resource name, from deploy/README.md:
+#                                   projects/<NUMBER>/locations/global/
+#                                   workloadIdentityPools/github/providers/github
+#   GCP_SERVICE_ACCOUNT             hypothesis-deployer@<PROJECT_ID>.iam.gserviceaccount.com
+#   GCP_REGION                      optional; asia-south1 if unset
+#
+# There is no service-account JSON key anywhere in this file, and there must
+# never be one: authentication is Workload Identity Federation, so GitHub mints
+# a short-lived token per run and Google trusts it because of who ran it.
+# deploy/README.md has the one-time setup.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys race to the same service.
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Is deployment configured?
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      # Secrets cannot be read from a job-level `if`, so they are inspected here
+      # and the answer is passed on as an output. Only emptiness is ever
+      # reported; no value is printed.
+      - id: check
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$PROJECT_ID" ] && [ -n "$PROVIDER" ] && [ -n "$SERVICE_ACCOUNT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "### Deploy skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Cloud Run deployment is not configured for this repository." >> "$GITHUB_STEP_SUMMARY"
+            echo "See \`deploy/README.md\` to set it up, or deploy by hand with \`make deploy\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy:
+    name: Build and deploy to Cloud Run
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # the whole point: mint an OIDC token for Google to verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and deploy
+        env:
+          REGION: ${{ secrets.GCP_REGION || 'asia-south1' }}
+        run: |
+          gcloud builds submit --config cloudbuild.yaml \
+            --substitutions "_REGION=${REGION}" \
+            --service-account "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/${{ secrets.GCP_SERVICE_ACCOUNT }}"
+
+      - name: The link
+        env:
+          REGION: ${{ secrets.GCP_REGION || 'asia-south1' }}
+        run: |
+          URL="$(gcloud run services describe hypothesis-engine \
+            --region "$REGION" --format 'value(status.url)')"
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,88 @@
+# Build the image and deploy it to Cloud Run, in one submission.
+#
+#   gcloud builds submit --config cloudbuild.yaml
+#
+# Everything project-specific is a substitution with a working default, so the
+# command above needs no arguments on a project set up the way docs/DEPLOY.md
+# describes. Override any of them with --substitutions _NAME=value.
+
+substitutions:
+  _REGION: asia-south1 # Mumbai: closest region to the team and the rig
+  _SERVICE: hypothesis-engine
+  _REPO: containers # Artifact Registry repository, created once
+  # name=secret:version pairs. GOOGLE_API_KEY is what agents/factory.py reads to
+  # decide whether Gemini narration is live; the secret itself is called
+  # gemini-api-key. Empty deploys the offline path, which is fully supported
+  # (docs/DECISIONS.md, ADR-0002) — the UI just reports offline-template.
+  _SECRETS: GOOGLE_API_KEY=gemini-api-key:latest
+  _GEMINI_MODEL: gemini-3.1-pro
+  # 0 costs nothing and cold-starts in a few seconds. Set to 1 for the judging
+  # window so the first person to open the link never waits.
+  _MIN_INSTANCES: "0"
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+
+steps:
+  # Pull the previous image so the node and uv layers can be reused. First build
+  # in a fresh project has nothing to pull, which is why this cannot fail hard.
+  - id: warm-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest || true
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - .
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+
+        # Cloud Build expands ${...} itself, so a shell variable of our own is
+        # written $${...} to survive to bash. --set-secrets with an empty value
+        # is an error, so the flag only appears when there is one to mount: a
+        # key-less deploy is a supported configuration, not a broken one.
+        SECRET_FLAG=""
+        if [ -n "${_SECRETS}" ]; then
+          SECRET_FLAG="--set-secrets=${_SECRETS}"
+        fi
+
+        gcloud run deploy "${_SERVICE}" \
+          --image "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}" \
+          --region "${_REGION}" \
+          --platform managed \
+          --allow-unauthenticated \
+          --port 8080 \
+          --cpu 1 \
+          --memory 1Gi \
+          --timeout 120s \
+          --min-instances "${_MIN_INSTANCES}" \
+          --max-instances 4 \
+          --concurrency 8 \
+          --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL}" \
+          $${SECRET_FLAG}
+
+        echo "---"
+        echo "Deployed URL (this is the submission link):"
+        gcloud run services describe "${_SERVICE}" --region "${_REGION}" \
+          --format 'value(status.url)'
+
+timeout: 1800s

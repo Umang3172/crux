@@ -1,0 +1,54 @@
+# Keep the build context small and the image reproducible. Anything the build
+# needs is copied explicitly in the Dockerfile; everything else is noise that
+# would invalidate layer caches and, worse, could smuggle a local secret or a
+# host-specific virtualenv into a published image.
+
+# host virtualenvs and caches — the image builds its own
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# the UI is built inside the image from source
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# history and CI config are not part of the runtime
+.git/
+.github/
+.gitignore
+
+# secrets and local config: never, under any circumstances
+.env
+.env.*
+*.key
+*.pem
+service-account*.json
+
+# datasets and captures stay on the machine that recorded them
+data/
+captures/
+*.mat
+*.npz
+
+# documentation, hardware and tests do not ship in the runtime image
+docs/
+firmware/
+tests/
+deploy/README.md
+*.md
+!README.md
+
+.DS_Store
+.idea/
+.vscode/

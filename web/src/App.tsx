@@ -1,148 +1,262 @@
 /**
  * The investigation view.
  *
- * Skeleton, on purpose: lane C replaces the blocks with the real thing (the
- * hypothesis constellation, real-vs-simulated spectra, the animated ledger).
- * What it already proves is the loop — start a case, watch beliefs move, read
- * the evidence.
+ * Built for the thirty seconds a judge spends on the deployed link: the page
+ * opens a case by itself, then plays the investigation back one engine state at
+ * a time — beliefs moving, the ledger growing, the moment it stops and asks a
+ * person for a measurement, the verdict and what would overturn it.
+ *
+ * Every frame is a state the API returned. Playback controls the order things
+ * are revealed in, never their values.
  */
 
-import { useEffect, useState } from "react";
-import { Investigation, health, replay } from "./api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EvidenceTest, catalogue, health } from "./api";
+import { Beliefs } from "./components/Beliefs";
+import { ConclusionCard } from "./components/Conclusion";
+import { Ledger } from "./components/Ledger";
+import { RequestCard } from "./components/RequestCard";
+import { Spectrum } from "./components/Spectrum";
+import { Phase, Step, investigate } from "./run";
 
-const FAULTS = ["imbalance", "misalignment", "looseness", "outer_race", "inner_race"];
+const FAULTS = [
+  "imbalance",
+  "misalignment",
+  "looseness",
+  "outer_race",
+  "inner_race",
+  "healthy",
+] as const;
+
+const SEVERITIES: { label: string; value: number }[] = [
+  { label: "light", value: 0.35 },
+  { label: "moderate", value: 0.6 },
+  { label: "severe", value: 1.0 },
+];
+
+/** How long each beat holds. The request is the story, so it gets the pause. */
+const DWELL: Record<Phase, number> = {
+  observe: 1500,
+  experiments: 2200,
+  request: 3200,
+  measurement: 1800,
+  conclusion: 0,
+};
+
+const CAPTIONS: Record<Phase, string> = {
+  observe: "uniform prior · nothing tested yet",
+  experiments: "after simulating every hypothesis",
+  request: "too close to call",
+  measurement: "after the measurement came back",
+  conclusion: "settled",
+};
 
 export default function App() {
   const [models, setModels] = useState<Record<string, string>>({});
-  const [inv, setInv] = useState<Investigation | null>(null);
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [tests, setTests] = useState<EvidenceTest[]>([]);
+
+  // Looseness at light severity is the case the physics cannot close on its own,
+  // so the opening run is the one that shows the agent stopping to ask a person.
+  // A bearing fault at this severity is decided by simulation alone — impressive,
+  // but it skips the part that makes this not a classifier.
+  const [fault, setFault] = useState<string>("looseness");
+  const [severity, setSeverity] = useState(0.35);
+  const [seed] = useState(1234);
+
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [cursor, setCursor] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const params = useMemo(() => ({ fault, severity, seed }), [fault, severity, seed]);
+  const ranOnce = useRef(false);
 
   useEffect(() => {
     health()
-      .then((h) => setModels(h.models))
-      .catch(() => setError("API not reachable — is `hypengine serve` running?"));
+      .then((h) => {
+        setModels(h.models);
+        setOnline(true);
+      })
+      .catch(() => setOnline(false));
+    catalogue()
+      .then(setTests)
+      .catch(() => setTests([]));
   }, []);
 
-  async function run(fault: string) {
+  const run = useCallback(async () => {
     setBusy(true);
     setError(null);
+    setPlaying(false);
     try {
-      setInv(await replay(fault));
+      const played = await investigate(params);
+      setSteps(played);
+      setCursor(0);
+      setPlaying(played.length > 1);
     } catch (e) {
-      setError(String(e));
+      setSteps([]);
+      setError(
+        `${e instanceof Error ? e.message : String(e)} — is the API up? Try GET /health.`,
+      );
     } finally {
       setBusy(false);
     }
-  }
+  }, [params]);
+
+  // Open a case on arrival. The deployed link should be telling its story
+  // before anyone decides whether to click anything.
+  useEffect(() => {
+    if (ranOnce.current) return;
+    ranOnce.current = true;
+    void run();
+  }, [run]);
+
+  const step: Step | null = steps[cursor] ?? null;
+
+  useEffect(() => {
+    if (!playing || !step) return;
+    if (cursor >= steps.length - 1) {
+      setPlaying(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setCursor((c) => c + 1), DWELL[step.phase]);
+    return () => window.clearTimeout(timer);
+  }, [playing, cursor, step, steps.length]);
+
+  const inv = step?.inv ?? null;
+  const leader = useMemo(() => {
+    if (!inv || step?.prior) return null;
+    return inv.hypotheses.reduce((a, b) => (a.posterior >= b.posterior ? a : b)).kind;
+  }, [inv, step]);
 
   return (
-    <main style={{ fontFamily: "ui-sans-serif, system-ui", padding: 32, maxWidth: 1100 }}>
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 32 }}>Hypothesis Engine</h1>
-        <p style={{ color: "#4a5157" }}>
-          MechNova · models: {Object.entries(models).map(([k, v]) => `${k}=${v}`).join(", ") || "…"}
-        </p>
+    <div className="shell">
+      <header className="topbar">
+        <span className="wordmark">Hypothesis Engine</span>
+        <span className="tagline">
+          MechNova · it argues with itself, then asks you for one measurement
+        </span>
+        <span className="models">
+          <span className={`dot${online === false ? " down" : ""}`} />
+          {online === false
+            ? "api unreachable"
+            : Object.entries(models)
+                .map(([k, v]) => `${k}=${v}`)
+                .join("  ") || "…"}
+        </span>
       </header>
 
-      <section style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-        {FAULTS.map((f) => (
-          <button key={f} onClick={() => run(f)} disabled={busy} style={button}>
-            induce {f.replace("_", " ")}
+      <div className="controls">
+        <div className="field">
+          <span className="label">Induced fault</span>
+          <div className="segmented">
+            {FAULTS.map((f) => (
+              <button
+                key={f}
+                aria-pressed={fault === f}
+                disabled={busy}
+                onClick={() => setFault(f)}
+              >
+                {f.replace("_", " ")}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <span className="label">Severity</span>
+          <div className="segmented">
+            {SEVERITIES.map((s) => (
+              <button
+                key={s.label}
+                aria-pressed={severity === s.value}
+                disabled={busy}
+                onClick={() => setSeverity(s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button className="run" onClick={() => void run()} disabled={busy}>
+          {busy ? "investigating…" : "Run an investigation"}
+        </button>
+      </div>
+
+      {error && <p className="error">{error}</p>}
+
+      {steps.length > 0 && (
+        <div className="steps" style={{ paddingBottom: 18 }}>
+          {steps.map((s, i) => (
+            <button
+              key={s.key}
+              aria-current={i === cursor}
+              className={i < cursor ? "done" : undefined}
+              onClick={() => {
+                setPlaying(false);
+                setCursor(i);
+              }}
+            >
+              {i + 1}. {s.title}
+            </button>
+          ))}
+          <button onClick={() => setPlaying((p) => !p)} disabled={cursor >= steps.length - 1}>
+            {playing ? "pause" : "play"}
           </button>
-        ))}
-      </section>
-
-      {error && <p style={{ color: "#a8420c" }}>{error}</p>}
-      {busy && <p>investigating…</p>}
-
-      {inv && (
-        <>
-          <Panel title="Transcript">
-            {inv.transcript.map((line, i) => (
-              <p key={i} style={{ margin: "6px 0" }}>
-                {line}
-              </p>
-            ))}
-          </Panel>
-
-          <Panel title="Hypotheses">
-            {inv.hypotheses.map((h) => (
-              <div key={h.kind} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ width: 150, opacity: h.rejected ? 0.45 : 1 }}>{h.label}</span>
-                <span style={{ flex: 1, background: "#e7e7e1", height: 14, borderRadius: 7 }}>
-                  <span
-                    style={{
-                      display: "block",
-                      width: `${Math.round(h.posterior * 100)}%`,
-                      height: 14,
-                      borderRadius: 7,
-                      background: h.rejected ? "#b9c4c9" : "#a8420c",
-                      transition: "width .6s",
-                    }}
-                  />
-                </span>
-                <span style={{ width: 120, textAlign: "right" }}>
-                  {(h.posterior * 100).toFixed(1)}%
-                  {h.correlation !== null && ` · r=${h.correlation.toFixed(2)}`}
-                </span>
-              </div>
-            ))}
-          </Panel>
-
-          <Panel title="Evidence ledger">
-            {inv.ledger.map((e) => (
-              <p key={e.id} style={{ margin: "4px 0", fontFamily: "ui-monospace, monospace" }}>
-                {e.id} · {e.statement}
-                {e.value !== null && ` = ${e.value}${e.unit}`} · <i>{e.source}</i>
-              </p>
-            ))}
-          </Panel>
-
-          {inv.conclusion && (
-            <Panel title="Conclusion">
-              <p style={{ fontSize: 20, fontWeight: 600 }}>
-                {inv.conclusion.root_cause.replace("_", " ")} ·{" "}
-                {(inv.conclusion.confidence * 100).toFixed(0)}%
-              </p>
-              <p>{inv.conclusion.reasoning}</p>
-              <p>
-                <b>Action:</b> {inv.conclusion.recommended_action}
-              </p>
-              <p>
-                <b>What would change my mind:</b> {inv.conclusion.what_would_change_my_mind}
-              </p>
-            </Panel>
-          )}
-        </>
+        </div>
       )}
-    </main>
-  );
-}
 
-const button: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "1px solid #dad9d0",
-  background: "#fbfbf8",
-  cursor: "pointer",
-};
+      <div className="grid">
+        <div className="col">
+          {inv && step && (
+            <Beliefs
+              hypotheses={inv.hypotheses}
+              prior={step.prior}
+              caption={CAPTIONS[step.phase]}
+            />
+          )}
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section
-      style={{
-        border: "1px solid #dad9d0",
-        borderRadius: 16,
-        padding: 24,
-        marginBottom: 20,
-        background: "#fbfbf8",
-      }}
-    >
-      <h2 style={{ marginTop: 0, fontSize: 18, letterSpacing: 1, color: "#a8420c" }}>
-        {title.toUpperCase()}
-      </h2>
-      {children}
-    </section>
+          {inv && step && step.requestIndex !== null && (
+            <RequestCard
+              inv={inv}
+              index={step.requestIndex}
+              answered={step.answered}
+              tests={tests}
+            />
+          )}
+
+          {inv?.conclusion && step?.phase === "conclusion" && (
+            <ConclusionCard conclusion={inv.conclusion} />
+          )}
+
+          <Spectrum params={params} hypothesis={leader} />
+
+          {inv && step && (
+            <section className="panel">
+              <header>
+                <h2>What it is doing</h2>
+                <span className="note">
+                  {inv.machine.name} · {inv.rpm.toFixed(0)} rpm
+                </span>
+              </header>
+              <div className="transcript">
+                {inv.transcript.slice(0, step.transcriptUpTo).map((line, i) => (
+                  <div key={line} style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}>
+                    <span className="n">{String(i + 1).padStart(2, "0")}</span>
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <div className="col pinned">
+          <Ledger entries={inv ? inv.ledger.slice(0, step?.ledgerUpTo ?? 0) : []} />
+        </div>
+      </div>
+    </div>
   );
 }
