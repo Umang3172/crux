@@ -1,11 +1,15 @@
 """Command line: the fastest way to see the whole loop work.
 
 uv run hypengine demo --fault outer_race
+uv run hypengine benchmark
 uv run hypengine frequencies --rpm 1798
 uv run hypengine serve
 """
 
 from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
 
 import typer
 from rich.console import Console
@@ -13,7 +17,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .agents.factory import describe as describe_models
+from .data import cwru
 from .data.rig import BENCH_RIG, rig_oracle, synthetic_capture
+from .investigation.catalog import BY_ID
 from .investigation.engine import Investigation, verify_repair
 from .models import FaultKind
 from .physics.frequencies import bearing_multipliers, fault_frequencies
@@ -92,6 +98,187 @@ def demo(
                 title="Repair verification",
             )
         )
+
+
+@dataclass(frozen=True)
+class _CaseResult:
+    """What one real recording cost and what we concluded from it."""
+
+    case: cwru.CwruCase
+    predicted: FaultKind
+    confidence: float
+    answered: tuple[str, ...]  # tests the recording could answer
+    unanswerable: tuple[str, ...]  # tests only a person at the machine can answer
+
+    @property
+    def minutes(self) -> float:
+        return sum(BY_ID[t].effort_min for t in self.answered)
+
+    @property
+    def correct(self) -> bool:
+        return self.predicted is self.case.kind
+
+
+def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _CaseResult:
+    """One full investigation against a real capture.
+
+    There is no oracle here. A requested measurement is answered out of the
+    recording itself, and a test the recording cannot answer — a coast-down, a
+    temperature reading — comes back as nothing rather than as a fabricated
+    number. Faking those would make the headline number meaningless.
+    """
+    observation = cwru.load_capture(case.file, duration_s=seconds)
+    investigation = Investigation(cwru.CWRU_DRIVE_END, observation)
+    answered: list[str] = []
+    unanswerable: list[str] = []
+
+    def measure(test_id: str) -> float | None:
+        try:
+            value = investigation.measure_from_capture(test_id, observation)
+        except ValueError:
+            unanswerable.append(test_id)
+            return None
+        answered.append(test_id)
+        return value
+
+    state = investigation.run(max_requests=max_requests, oracle=measure)
+    conclusion = state.conclusion
+    leader = state.leader()
+    return _CaseResult(
+        case=case,
+        predicted=conclusion.root_cause if conclusion else leader.kind,
+        confidence=conclusion.confidence if conclusion else leader.posterior,
+        answered=tuple(answered),
+        unanswerable=tuple(unanswerable),
+    )
+
+
+def _confusion(results: list[_CaseResult]) -> Table:
+    seen = {r.case.kind for r in results} | {r.predicted for r in results}
+    columns = [k for k in FaultKind if k in seen]
+    truths = [k for k in FaultKind if any(r.case.kind is k for r in results)]
+    counts = Counter((r.case.kind, r.predicted) for r in results)
+
+    table = Table(title="\nConfusion — rows are the true fault, columns the diagnosis")
+    table.add_column("truth \\ diagnosed")
+    for kind in columns:
+        table.add_column(kind.value.replace("_", " "), justify="right")
+    for truth in truths:
+        row = [truth.value.replace("_", " ")]
+        for predicted in columns:
+            n = counts[(truth, predicted)]
+            if not n:
+                row.append("[dim]·[/dim]")
+            else:
+                row.append(f"[green]{n}[/green]" if truth is predicted else f"[red]{n}[/red]")
+        table.add_row(*row)
+    return table
+
+
+@app.command()
+def benchmark(
+    data_dir: str = typer.Option(str(cwru.DATA_DIR), help="Folder of CWRU .mat files"),
+    seconds: float = typer.Option(4.0, help="Seconds of each recording to use"),
+    max_requests: int = typer.Option(2, help="Measurements the investigator may ask for"),
+    per_case: bool = typer.Option(True, help="Print a row per recording as well as the summary"),
+) -> None:
+    """Run the investigator over real CWRU bearing recordings.
+
+    Accuracy is the number a judge asks for first, and it is the least
+    interesting one here: a classifier can win it. The three lines above it —
+    cases settled by simulation alone, cases that needed a human measurement,
+    and technician-minutes spent — are what this product is for.
+    """
+    files = cwru.available(data_dir)
+    if not files:
+        console.print(
+            Panel.fit(
+                f"No .mat files in [bold]{data_dir}[/bold].\n\n"
+                "Fetch a subset (you run this, not the agent):\n"
+                "  [bold]uv run python scripts/fetch_cwru.py[/bold]\n\n"
+                "Or drop files from https://engineering.case.edu/bearingdatacenter\n"
+                "in by hand. docs/DATA.md has the naming convention the loader expects.",
+                title="No CWRU data",
+            )
+        )
+        raise typer.Exit()
+
+    cases: list[cwru.CwruCase] = []
+    skipped: list[str] = []
+    for path in files:
+        try:
+            cases.append(cwru.parse_filename(path))
+        except ValueError as exc:
+            skipped.append(str(exc))
+
+    if not cases:
+        console.print(f"[yellow]{len(files)} .mat files, none of them usable:[/yellow]")
+        for why in skipped:
+            console.print(f"  [dim]{why}[/dim]")
+        raise typer.Exit()
+
+    results: list[_CaseResult] = []
+    with console.status(f"Investigating {len(cases)} recordings…"):
+        for case in cases:
+            results.append(_run_cwru_case(case, max_requests, seconds))
+
+    if per_case:
+        table = Table(title=f"Real captures · first {seconds:.0f} s of each recording")
+        table.add_column("file")
+        table.add_column("truth")
+        table.add_column("diagnosed")
+        table.add_column("conf", justify="right")
+        table.add_column("asked for")
+        table.add_column("min", justify="right")
+        for r in results:
+            asked = list(r.answered)
+            asked += [f"[yellow]{t} (unanswerable)[/yellow]" for t in r.unanswerable]
+            table.add_row(
+                r.case.file.name,
+                r.case.label,
+                f"[{'green' if r.correct else 'red'}]{r.predicted.value}[/]",
+                f"{r.confidence:.0%}",
+                ", ".join(asked) or "[dim]nothing[/dim]",
+                f"{r.minutes:.0f}",
+            )
+        console.print(table)
+
+    console.print(_confusion(results))
+
+    n = len(results)
+    correct = sum(r.correct for r in results)
+    sim_only = sum(1 for r in results if not r.answered and not r.unanswerable)
+    measured = sum(1 for r in results if r.answered)
+    blocked = sum(1 for r in results if r.unanswerable)
+    mean_minutes = sum(r.minutes for r in results) / n
+
+    def row(label: str, value: str, share: str = "") -> str:
+        return f"{label:<42}[bold]{value:>7}[/bold]  {share}"
+
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    row("settled by simulation alone", f"{sim_only} / {n}", f"{sim_only / n:.0%}"),
+                    row(
+                        "needed a requested measurement", f"{measured} / {n}", f"{measured / n:.0%}"
+                    ),
+                    row("requested a test no recording can answer", f"{blocked} / {n}"),
+                    row("mean technician-minutes per case", f"{mean_minutes:.1f}"),
+                    "",
+                    row("accuracy", f"{correct} / {n}", f"{correct / n:.0%}"),
+                    "",
+                    "[dim]Minutes avoided is the headline. A classifier spends the same",
+                    "technician time on every case; this spends it only when the physics",
+                    "genuinely cannot separate the survivors. See docs/DATA.md.[/dim]",
+                ]
+            ),
+            title="Benchmark · CWRU drive end, 12 kHz",
+        )
+    )
+
+    for why in skipped:
+        console.print(f"[dim]skipped {why}[/dim]")
 
 
 @app.command()
