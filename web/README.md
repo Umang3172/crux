@@ -61,4 +61,4 @@ as such on screen.
 - **The coached measurement** — the phone view, ER 2 watching sensor placement,
   chips turning green. Gated on ADR-0005 and the 5 October kill switch.
 - **Live rig** — this view only replays synthetic captures. Pointing it at
-  `/ingest` is lane C's week-3 item.
+  `/ingest` is a week-3 item in `docs/TASKS.md`.
