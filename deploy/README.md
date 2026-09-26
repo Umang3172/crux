@@ -31,7 +31,7 @@ Run this once, as a project owner, after the §1 block in `docs/DEPLOY.md`:
 
 ```bash
 export PROJECT_ID="your-project-id"
-export GITHUB_REPO="MechNova/hypothesis-engine"   # owner/name, exactly
+export GITHUB_REPO="Umang3172/crux"   # owner/name, exactly
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 DEPLOYER="hypothesis-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 
