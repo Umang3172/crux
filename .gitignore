@@ -21,6 +21,8 @@ data/cwru/*
 !data/cwru/.gitkeep
 data/rig/*
 !data/rig/.gitkeep
+data/ims/
+data/xjtu/
 *.mat
 *.npz
 captures/
@@ -33,3 +35,4 @@ web/dist/
 .DS_Store
 .idea/
 .vscode/
+data/forecast/
