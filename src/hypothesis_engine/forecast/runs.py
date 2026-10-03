@@ -68,21 +68,35 @@ XJTU_BEARINGS: dict[str, tuple[int, str]] = {
     "Bearing3_5": (114, "outer race"),
 }
 
-#: IMS sampling: 20 kHz, 1 s snapshots every 10 minutes (arXiv 1703.06272). The
-#: interval is read from the file names rather than assumed, because the first
-#: test's opening hours were logged more often.
+# Every IMS figure below is from "Readme Document for IMS Bearing Data.pdf",
+# shipped inside IMS.zip (NASA PCoE), read 3 Oct 2026.
+
+#: 20,480 points per 1 s snapshot, sampled at 20 kHz.
 IMS_FS_HZ = 20_000.0
 
-#: Which IMS bearings ran to failure, as stated in the readme inside IMS.zip.
-#: NOT yet checked against that file in this repo. Confirm it on first download
-#: before quoting any IMS number (docs/FORECAST.md). Bearings missing from this
-#: map survived their test, so their true failure time is unknown (censored)
-#: and they are never scored.
+#: Snapshots every 10 minutes (the first 43 of test 1 every 5). "Larger intervals
+#: of time stamps indicate resumption of the experiment in the next working day",
+#: so a longer gap is a pause, not running time: it counts as one interval. Test 1
+#: has 24 such gaps adding about 20 days of calendar time to 14 days of running.
+IMS_INTERVAL_MIN = 10.0
+
+#: Bearings that failed: test 1 inner race in bearing 3 and roller element in
+#: bearing 4, test 2 outer race in bearing 1, test 3 outer race in bearing 3.
+#: Bearings missing from this map survived their test, so their true failure
+#: time is unknown (censored) and they are never scored.
 IMS_FAILURES: dict[int, dict[int, str]] = {
     1: {3: "inner race", 4: "roller"},
     2: {1: "outer race"},
     3: {3: "outer race"},
 }
+
+#: Files per test in the archive. Tests 1 and 2 match the readme. Test 3 does
+#: not: it unpacks to `4th_test/txt` with 6,324 files running to 18 Apr 2004,
+#: while the readme stops at 4 Apr 2004 19:01:57 (file 4,448). Bearing 3's RMS is
+#: flat at about 0.07 g up to that date and only rises, roughly elevenfold, on
+#: 15-18 Apr, so the outer-race failure the readme describes is in the full
+#: archive and all of it is used.
+IMS_FILES: dict[int, int] = {1: 2156, 2: 984, 3: 6324}
 
 _XJTU_CONDITION = re.compile(r"(?P<hz>\d+(?:\.\d+)?)Hz(?P<kn>\d+(?:\.\d+)?)kN", re.IGNORECASE)
 _XJTU_BEARING = re.compile(r"^Bearing\d+_\d+$", re.IGNORECASE)
@@ -110,17 +124,18 @@ class Run:
 
     def load(self, i: int) -> np.ndarray:
         """The i-th snapshot as a 1-D float array, mean removed."""
-        x = _read_column(self.files[i], self.channel)
+        x = read_table(self.files[i])[:, self.channel]
         return x - float(np.mean(x))
 
 
-def _read_column(path: Path, column: int) -> np.ndarray:
+def read_table(path: Path) -> np.ndarray:
+    """Every column of one snapshot file, as a 2-D array (rows = samples)."""
     with path.open() as fh:
         first = fh.readline()
     # XJTU-SY CSVs start with a header row; IMS files are bare numbers.
     skip = 0 if re.match(r"^\s*[-+0-9.]", first) else 1
     delimiter = "," if "," in first else None
-    return np.loadtxt(path, delimiter=delimiter, skiprows=skip, usecols=(column,), dtype=float)
+    return np.loadtxt(path, delimiter=delimiter, skiprows=skip, dtype=float, ndmin=2)
 
 
 def xjtu_runs(root: str | Path | None = None, channel: int = 0) -> list[Run]:
@@ -171,7 +186,8 @@ def ims_runs(root: str | Path | None = None, include_censored: bool = False) -> 
 
     Each test folder holds one ASCII file per snapshot, named by its timestamp
     (`2003.10.22.12.06.24`). Test 1 recorded two accelerometers per bearing and
-    tests 2 and 3 one, so bearing b sits in column 2(b-1) or b-1.
+    tests 2 and 3 one, so bearing b sits in column 2(b-1) or b-1. Times are
+    running minutes: pauses between working days are not counted.
     """
     base = Path(root) if root is not None else IMS_DIR
     if not base.exists():
@@ -184,7 +200,11 @@ def ims_runs(root: str | Path | None = None, include_censored: bool = False) -> 
             continue
         stamped.sort(key=lambda f: f.name)
         stamps = [datetime.strptime(f.name, "%Y.%m.%d.%H.%M.%S") for f in stamped]
-        times = tuple((s - stamps[0]).total_seconds() / 60.0 for s in stamps)
+        gaps = [
+            min((b - a).total_seconds() / 60.0, IMS_INTERVAL_MIN)
+            for a, b in zip(stamps, stamps[1:], strict=False)
+        ]
+        times = tuple(float(v) for v in np.concatenate([[0.0], np.cumsum(gaps)]))
         for bearing in range(1, 5):
             mode = IMS_FAILURES.get(test, {}).get(bearing, "")
             if not mode and not include_censored:

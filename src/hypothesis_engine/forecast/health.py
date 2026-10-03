@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .runs import Run
+from .runs import Run, read_table
 
 #: Frequency bands whose share of the energy is tracked. Chosen, not physical
 #: constants: below 1 kHz holds shaft-order content (1x, 2x, misalignment), and
@@ -102,6 +102,21 @@ class RunHealth:
         )
 
 
+#: A snapshot below this share of the healthy RMS means the shaft had stopped.
+#: Chosen: IMS tests 2 and 3 end with one or two files at about 1% of the normal
+#: level, recorded after the machine was switched off.
+STOPPED_FRACTION = 0.1
+
+
+def trim_stopped(h: RunHealth, n_baseline: int = 10) -> RunHealth:
+    """Drop trailing snapshots taken after the machine stopped; failure is the last live one."""
+    floor = STOPPED_FRACTION * float(np.mean(h.rms[:n_baseline]))
+    n = len(h)
+    while n > n_baseline and h.rms[n - 1] < floor:
+        n -= 1
+    return h if n == len(h) else h.prefix(n)
+
+
 def from_snapshots(meta: Run, t: Iterable[float], snaps: Iterable[SnapshotHealth]) -> RunHealth:
     snaps = list(snaps)
     return RunHealth(
@@ -127,6 +142,26 @@ def build(run: Run, progress: Callable[[int, int], None] | None = None) -> RunHe
         if progress is not None:
             progress(i + 1, len(run))
     return from_snapshots(run, run.times_min, snaps)
+
+
+def build_many(
+    runs_: Iterable[Run], progress: Callable[[str, int, int], None] | None = None
+) -> list[RunHealth]:
+    """Like `build`, but runs that share files (IMS bearings on one shaft) read each file once."""
+    groups: dict[tuple[Path, ...], list[Run]] = {}
+    for r in runs_:
+        groups.setdefault(r.files, []).append(r)
+    out = []
+    for files, members in groups.items():
+        snaps: dict[str, list[SnapshotHealth]] = {r.run_id: [] for r in members}
+        for i, f in enumerate(files):
+            table = read_table(f)
+            for r in members:
+                snaps[r.run_id].append(snapshot_health(table[:, r.channel], r.fs))
+            if progress is not None:
+                progress(members[0].run_id, i + 1, len(files))
+        out.extend(from_snapshots(r, r.times_min, snaps[r.run_id]) for r in members)
+    return out
 
 
 _COLUMNS = [

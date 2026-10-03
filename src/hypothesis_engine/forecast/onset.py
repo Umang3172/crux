@@ -24,9 +24,12 @@ BASELINE_SNAPSHOTS = 10
 #: time per snapshot (one-sided Gaussian tail).
 SIGMA_K = 3.0
 
-#: A run whose baseline is unusually quiet would alarm on a trivial wobble, so
-#: the level must also rise by this fraction. Chosen.
-MIN_RISE = 0.2
+#: The level must also at least double (+6 dB). Set on IMS, the development set:
+#: its healthy bearings drift up to about 25% between restarts (test 1, bearing 1,
+#: session medians 0.088 to 0.113 g, a bearing that never failed), so the first
+#: choice of 20% fired on restarts, not on wear. Fixed on 3 Oct 2026, before any
+#: XJTU-SY file was opened.
+MIN_RISE = 1.0
 
 #: Consecutive snapshots above the limit before the alarm fires. Chosen: with
 #: three, isolated noise crossings (0.13% each) almost never chain together.

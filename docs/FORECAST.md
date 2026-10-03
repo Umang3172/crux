@@ -32,10 +32,30 @@ engine, never reads or writes a belief, and is not part of the physics layer
 
 Both folders are git-ignored. Nothing in the code repo downloads anything.
 
-**Before quoting any IMS number**, open the readme inside IMS.zip and check
-`IMS_FAILURES` and the channel mapping in `forecast/runs.py` against it. They
-are written from the commonly cited description and have not yet been checked
-against the file.
+IMS.zip holds three `.rar` archives and the readme PDF; `bsdtar -xf <file>.rar`
+(built into macOS) unpacks them. `IMS_FAILURES`, the channel mapping and the
+file counts were checked against that readme on 3 Oct 2026.
+
+### What the IMS files hold that the readme does not say
+
+- **Pauses.** Test 1 spans 34.5 calendar days but only about 14 days of
+  running: the readme says longer gaps mean the test resumed the next working
+  day. Times are running minutes; a pause counts as one 10-minute interval.
+- **Snapshots after the stop.** Tests 2 and 3 end with files at about 1% of the
+  normal level, recorded after the machine was off. `trim_stopped()` drops them,
+  so failure is the last live snapshot.
+- **Test 3 is longer than documented.** The readme says 4,448 files ending
+  4 Apr 2004; the archive has 6,324 ending 18 Apr. Bearing 3 is flat at about
+  0.07 g through 4 Apr and only rises, roughly elevenfold, on 15-18 Apr, so the
+  documented failure is in the full archive. All of it is used.
+
+## Development and test sets
+
+IMS was opened first and used to set the watcher (the restart drift that moved
+`MIN_RISE` from 20% to a doubling) and the stop rule. That makes IMS a
+development set: its scores are not evidence. Every rule was fixed on
+3 Oct 2026 before any XJTU-SY file was opened; XJTU-SY, held out one bearing at
+a time, is the test.
 
 ## Run it
 
@@ -72,10 +92,13 @@ A learned model is only worth shipping if it beats both `average-life` and
 | `XJTU_FS_HZ`, `XJTU_INTERVAL_MIN` | 25.6 kHz, 1 min (1.28 s snapshots) | biaowang.tech/xjtu-sy-bearing-datasets (dataset authors, read 3 Oct 2026) |
 | `XJTU_BEARING` | LDK UER204: 8 balls, 7.92 mm, 34.55 mm mean diameter, 0 deg | same page, bearing table |
 | `XJTU_BEARINGS` | files and failed element per bearing | same page, dataset table. `test_real_xjtu_download_is_complete` checks a download against it |
-| `IMS_FS_HZ` | 20 kHz (1 s snapshots, every 10 min) | arXiv 1703.06272 (secondary); interval read from file names |
+| `IMS_FS_HZ`, `IMS_INTERVAL_MIN` | 20 kHz, 20,480-point snapshots every 10 min | IMS readme (inside IMS.zip) |
+| `IMS_FAILURES`, `IMS_FILES` | which bearings failed; files per test | IMS readme; test 3 count from the archive (see above) |
 | `DANGER_FACTOR` | 10x the largest healthy amplitude | XJTU-SY failure definition (Wang et al. 2020, restated in PMC9919518; secondary). Applied to IMS for consistency; not IMS's own criterion |
 | `SIGMA_K` | 3 | Shewhart control limit |
-| `BASELINE_SNAPSHOTS`, `MIN_RISE`, `CONSECUTIVE` | 10, 20%, 3 | chosen; see `onset.py` |
+| `BASELINE_SNAPSHOTS`, `CONSECUTIVE` | 10, 3 | chosen; see `onset.py` |
+| `MIN_RISE` | the level doubles | set on IMS (development set): healthy bearings drift up to about 25% between restarts |
+| `STOPPED_FRACTION` | 10% of healthy RMS | chosen; IMS stop files sit near 1% |
 | `TREND_WINDOW` | 15 snapshots | chosen |
 | `BANDS_HZ` | 0–1, 1–3, 3–6, 6–10 kHz | chosen; 10 kHz is the IMS Nyquist limit |
 | GBM settings | 300 trees, rate 0.05, 15 leaves, 20 per leaf | chosen once, not tuned on held-out bearings |
@@ -85,8 +108,13 @@ A learned model is only worth shipping if it beats both `average-life` and
 - XJTU-SY bearings were worn out on purpose in hours. Minutes learned there do
   not carry over to a plant where wear takes months; only unit-free quantities
   (the residual model, the trend) can, and the IMS test checks that.
-- IMS tests did not stop at the 10x line, so the trend aims at a line those
-  bearings may never have reached.
+- IMS tests did not stop at the 10x line: no IMS bearing's peak reaches it, so
+  the trend aims at a line those bearings never crossed.
+- On a shared shaft, a failing bearing shakes its neighbours: on IMS the watcher
+  also fires on healthy neighbours, always after the failing bearing.
+- RMS is a late signal for some faults. On IMS test 1 the inner-race bearing's
+  kurtosis rose from about 3.7 to over 7 roughly three days before its RMS
+  doubled. The watcher does not use kurtosis yet.
 - IMS bearings that survived their test (censored) are never scored.
 - One accelerometer per bearing: horizontal on XJTU-SY, the first channel on IMS.
 - XJTU-SY includes two cage failures and two bearings with several damaged

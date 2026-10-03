@@ -24,6 +24,7 @@ from hypothesis_engine.forecast.models import (
     AverageLife,
     QuantileGBM,
     TrendExtrapolation,
+    onset_of,
 )
 
 OUT = runs.DATA_ROOT / "forecast"
@@ -42,11 +43,13 @@ def _table(name: str) -> None:
     if not found:
         print(f"{name}: nothing under {runs.XJTU_DIR if name == 'xjtu' else runs.IMS_DIR}")
         return
-    built = []
-    for k, run in enumerate(found, 1):
-        print(f"{name} {k}/{len(found)} {run.run_id}: {len(run)} snapshots", flush=True)
-        built.append(health.build(run))
-    health.save(built, TABLES[name])
+    print(f"{name}: {len(found)} bearings", flush=True)
+
+    def progress(run_id: str, i: int, n: int) -> None:
+        if i == n or i % 500 == 0:
+            print(f"  {run_id}: {i}/{n} snapshots", flush=True)
+
+    health.save(health.build_many(found, progress), TABLES[name])
     print(f"wrote {TABLES[name]}")
 
 
@@ -62,43 +65,69 @@ def _fmt(v: float | None, pct: bool = False) -> str:
     return f"{v:.0%}" if pct else f"{v:.2f}"
 
 
+def _load(name: str) -> list[health.RunHealth]:
+    """A health table with snapshots taken after the machine stopped removed."""
+    return [health.trim_stopped(h) for h in health.load(TABLES[name])]
+
+
+def _watcher_lines(runs_: list[health.RunHealth]) -> list[str]:
+    lines = [
+        "| bearing | outcome | ran (h) | watcher fired at (h) | warning before the end (h) |",
+        "|---|---|---|---|---|",
+    ]
+    for h in sorted(runs_, key=lambda h: h.run_id):
+        o = onset_of(h)
+        fired = f"{h.t[o] / 60:.1f}" if o is not None else "never"
+        lead = f"{(h.t_end - h.t[o]) / 60:.1f}" if o is not None else "-"
+        outcome = f"failed: {h.failure_mode}" if h.failed else "survived the test"
+        lines.append(f"| {h.run_id} | {outcome} | {h.t_end / 60:.1f} | {fired} | {lead} |")
+    return lines
+
+
 def cmd_evaluate(args: argparse.Namespace) -> int:
-    if not TABLES["xjtu"].exists():
-        print("no XJTU-SY health table: run `table` first", file=sys.stderr)
+    name = args.dataset
+    if not TABLES[name].exists():
+        print(f"no {name} health table: run `table --dataset {name}` first", file=sys.stderr)
         return 1
-    xjtu = health.load(TABLES["xjtu"])
-    ims = [h for h in health.load(TABLES["ims"]) if h.failed] if TABLES["ims"].exists() else []
+    every = _load(name)
+    scored = [h for h in every if h.failed]
+    other = "ims" if name == "xjtu" else None
+    test = [h for h in _load(other) if h.failed] if other and TABLES[other].exists() else []
     report: dict = {
         "generated": datetime.now(UTC).isoformat(timespec="seconds"),
-        "xjtu_runs": len(xjtu),
-        "ims_runs": len(ims),
+        "dataset": name,
+        "bearings": len(every),
+        "failed_bearings": len(scored),
         "leave_one_out": {},
         "transfer_to_ims": {},
     }
     lines = [
-        "| method | split | bearings scored | median error / life after onset | inside p10-p90 (aim 80%) | p10 too late |",
+        f"Leave one bearing out on {name} ({len(scored)} failed bearings)",
+        "",
+        "| method | split | bearings scored | median error / life after alarm | inside p10-p90 (aim 80%) | p10 too late |",
         "|---|---|---|---|---|---|",
     ]
-    for name, make in METHODS.items():
-        loo = leave_one_out(xjtu, make)
+    for method, make in METHODS.items():
+        loo = leave_one_out(scored, make)
         s = summarise(loo)
-        report["leave_one_out"][name] = {"summary": s.__dict__, "runs": as_records(loo)}
+        report["leave_one_out"][method] = {"summary": s.__dict__, "runs": as_records(loo)}
         lines.append(
-            f"| {name} | XJTU-SY, one bearing held out | {s.runs_scored} | {_fmt(s.norm_error)} | {_fmt(s.coverage, True)} | {_fmt(s.late, True)} |"
+            f"| {method} | {name}, one bearing held out | {s.runs_scored} | {_fmt(s.norm_error)} | {_fmt(s.coverage, True)} | {_fmt(s.late, True)} |"
         )
-        if ims:
-            tr = transfer(xjtu, ims, make)
+        if test:
+            tr = transfer(scored, test, make)
             t = summarise(tr)
-            report["transfer_to_ims"][name] = {"summary": t.__dict__, "runs": as_records(tr)}
+            report["transfer_to_ims"][method] = {"summary": t.__dict__, "runs": as_records(tr)}
             lines.append(
-                f"| {name} | trained on XJTU-SY, tested on IMS | {t.runs_scored} | {_fmt(t.norm_error)} | {_fmt(t.coverage, True)} | {_fmt(t.late, True)} |"
+                f"| {method} | trained on {name}, tested on IMS | {t.runs_scored} | {_fmt(t.norm_error)} | {_fmt(t.coverage, True)} | {_fmt(t.late, True)} |"
             )
+    lines += ["", f"Watcher on every {name} bearing (running hours)", "", *_watcher_lines(every)]
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "results.json").write_text(json.dumps(report, indent=2))
-    table = "\n".join(lines)
-    (OUT / "results.md").write_text(table + "\n")
-    print(table)
-    print(f"\nwrote {OUT / 'results.json'} and {OUT / 'results.md'}")
+    (OUT / f"results_{name}.json").write_text(json.dumps(report, indent=2))
+    text = "\n".join(lines)
+    (OUT / f"results_{name}.md").write_text(text + "\n")
+    print(text)
+    print(f"\nwrote {OUT / f'results_{name}.json'} and {OUT / f'results_{name}.md'}")
     return 0
 
 
@@ -107,7 +136,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         print("no XJTU-SY health table: run `table` first", file=sys.stderr)
         return 1
     model = QuantileGBM(args.target)
-    model.fit(health.load(TABLES["xjtu"]))
+    model.fit(_load("xjtu"))
     model.save(DEFAULT_MODEL)
     print(f"wrote {DEFAULT_MODEL} ({model.name})")
     return 0
@@ -122,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--dataset", choices=["xjtu", "ims", "all"], default="all")
     t.set_defaults(func=cmd_table)
     e = sub.add_parser("evaluate", help="compare every forecaster on held-out bearings")
+    e.add_argument("--dataset", choices=["xjtu", "ims"], default="xjtu")
     e.set_defaults(func=cmd_evaluate)
     tr = sub.add_parser("train", help="fit the shipped model on all of XJTU-SY")
     tr.add_argument("--target", choices=["direct", "residual"], default="residual")

@@ -78,7 +78,7 @@ def test_gaussian_noise_has_kurtosis_three_and_spread_bands() -> None:
 
 
 def test_watcher_fires_on_a_step_and_only_with_hindsight_it_had() -> None:
-    hi = np.r_[np.ones(50), 2.0 * np.ones(50)] * (
+    hi = np.r_[np.ones(50), 3.0 * np.ones(50)] * (
         1 + 0.01 * np.random.default_rng(2).standard_normal(100)
     )
     onset = detect_onset(hi)
@@ -260,3 +260,50 @@ def test_xjtu_bearing_fault_multipliers_follow_from_its_geometry() -> None:
     m = bearing_multipliers(runs.XJTU_BEARING)
     assert m["bpfo"] == pytest.approx(4 * (1 - 7.92 / 34.55))  # about 3.08 x shaft speed
     assert m["bpfi"] == pytest.approx(4 * (1 + 7.92 / 34.55))
+
+
+def _ims_folder(root, name: str, stamps: list[str], n_cols: int = 4, rows: int = 64) -> None:
+    folder = root / name
+    folder.mkdir(parents=True)
+    rng = np.random.default_rng(len(stamps))
+    for stamp in stamps:
+        np.savetxt(folder / stamp, rng.standard_normal((rows, n_cols)), delimiter="\t")
+
+
+def test_ims_overnight_pause_is_not_running_time(tmp_path) -> None:
+    _ims_folder(
+        tmp_path, "2nd_test", ["2004.02.12.10.00.00", "2004.02.12.10.10.00", "2004.02.13.09.00.00"]
+    )
+    (run,) = runs.ims_runs(tmp_path)
+    assert run.times_min == (0.0, 10.0, 20.0)  # the 22 h 50 min gap counts as one interval
+
+
+def test_snapshots_after_the_machine_stopped_are_dropped() -> None:
+    h = _run("stopped", life=200, onset_at=100)
+    h.rms[-2:] = 0.001
+    trimmed = health.trim_stopped(h)
+    assert len(trimmed) == len(h) - 2
+    assert health.trim_stopped(trimmed) is trimmed  # nothing left to drop
+
+
+def test_reading_shared_files_once_gives_the_same_health(tmp_path) -> None:
+    _ims_folder(
+        tmp_path, "1st_test", ["2003.10.22.12.00.00", "2003.10.22.12.10.00"], n_cols=8, rows=2048
+    )
+    found = runs.ims_runs(tmp_path, include_censored=True)
+    together = {h.run_id: h for h in health.build_many(found)}
+    for r in found:
+        alone = health.build(r)
+        assert together[r.run_id].rms == pytest.approx(alone.rms)
+        assert together[r.run_id].bands == pytest.approx(alone.bands)
+
+
+needs_ims = pytest.mark.skipif(
+    not runs.ims_runs(), reason="needs IMS in data/ims/ (docs/FORECAST.md)"
+)
+
+
+@needs_ims
+def test_real_ims_download_is_complete() -> None:
+    found = {int(r.condition.removeprefix("test")): len(r) for r in runs.ims_runs()}
+    assert found == runs.IMS_FILES
