@@ -51,7 +51,8 @@ const CAPTIONS: Record<Phase, string> = {
   conclusion: "settled",
 };
 
-export default function App() {
+/** The engineer's view: every engine state, the ledger and the spectra. */
+export default function App({ embedded = false }: { embedded?: boolean }) {
   const [models, setModels] = useState<Record<string, string>>({});
   const [online, setOnline] = useState<boolean | null>(null);
   const [tests, setTests] = useState<EvidenceTest[]>([]);
@@ -139,7 +140,8 @@ export default function App() {
   }, [inv, step]);
 
   return (
-    <div className="shell">
+    <div className={embedded ? "g-engineer" : "shell"}>
+      {!embedded && (
       <header className="topbar">
         <span className="wordmark">Crux</span>
         <span className="tagline">
@@ -154,6 +156,7 @@ export default function App() {
                 .join("  ") || "…"}
         </span>
       </header>
+      )}
 
       <div className="controls">
         <div className="field">
