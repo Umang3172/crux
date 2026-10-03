@@ -125,17 +125,25 @@ export default function App() {
   }, [playing, cursor, step, steps.length]);
 
   const inv = step?.inv ?? null;
-  const leader = useMemo(() => {
-    if (!inv || step?.prior) return null;
-    return inv.hypotheses.reduce((a, b) => (a.posterior >= b.posterior ? a : b)).kind;
+  // While a measurement is outstanding the story is the tie, so draw the two
+  // leading live suspects; otherwise the leader alone. Ranked by the engine's
+  // own posteriors. Once choose_next_test names the pair it separates, use that.
+  const suspects = useMemo<string[]>(() => {
+    if (!inv || step?.prior) return [];
+    const live = [...inv.hypotheses]
+      .filter((h) => !h.rejected)
+      .sort((a, b) => b.posterior - a.posterior);
+    const ranked = live.length > 0 ? live : [...inv.hypotheses].sort((a, b) => b.posterior - a.posterior);
+    const tied = step?.phase === "request" && !step.answered && ranked.length > 1;
+    return ranked.slice(0, tied ? 2 : 1).map((h) => h.kind);
   }, [inv, step]);
 
   return (
     <div className="shell">
       <header className="topbar">
-        <span className="wordmark">Hypothesis Engine</span>
+        <span className="wordmark">Crux</span>
         <span className="tagline">
-          MechNova · it argues with itself, then asks you for one measurement
+          MechNova · the one measurement that decides
         </span>
         <span className="models">
           <span className={`dot${online === false ? " down" : ""}`} />
@@ -231,7 +239,7 @@ export default function App() {
             <ConclusionCard conclusion={inv.conclusion} />
           )}
 
-          <Spectrum params={params} hypothesis={leader} />
+          <Spectrum params={params} suspects={suspects} />
 
           {inv && step && (
             <section className="panel">

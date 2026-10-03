@@ -23,7 +23,7 @@ from ..investigation.engine import Investigation
 from ..models import FaultKind, InvestigationState
 
 app = FastAPI(
-    title="Hypothesis Engine",
+    title="Crux",
     version="0.1.0",
     summary="An AI investigator for machine faults, built by MechNova.",
 )
