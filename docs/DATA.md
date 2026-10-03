@@ -86,28 +86,37 @@ For each file: load the real capture, run a full `Investigation` — virtual
 experiments against all six hypotheses, then a requested measurement if
 simulation cannot separate the survivors — and record what it cost.
 
-The printout leads with three numbers and puts accuracy last, on purpose:
+The printout leads with what each case cost and how it ended, and puts accuracy
+last, on purpose:
 
 1. **Settled by simulation alone.** The physics decided; nobody was sent to the
    machine. This is the cheapest possible outcome.
-2. **Needed a requested measurement.** The engine could not separate the
+2. **Settled after a requested measurement.** The engine could not separate the
    survivors, named the cheapest deciding test, and that test settled it.
-3. **Mean technician-minutes per case.** The sum of `effort_min` for the tests
+3. **Said it could not tell (unresolved).** The evidence never reached the 80 %
+   bar, or the capture held a periodic impact no hypothesis explains. The case
+   closes with the reason instead of a guess (ADR-0009).
+4. **Mean technician-minutes per case.** The sum of `effort_min` for the tests
    that were actually performed, averaged over cases.
+5. **Wrong verdicts**, then **accuracy of the verdicts given**. Accuracy is over
+   the cases that ended in a verdict, so read it beside line 3: together they are
+   the coverage and the risk of a system that may abstain.
 
-Accuracy comes fourth because **a classifier wins accuracy and tells you nothing
-about what it costs to trust it**. A classifier is 100% confident on every case
-and sends a technician either always or never. The claim this project makes is
-narrower and more useful: it asks for a human measurement only when the physics
-genuinely cannot decide, and it can tell you in advance which measurement and
-how many minutes. Minutes avoided is the number a maintenance manager buys.
+Accuracy comes last because **a classifier wins accuracy and tells you nothing
+about what it costs to trust it**. A classifier answers every case and sends a
+technician either always or never. The claim this project makes is narrower and
+more useful: it asks for a human measurement only when the physics genuinely
+cannot decide, it can tell you in advance which measurement and how many minutes,
+and it says so when it cannot tell. Minutes avoided and wrong verdicts are the
+numbers a maintenance manager buys.
 
-A fourth line, **requested a test no recording can answer**, is reported
+A further line, **requested a test no recording can answer**, is reported
 separately and never faked. CWRU recordings contain a waveform and a speed, so a
 coast-down (`speed_sensitivity`) or a housing temperature (`temp_rise_c`) has no
 answer in the file. When the engine asks for one, the benchmark records the
-request, answers nothing and lets the investigation conclude on what it has.
-Inventing a plausible value for those would make every number above meaningless.
+request, answers nothing, and the case closes on what it has, which below the
+bar means unresolved. Inventing a plausible value for those would make every
+number above meaningless.
 
 ## What this dataset cannot show
 

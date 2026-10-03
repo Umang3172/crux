@@ -19,7 +19,9 @@ dashboard). One submission, Theme 3.
    fault frequency by hand from `docs/DOMAIN.md`.
 2. **A language model never moves a belief.** `agents/` may explain, translate,
    draft or classify a camera frame. Posterior updates happen only in
-   `investigation/engine.py`, through spectral correlation and measured evidence.
+   `investigation/engine.py`, through simulated likelihoods and measured evidence.
+   A model reaches a case only through `tools/`, whose functions never take a
+   probability, a score or a reading (ADR-0007).
 3. **The offline path must keep working.** No API keys in CI. If `get_narrator()`
    or `get_gate()` falls back, every test still passes.
 4. **Every number has a source.** New constants go in `physics/signatures.py` or
@@ -48,10 +50,12 @@ src/hypothesis_engine/
   physics/frequencies.py    BPFO/BPFI/BSF/FTF from geometry — verified against CWRU
   physics/signatures.py     what each hypothesis predicts (tones + impact trains)
   physics/synth.py          Signature -> waveform (the virtual experiment)
-  physics/compare.py        simulated vs real, log peak-hold spectral correlation
+  physics/likelihood.py     how well each hypothesis explains a capture, by simulation
+  physics/compare.py        simulated vs real correlation, for the picture only
   signals/features.py       waveform -> named observations, envelope analysis
   investigation/catalog.py  the measurements the agent can ask for, and their costs
   investigation/engine.py   the loop: observe, experiment, choose a test, conclude
+  tools/                    what a model may call on a case, and the door readings come in by
   agents/                   optional model adapters + offline fallbacks
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
@@ -62,14 +66,17 @@ src/hypothesis_engine/
 
 **Add a fault hypothesis**: `FaultKind` → `predicted_signature()` →
 predictions for it in every test in `catalog.py` → a row in `docs/DOMAIN.md` →
-a case in `tests/test_investigation.py`.
+a case in `tests/test_investigation.py`. A suspect for one case only does not
+need any of that: write it as an `OrderSuspect` and pass it to
+`Investigation.add_hypothesis`, which simulates and scores it (ADR-0010).
 
 **Add a measurement the agent can request**: an `EvidenceTest` in `catalog.py`
 with its predictions, `sigma`, `effort_min`, and the coaching `procedure`; then
 teach `measure_from_capture()` or the rig oracle how to answer it.
 
-**Change how beliefs move**: only in `engine.py`, and say why in
-`docs/DECISIONS.md`. `LIKELIHOOD_SHARPNESS` is a calibration constant, not a
+**Change how beliefs move**: only in `engine.py` (`_set_posteriors` is the one
+writer) and `physics/likelihood.py`, and say why in `docs/DECISIONS.md`.
+`MODEL_MISMATCH` is an assumption awaiting calibration on recordings, not a
 tuning knob for demos.
 
 ## What to check before you push

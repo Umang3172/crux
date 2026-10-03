@@ -60,6 +60,38 @@ From `signals/features.py`:
 `env_contrast` exists because the raw envelope height moves with load, speed and
 sensor mounting, so it cannot be predicted per hypothesis. The ratio can.
 
+These named features feed the ledger and the measurement catalogue. The first
+look is scored on something else, below.
+
+## How the first look is scored
+
+`physics/likelihood.py`. For every line any hypothesis predicts (its tones in the
+raw spectrum; its impact rates, their second harmonics and their 1× sidebands in
+the envelope spectrum), the capture's line height is
+`log10(peak within the tolerance / median of the spectrum around it)`. Each
+hypothesis is simulated at the capture's speed and noise, the same heights are
+read from every simulation, and the capture is scored with a Student-t per line.
+
+| Constant | Value | Where it comes from |
+|---|---|---|
+| `LINE_TOLERANCE` | ±2 % of the line | Measured ball-pass frequencies run "generally 1-2 % in deviation from the theoretical calculated frequencies" because rolling elements slip (Sawalhi, *J. Vibroengineering* 20(3):1322, 2018). The band covers the top of that range. |
+| `SEVERITY_GRID` | 0.25, 0.5, 0.75, 1.0, 1.5 | The severity of a fault is unknown before the diagnosis, so the likelihood averages over this span of the signature model's own severity scale instead of assuming one. A range, not a measured quantity. |
+| `SEEDS_PER_SEVERITY` | 4 | Enough simulations to estimate a spread per line; at about 2.5 ms each, the first look costs about a quarter of a second. Compute budget, not physics. |
+| `MODEL_MISMATCH` | 0.15 (log10; ×1.4 in amplitude) | **Assumption, not yet calibrated.** The signature model is reduced-order, and a real machine will not match its line heights more closely than this. Calibrate on development recordings (the 0.007″ CWRU files), never on the files a result is reported on. |
+| `STUDENT_T_DOF` | 4 | **Judgement call.** Heavy tails cap what one badly modelled line can cost, so no single line decides a case. The method: Lange, Little & Taylor, *JASA* 84:881, 1989. |
+| `FALSE_ALARM_RATE` | 1 % per capture | **Design target.** A noise-only bin's power over the median exceeds x with probability exp(−x ln 2); the largest of N bins with 1 − (1 − exp(−x ln 2))^N. Solving at 1 % sets the unexplained-line threshold (about 16× the median power for 800 bins). `tests/test_likelihood.py` checks it on white noise; check it on healthy recordings before trusting it on a machine. |
+| `FITS_NONE_SIGMA` | 4 σ | A reading further than this from every hypothesis' prediction fits none of them: the two-sided Gaussian tail beyond 4 σ is about 6 × 10⁻⁵. |
+| `DISTINCT_SIGMA` | 1 σ | A suspect written during a case must differ from every existing hypothesis, at every severity it is simulated at, by at least this on some predicted line. Otherwise no capture could tell them apart and testing it would prove nothing, so it is refused. A design rule. |
+| `BASELINE_1X` | 0.25 | The height of the normal 1× running tone in every signature. Heights are relative, so this only fixes the unit a written suspect's "4× as tall" is measured in. |
+| `REJECT_BELOW` | 3 % | Display only: below it a hypothesis is shown as rejected. It stays in the distribution. |
+| `CONCLUDE_ABOVE` | 80 % | The bar for a verdict. Below it the case asks for a measurement or ends "unresolved". |
+
+What the scoring cannot do, said plainly: the line heights are relative to the
+local floor, so a healthy machine and a mildly unbalanced one differ only in how
+tall 1× stands, and without the machine's own baseline that is weak evidence.
+The first look then splits between them, and the engine asks for the
+measurement that separates them (a coast-down) rather than guess.
+
 ## Predicted values in the test catalogue
 
 `investigation/catalog.py` holds what each hypothesis predicts for each
