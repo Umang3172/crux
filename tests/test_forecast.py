@@ -26,6 +26,7 @@ from hypothesis_engine.forecast.models import (
     when_to_fix,
 )
 from hypothesis_engine.forecast.onset import BASELINE_SNAPSHOTS, CONSECUTIVE, detect_onset
+from hypothesis_engine.physics.frequencies import bearing_multipliers
 
 FS = 25_600.0
 
@@ -209,6 +210,7 @@ def test_xjtu_files_are_ordered_by_minute_not_by_name(tmp_path) -> None:
     assert [f.stem for f in run.files] == ["1", "2", "9", "10"]
     assert run.times_min == (0.0, 1.0, 8.0, 9.0)
     assert run.condition == "35Hz12kN" and run.failed
+    assert run.failure_mode == "outer race"  # from the authors' table, never read by a model
     assert run.load(3) == pytest.approx([-1.5, -0.5, 0.5, 1.5])  # column 0, mean removed
 
 
@@ -246,3 +248,15 @@ needs_xjtu = pytest.mark.skipif(
 def test_real_xjtu_snapshot_has_the_documented_length() -> None:
     first = runs.xjtu_runs()[0]
     assert len(first.load(0)) == int(runs.XJTU_FS_HZ * 1.28)
+
+
+@needs_xjtu
+def test_real_xjtu_download_is_complete() -> None:
+    found = {r.files[0].parent.name: len(r) for r in runs.xjtu_runs()}
+    assert found == {name: n for name, (n, _) in runs.XJTU_BEARINGS.items()}
+
+
+def test_xjtu_bearing_fault_multipliers_follow_from_its_geometry() -> None:
+    m = bearing_multipliers(runs.XJTU_BEARING)
+    assert m["bpfo"] == pytest.approx(4 * (1 - 7.92 / 34.55))  # about 3.08 x shaft speed
+    assert m["bpfi"] == pytest.approx(4 * (1 + 7.92 / 34.55))

@@ -24,14 +24,49 @@ from pathlib import Path
 
 import numpy as np
 
+from ..models import BearingGeometry
+
 DATA_ROOT = Path(__file__).resolve().parents[3] / "data"
 XJTU_DIR = DATA_ROOT / "xjtu"
 IMS_DIR = DATA_ROOT / "ims"
 
-#: XJTU-SY sampling: 25.6 kHz, one 1.28 s snapshot every minute
-#: (github.com/WangBiaoXJTU/xjtu-sy-bearing-datasets; figures via arXiv 2510.17846).
+#: XJTU-SY sampling: 25.6 kHz, 32,768 points (1.28 s) every minute, horizontal
+#: and vertical PCB 352C33 accelerometers (biaowang.tech/xjtu-sy-bearing-datasets,
+#: the dataset authors' page, read 3 Oct 2026).
 XJTU_FS_HZ = 25_600.0
 XJTU_INTERVAL_MIN = 1.0
+
+#: The tested bearing, LDK UER204: 8 balls of 7.92 mm on a 34.55 mm mean
+#: diameter, 0 deg contact angle (same page, "Bearing Testbed & Tested Bearing"
+#: table). With it the physics layer can compute fault frequencies for XJTU-SY.
+XJTU_BEARING = BearingGeometry(
+    n_rolling_elements=8,
+    ball_diameter_mm=7.92,
+    pitch_diameter_mm=34.55,
+    contact_angle_deg=0.0,
+    label="LDK UER204",
+)
+
+#: Per bearing: CSV files (= minutes of life) and the element that failed, from
+#: the same page's "Dataset details" table. Used to check a download is complete,
+#: and as the answer key: the forecaster never reads it.
+XJTU_BEARINGS: dict[str, tuple[int, str]] = {
+    "Bearing1_1": (123, "outer race"),
+    "Bearing1_2": (161, "outer race"),
+    "Bearing1_3": (158, "outer race"),
+    "Bearing1_4": (122, "cage"),
+    "Bearing1_5": (52, "inner race and outer race"),
+    "Bearing2_1": (491, "inner race"),
+    "Bearing2_2": (161, "outer race"),
+    "Bearing2_3": (533, "cage"),
+    "Bearing2_4": (42, "outer race"),
+    "Bearing2_5": (339, "outer race"),
+    "Bearing3_1": (2538, "outer race"),
+    "Bearing3_2": (2496, "inner race, ball, cage and outer race"),
+    "Bearing3_3": (371, "inner race"),
+    "Bearing3_4": (1515, "inner race"),
+    "Bearing3_5": (114, "outer race"),
+}
 
 #: IMS sampling: 20 kHz, 1 s snapshots every 10 minutes (arXiv 1703.06272). The
 #: interval is read from the file names rather than assumed, because the first
@@ -117,6 +152,7 @@ def xjtu_runs(root: str | Path | None = None, channel: int = 0) -> list[Run]:
                 channel=channel,
                 failed=True,  # every XJTU-SY bearing was run until it failed
                 condition=cond,
+                failure_mode=XJTU_BEARINGS.get(folder.name, (0, ""))[1],
             )
         )
     return runs
