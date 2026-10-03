@@ -45,7 +45,8 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
         "rpm": round(state.rpm, 1),
         "hypotheses": [
             {
-                "kind": h.kind.value,
+                "kind": h.name,
+                "origin": h.origin,
                 "label": h.label,
                 "posterior": round(h.posterior, 4),
                 "correlation": None if h.correlation is None else round(h.correlation, 3),
@@ -72,10 +73,12 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
             for o in state.outcomes
         ],
         "transcript": state.transcript,
+        "outcome": state.outcome,
+        "unresolved_reason": state.unresolved_reason,
         "conclusion": None
         if state.conclusion is None
         else {
-            "root_cause": state.conclusion.root_cause.value,
+            "root_cause": state.conclusion.cause,
             "confidence": round(state.conclusion.confidence, 4),
             "reasoning": state.conclusion.reasoning,
             "recommended_action": state.conclusion.recommended_action,
@@ -93,6 +96,12 @@ class StartRequest(BaseModel):
     rpm: float | None = None
     severity: float = 1.0
     seed: int = 1234
+    extra_noise: float = Field(
+        default=0.05,
+        ge=0.0,
+        description="Added sensor noise. Raise it, with a low severity, for a case the physics "
+        "cannot settle without a measurement.",
+    )
 
 
 class EvidenceRequest(BaseModel):
@@ -127,13 +136,18 @@ def tests() -> list[dict[str, Any]]:
 @app.post("/investigations")
 def start(req: StartRequest) -> dict[str, Any]:
     """Open an investigation on a capture. Runs observe + virtual experiments."""
-    obs = synthetic_capture(req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed)
+    obs = synthetic_capture(
+        req.fault,
+        BENCH_RIG,
+        rpm=req.rpm,
+        severity=req.severity,
+        seed=req.seed,
+        extra_noise=req.extra_noise,
+    )
     inv = Investigation(BENCH_RIG, obs)
     inv.observe()
     inv.run_virtual_experiments()
-    choice = inv.choose_next_test()
-    if choice:
-        inv.request(choice)
+    inv.advance()
     inv.state.extra["ground_truth"] = req.fault.value  # demo only; never shown to the agent
     inv.state.ledger = inv.ledger.items
     _INVESTIGATIONS[inv.state.id] = inv
@@ -157,15 +171,10 @@ def add_evidence(investigation_id: str, req: EvidenceRequest) -> dict[str, Any]:
         raise HTTPException(404, "no such investigation")
     if req.test_id not in BY_ID:
         raise HTTPException(400, f"unknown test {req.test_id}")
+    if inv.state.outcome != "open":
+        raise HTTPException(409, f"the investigation is {inv.state.outcome}")
     inv.apply_outcome(req.test_id, req.value, collected_by=req.collected_by)
-    if inv.state.leader().posterior >= 0.8:
-        inv.conclude()
-    else:
-        choice = inv.choose_next_test()
-        if choice:
-            inv.request(choice)
-        else:
-            inv.conclude()
+    inv.advance()
     inv.state.ledger = inv.ledger.items
     return serialise(inv.state)
 
@@ -176,7 +185,14 @@ def replay(req: StartRequest) -> dict[str, Any]:
 
     This is what a judge sees with no hardware in front of them.
     """
-    obs = synthetic_capture(req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed)
+    obs = synthetic_capture(
+        req.fault,
+        BENCH_RIG,
+        rpm=req.rpm,
+        severity=req.severity,
+        seed=req.seed,
+        extra_noise=req.extra_noise,
+    )
     inv = Investigation(BENCH_RIG, obs)
     state = inv.run(oracle=rig_oracle(req.fault, BENCH_RIG))
     state.extra["ground_truth"] = req.fault.value

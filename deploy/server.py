@@ -26,16 +26,17 @@ from pydantic import BaseModel, Field
 
 from hypothesis_engine.api.app import app
 from hypothesis_engine.data.rig import BENCH_RIG, synthetic_capture
+from hypothesis_engine.investigation.engine import PICTURE_SEED_OFFSET
 from hypothesis_engine.models import FaultKind
 from hypothesis_engine.physics.signatures import predicted_signature
 from hypothesis_engine.physics.synth import synthesize
 from hypothesis_engine.signals.features import envelope_spectrum, magnitude_spectrum
 
-#: `investigation.engine` synthesises each hypothesis at `self.seed + 101`. The
-#: plot has to show the waveform the correlation was actually computed from, so
-#: the offset is repeated rather than approximated. If engine.py changes it,
-#: change it here too — a mismatched picture is worse than no picture.
-SIM_SEED = 7 + 101
+#: The engine draws its picture of each hypothesis from one simulation at
+#: `seed + PICTURE_SEED_OFFSET` (the investigation's default seed is 7). The plot
+#: shows that same waveform, so the correlation beside it matches. Beliefs come
+#: from the simulated likelihood, not from this picture (ADR-0008).
+SIM_SEED = 7 + PICTURE_SEED_OFFSET
 
 #: Bin width for the plotted spectra, matching `physics.compare`.
 BIN_HZ = 2.0

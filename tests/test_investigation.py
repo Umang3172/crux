@@ -37,14 +37,19 @@ def test_virtual_experiments_reject_at_least_one_rival():
     assert any(h.rejected for h in inv.state.hypotheses)
 
 
-def test_it_asks_for_a_cheap_test_before_an_expensive_one():
-    obs = synthetic_capture(FaultKind.LOOSENESS, BENCH_RIG)
+def test_it_asks_for_the_cheap_test_that_separates_the_suspects():
+    # The two races are left standing; the envelope capture separates them in
+    # three minutes, while a coast-down costs ten and a stop and separates nothing.
+    obs = synthetic_capture(
+        FaultKind.OUTER_RACE, BENCH_RIG, severity=0.35, extra_noise=0.45, seed=555
+    )
     inv = Investigation(BENCH_RIG, obs)
     inv.observe()
     inv.run_virtual_experiments()
     choice = inv.choose_next_test()
     assert choice is not None
-    assert choice.test.downtime == "none", "a test needing downtime should never win on gain/minute"
+    assert choice.test.id == "envelope"
+    assert choice.test.downtime == "none"
     assert choice.expected_info_gain > 0
 
 

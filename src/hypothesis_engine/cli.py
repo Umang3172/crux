@@ -33,6 +33,11 @@ def demo(
     fault: str = typer.Option("outer_race", help="Fault to induce on the synthetic rig"),
     rpm: float = typer.Option(1798.0),
     severity: float = typer.Option(1.0),
+    noise: float = typer.Option(
+        0.05,
+        help="Added sensor noise. With a low severity (e.g. --severity 0.35 --noise 0.45) "
+        "the physics cannot settle the case alone and asks for a measurement.",
+    ),
     verify: bool = typer.Option(True, help="Also show post-repair verification"),
 ) -> None:
     """Run one full investigation and print the transcript and ledger."""
@@ -46,7 +51,7 @@ def demo(
         )
     )
 
-    obs = synthetic_capture(kind, BENCH_RIG, rpm=rpm, severity=severity)
+    obs = synthetic_capture(kind, BENCH_RIG, rpm=rpm, severity=severity, extra_noise=noise)
     inv = Investigation(BENCH_RIG, obs)
     state = inv.run(oracle=rig_oracle(kind, BENCH_RIG))
 
@@ -76,7 +81,7 @@ def demo(
     if c:
         console.print(
             Panel.fit(
-                f"[bold]{c.root_cause.value}[/bold] at {c.confidence:.0%}\n\n"
+                f"[bold]{c.cause}[/bold] at {c.confidence:.0%}\n\n"
                 f"{c.reasoning}\n\n"
                 f"[bold]Action[/bold]: {c.recommended_action}\n"
                 f"[bold]What would change my mind[/bold]: {c.what_would_change_my_mind}",
@@ -88,8 +93,13 @@ def demo(
             f"\n[{'green' if correct else 'red'}]"
             f"{'correct' if correct else 'WRONG'}[/] against the induced fault ({kind.value})"
         )
+    elif state.outcome == "unresolved":
+        console.print(Panel.fit(state.unresolved_reason or "", title="Unresolved"))
+        console.print(
+            f"\n[yellow]no verdict[/yellow] rather than a guess (the induced fault was {kind.value})"
+        )
 
-    if verify and c:
+    if verify and c and c.root_cause is not None:
         after = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, rpm=rpm, seed=4242)
         result = verify_repair(obs, after, BENCH_RIG, c.root_cause)
         console.print(
@@ -105,14 +115,19 @@ class _CaseResult:
     """What one real recording cost and what we concluded from it."""
 
     case: cwru.CwruCase
-    predicted: FaultKind
+    predicted: FaultKind | None  # None when the case closed unresolved
     confidence: float
     answered: tuple[str, ...]  # tests the recording could answer
     unanswerable: tuple[str, ...]  # tests only a person at the machine can answer
+    reason: str = ""
 
     @property
     def minutes(self) -> float:
         return sum(BY_ID[t].effort_min for t in self.answered)
+
+    @property
+    def concluded(self) -> bool:
+        return self.predicted is not None
 
     @property
     def correct(self) -> bool:
@@ -143,32 +158,38 @@ def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _C
 
     state = investigation.run(max_requests=max_requests, oracle=measure)
     conclusion = state.conclusion
-    leader = state.leader()
     return _CaseResult(
         case=case,
-        predicted=conclusion.root_cause if conclusion else leader.kind,
-        confidence=conclusion.confidence if conclusion else leader.posterior,
+        predicted=conclusion.root_cause if conclusion else None,
+        confidence=conclusion.confidence if conclusion else state.leader().posterior,
         answered=tuple(answered),
         unanswerable=tuple(unanswerable),
+        reason=state.unresolved_reason or "",
     )
 
 
 def _confusion(results: list[_CaseResult]) -> Table:
-    seen = {r.case.kind for r in results} | {r.predicted for r in results}
-    columns = [k for k in FaultKind if k in seen]
+    seen = {r.case.kind for r in results} | {r.predicted for r in results if r.concluded}
+    columns: list[FaultKind | None] = [k for k in FaultKind if k in seen]
+    if any(not r.concluded for r in results):
+        columns.append(None)
     truths = [k for k in FaultKind if any(r.case.kind is k for r in results)]
     counts = Counter((r.case.kind, r.predicted) for r in results)
 
     table = Table(title="\nConfusion — rows are the true fault, columns the diagnosis")
     table.add_column("truth \\ diagnosed")
     for kind in columns:
-        table.add_column(kind.value.replace("_", " "), justify="right")
+        table.add_column(
+            "unresolved" if kind is None else kind.value.replace("_", " "), justify="right"
+        )
     for truth in truths:
         row = [truth.value.replace("_", " ")]
         for predicted in columns:
             n = counts[(truth, predicted)]
             if not n:
                 row.append("[dim]·[/dim]")
+            elif predicted is None:
+                row.append(f"[yellow]{n}[/yellow]")
             else:
                 row.append(f"[green]{n}[/green]" if truth is predicted else f"[red]{n}[/red]")
         table.add_row(*row)
@@ -233,10 +254,14 @@ def benchmark(
         for r in results:
             asked = list(r.answered)
             asked += [f"[yellow]{t} (unanswerable)[/yellow]" for t in r.unanswerable]
+            if r.concluded:
+                verdict = f"[{'green' if r.correct else 'red'}]{r.predicted.value}[/]"
+            else:
+                verdict = "[yellow]unresolved[/yellow]"
             table.add_row(
                 r.case.file.name,
                 r.case.label,
-                f"[{'green' if r.correct else 'red'}]{r.predicted.value}[/]",
+                verdict,
                 f"{r.confidence:.0%}",
                 ", ".join(asked) or "[dim]nothing[/dim]",
                 f"{r.minutes:.0f}",
@@ -246,31 +271,52 @@ def benchmark(
     console.print(_confusion(results))
 
     n = len(results)
-    correct = sum(r.correct for r in results)
-    sim_only = sum(1 for r in results if not r.answered and not r.unanswerable)
-    measured = sum(1 for r in results if r.answered)
+    concluded = [r for r in results if r.concluded]
+    correct = sum(r.correct for r in concluded)
+    wrong = len(concluded) - correct
+    sim_only = sum(1 for r in concluded if not r.answered and not r.unanswerable)
+    measured = sum(1 for r in concluded if r.answered)
+    unresolved = n - len(concluded)
     blocked = sum(1 for r in results if r.unanswerable)
     mean_minutes = sum(r.minutes for r in results) / n
 
     def row(label: str, value: str, share: str = "") -> str:
         return f"{label:<42}[bold]{value:>7}[/bold]  {share}"
 
+    accuracy = (
+        row(
+            "accuracy of the verdicts given",
+            f"{correct} / {len(concluded)}",
+            f"{correct / len(concluded):.0%}",
+        )
+        if concluded
+        else row("accuracy of the verdicts given", "none given")
+    )
     console.print(
         Panel.fit(
             "\n".join(
                 [
                     row("settled by simulation alone", f"{sim_only} / {n}", f"{sim_only / n:.0%}"),
                     row(
-                        "needed a requested measurement", f"{measured} / {n}", f"{measured / n:.0%}"
+                        "settled after a requested measurement",
+                        f"{measured} / {n}",
+                        f"{measured / n:.0%}",
+                    ),
+                    row(
+                        "said it could not tell (unresolved)",
+                        f"{unresolved} / {n}",
+                        f"{unresolved / n:.0%}",
                     ),
                     row("requested a test no recording can answer", f"{blocked} / {n}"),
                     row("mean technician-minutes per case", f"{mean_minutes:.1f}"),
                     "",
-                    row("accuracy", f"{correct} / {n}", f"{correct / n:.0%}"),
+                    row("wrong verdicts", f"{wrong} / {n}", f"{wrong / n:.0%}"),
+                    accuracy,
                     "",
-                    "[dim]Minutes avoided is the headline. A classifier spends the same",
-                    "technician time on every case; this spends it only when the physics",
-                    "genuinely cannot separate the survivors. See docs/DATA.md.[/dim]",
+                    "[dim]Minutes avoided and wrong verdicts are the headline. A classifier",
+                    "answers every case and spends the same technician time on each; this",
+                    "answers when the evidence reaches the bar and says so when it does not.",
+                    "See docs/DATA.md.[/dim]",
                 ]
             ),
             title="Benchmark · CWRU drive end, 12 kHz",

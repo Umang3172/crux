@@ -16,6 +16,10 @@ from dataclasses import dataclass, field
 from ..models import FaultKind, MachineSpec
 from .frequencies import fault_frequencies, shaft_hz
 
+#: Height of the normal 1x running tone every signature starts from. Amplitudes
+#: here are relative, so this fixes the unit the others are measured in.
+BASELINE_1X = 0.25
+
 
 @dataclass(frozen=True)
 class Tone:
@@ -45,11 +49,61 @@ class ImpactTrain:
 
 @dataclass(frozen=True)
 class Signature:
-    kind: FaultKind
+    kind: FaultKind | None  # None for a suspect written outside the catalogue
     tones: tuple[Tone, ...] = field(default_factory=tuple)
     impacts: tuple[ImpactTrain, ...] = field(default_factory=tuple)
     noise: float = 0.08
     description: str = ""
+
+
+@dataclass(frozen=True)
+class OrderSuspect:
+    """A cause outside the catalogue, written as the vibration it would produce.
+
+    Frequencies are multiples of shaft speed and heights are relative to the
+    normal 1x running tone (4.0 = four times as tall), so one description holds
+    at any speed. It carries physics only; the engine works out the belief.
+
+    tones:   (order, relative height)
+    impacts: (impacts per revolution, relative strength, modulation order or
+             None, resonance in Hz or None for the default)
+    """
+
+    name: str
+    description: str
+    tones: tuple[tuple[float, float], ...] = ()
+    impacts: tuple[tuple[float, float, float | None, float | None], ...] = ()
+
+
+def signature_from_orders(suspect: OrderSuspect, rpm: float, severity: float = 1.0) -> Signature:
+    """Render a written suspect as a Signature, scaled like the catalogue's.
+
+    As in `predicted_signature`, `severity` scales the fault and leaves the
+    normal running 1x where it is.
+    """
+    fr = shaft_hz(rpm)
+    tones: list[Tone] = []
+    if not any(abs(order - 1.0) < 1e-9 for order, _ in suspect.tones):
+        tones.append(Tone(fr, BASELINE_1X, "1x baseline"))
+    for order, height in suspect.tones:
+        base = BASELINE_1X if abs(order - 1.0) < 1e-9 else 0.0
+        amp = base + (height * BASELINE_1X - base) * severity
+        tones.append(Tone(order * fr, amp, f"{order:g}x"))
+    impacts = []
+    for rate_order, strength, modulation_order, resonance_hz in suspect.impacts:
+        extra = {} if resonance_hz is None else {"resonance_hz": resonance_hz}
+        impacts.append(
+            ImpactTrain(
+                rate_hz=rate_order * fr,
+                amp=strength * BASELINE_1X * severity,
+                modulation_hz=None if modulation_order is None else modulation_order * fr,
+                label=f"impacts at {rate_order:g}x",
+                **extra,
+            )
+        )
+    return Signature(
+        None, tuple(tones), tuple(impacts), noise=0.10, description=suspect.description
+    )
 
 
 def predicted_signature(
@@ -65,7 +119,7 @@ def predicted_signature(
     """
     fr = shaft_hz(rpm)
     ff = fault_frequencies(machine.bearing, rpm)
-    base = (Tone(fr, 0.25, "1x baseline"),)
+    base = (Tone(fr, BASELINE_1X, "1x baseline"),)
 
     if kind is FaultKind.HEALTHY:
         return Signature(
@@ -79,7 +133,7 @@ def predicted_signature(
         return Signature(
             kind,
             tones=(
-                Tone(fr, 0.25 + 1.00 * severity, "1x dominant"),
+                Tone(fr, BASELINE_1X + 1.00 * severity, "1x dominant"),
                 Tone(2 * fr, 0.12 * severity, "2x small"),
             ),
             noise=0.08,
@@ -90,7 +144,7 @@ def predicted_signature(
         return Signature(
             kind,
             tones=(
-                Tone(fr, 0.25 + 0.55 * severity, "1x"),
+                Tone(fr, BASELINE_1X + 0.55 * severity, "1x"),
                 Tone(2 * fr, 1.00 * severity, "2x dominant"),
                 Tone(3 * fr, 0.35 * severity, "3x"),
             ),
@@ -103,7 +157,7 @@ def predicted_signature(
             kind,
             tones=(
                 Tone(0.5 * fr, 0.30 * severity, "0.5x sub-harmonic"),
-                Tone(fr, 0.25 + 0.70 * severity, "1x"),
+                Tone(fr, BASELINE_1X + 0.70 * severity, "1x"),
                 Tone(1.5 * fr, 0.25 * severity, "1.5x"),
                 Tone(2 * fr, 0.50 * severity, "2x"),
                 Tone(3 * fr, 0.45 * severity, "3x"),

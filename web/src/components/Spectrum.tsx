@@ -1,12 +1,12 @@
 /**
  * Real against simulated: the virtual experiment, drawn.
  *
- * The correlation number beside each hypothesis is the thing that moves belief,
- * and a number is easy to disbelieve. This is the same comparison with the
- * evidence on screen — the measured spectrum, and the spectrum the winning
- * hypothesis predicts. Two views, because the two fault families live in
- * different places: shaft orders in the raw spectrum, bearing impacts in the
- * envelope (see docs/DECISIONS.md, ADR-0003).
+ * Beliefs move by a likelihood built from many simulations (docs/DECISIONS.md,
+ * ADR-0008), and a number is easy to disbelieve. This is the comparison with the
+ * evidence on screen — the measured spectrum, and one simulation of the winning
+ * hypothesis, with the correlation between them beside it as a picture of the
+ * fit. Two views, because the two fault families live in different places:
+ * shaft orders in the raw spectrum, bearing impacts in the envelope.
  *
  * uPlot draws to canvas, so the palette is repeated here as literals; keep it in
  * step with theme.css.
