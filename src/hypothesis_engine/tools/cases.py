@@ -1,0 +1,151 @@
+"""Open cases, where they are kept, and the one door a reading comes in by.
+
+A case wraps an `Investigation` with what the tool layer needs on top of it:
+the measurement requests and their readings, suspects a model has written, and
+the model's own narration, which is kept apart from the evidence ledger.
+
+`record_measurement` is deliberately not an agent tool. A reading comes from a
+technician, a sensor or the replay rig; a language model never supplies one.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Literal, Protocol
+
+from ..investigation.engine import Investigation, TestChoice
+from ..models import MachineSpec, Observation
+from .contract import SuspectSpec
+
+#: Answers a requested test id with a reading, or None when it cannot. The
+#: replay rig is one; in the field the reading arrives later, from a person.
+AnswerSource = Callable[[str], float | None]
+
+
+class CaseNotFound(LookupError):
+    """No open case has this id."""
+
+
+@dataclass
+class MeasurementRequest:
+    id: str
+    test_id: str
+    status: Literal["waiting", "answered", "unanswerable"] = "waiting"
+    reading: float | None = None
+    collected_by: str | None = None
+    note: str = ""
+
+
+@dataclass
+class WrittenSuspect:
+    spec: SuspectSpec
+    status: Literal["tested", "pending_experiments", "refused"]
+    reasons: list[str]
+
+
+@dataclass
+class Case:
+    investigation: Investigation
+    answer_source: AnswerSource | None = None
+    requests: list[MeasurementRequest] = field(default_factory=list)
+    written_suspects: list[WrittenSuspect] = field(default_factory=list)
+    narration: list[str] = field(default_factory=list)
+    # The physics' latest pick, and the engine's own words for it. A request must
+    # name this test; the words go into the transcript once, when it is made.
+    chosen: TestChoice | None = None
+    chosen_lines: list[str] = field(default_factory=list)
+
+    @property
+    def id(self) -> str:
+        return self.investigation.state.id
+
+    @property
+    def status(self) -> Literal["open", "concluded", "unresolved"]:
+        """Read from the engine, which is the only thing that closes a case."""
+        return self.investigation.state.outcome
+
+    def request(self, request_id: str) -> MeasurementRequest:
+        for req in self.requests:
+            if req.id == request_id:
+                return req
+        raise KeyError(f"case {self.id} has no request {request_id}")
+
+
+class CaseStore(Protocol):
+    """Where cases live between tool calls.
+
+    The in-memory store is lost on restart and is not shared between Cloud Run
+    instances; a database-backed store replaces it there behind this interface.
+    """
+
+    def get(self, case_id: str) -> Case: ...
+
+    def put(self, case: Case) -> None: ...
+
+
+class InMemoryCaseStore:
+    def __init__(self) -> None:
+        self._cases: dict[str, Case] = {}
+
+    def get(self, case_id: str) -> Case:
+        try:
+            return self._cases[case_id]
+        except KeyError:
+            raise CaseNotFound(f"no case with id {case_id!r}") from None
+
+    def put(self, case: Case) -> None:
+        self._cases[case.id] = case
+
+
+def open_case(
+    store: CaseStore,
+    machine: MachineSpec,
+    observation: Observation,
+    answer_source: AnswerSource | None = None,
+) -> Case:
+    """Open a case on a capture and record the first look. Not an agent tool:
+    the watcher, the replay button or the API opens cases."""
+    investigation = Investigation(machine, observation)
+    investigation.observe()
+    case = Case(investigation, answer_source=answer_source)
+    store.put(case)
+    return case
+
+
+def record_measurement(
+    store: CaseStore,
+    case_id: str,
+    request_id: str,
+    reading: float,
+    collected_by: str = "technician",
+) -> MeasurementRequest:
+    """Hand a requested reading to the engine. The only way a reading gets in."""
+    case = store.get(case_id)
+    req = case.request(request_id)
+    if req.status != "waiting":
+        raise ValueError(f"{request_id} is {req.status}, not waiting for a reading")
+    if not math.isfinite(reading):
+        raise ValueError("a reading must be a finite number")
+    case.investigation.apply_outcome(req.test_id, float(reading), collected_by=collected_by)
+    req.status = "answered"
+    req.reading = float(reading)
+    req.collected_by = collected_by
+    store.put(case)
+    return req
+
+
+def mark_unanswerable(
+    store: CaseStore, case_id: str, request_id: str, why: str
+) -> MeasurementRequest:
+    """Close a request that nobody can answer, rather than inventing a reading."""
+    case = store.get(case_id)
+    req = case.request(request_id)
+    if req.status != "waiting":
+        raise ValueError(f"{request_id} is {req.status}, not waiting for a reading")
+    req.status = "unanswerable"
+    req.note = why
+    case.investigation.state.transcript.append(f"{request_id} cannot be answered: {why}")
+    store.put(case)
+    return req
