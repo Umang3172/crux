@@ -60,6 +60,30 @@ From `signals/features.py`:
 `env_contrast` exists because the raw envelope height moves with load, speed and
 sensor mounting, so it cannot be predicted per hypothesis. The ratio can.
 
+When the capture cannot see the resonance band (the ESP32 rig at 2 kHz), the
+three envelope features are reported as **not available**, never as a substitute
+value, and the engine stops asking for measurements that need them.
+
+## Order tracking
+
+Every frequency above is a multiple of shaft speed, so the speed it is read at
+decides whether the peak is found at all. BPFI is 5.4× shaft speed: a 3% speed
+error moves it by about 5 Hz, wider than the peak, and an inner-race defect then
+reads as healthy. `signals/features.py` therefore measures the speed from the
+signal before reading any order or bearing frequency, and the ledger records both
+the reported and the measured speed.
+
+| Constant | Value | Source |
+|---|---|---|
+| `SPEED_SEARCH_FRACTION` | ±5% around the reported 1× | CWRU's own load table spans 1730–1797 rpm (3.7%, `docs/DATA.md`); ±5% covers that plus a nameplate or tachometer offset, and stays far from the 0.5× and 2× peaks |
+| `SPEED_PEAK_PROMINENCE` | 1× peak ≥ 4 × spectrum median | Noise-only spectral magnitudes are Rayleigh distributed, so one bin exceeds k × median with probability 2^(−k²): 1.5 × 10⁻⁵ at k = 4. Below that, the reported speed is kept and the ledger says why |
+| `BEARING_SLIP_FRACTION` | ±2% of each bearing frequency | Rolling elements slip, so real defect frequencies sit 1–2% from the kinematic value: R. B. Randall and J. Antoni, "Rolling element bearing diagnostics — A tutorial", *Mechanical Systems and Signal Processing* 25 (2011) 485–520 |
+
+The speed estimate scores each candidate 1× by the sum of its 1×, 2× and 3×
+magnitudes, so a 2×-dominant machine (misalignment) still locks onto the right
+fundamental, then refines the peak with Gaussian interpolation on the three log
+magnitudes around it.
+
 ## Predicted values in the test catalogue
 
 `investigation/catalog.py` holds what each hypothesis predicts for each

@@ -121,28 +121,53 @@ class Investigation:
             for k in candidates
         ]
         self.evidence = feat.extract(observation, machine)
+        self.state.rpm = self.rpm
 
     # ------------------------------------------------------------------ observe
+    @property
+    def rpm(self) -> float:
+        """The speed every frequency is read at: the signal's own, when it shows one."""
+        return self.evidence.rpm or self.observation.rpm
+
     def observe(self) -> None:
-        ff = fault_frequencies(self.machine.bearing, self.observation.rpm)
+        ff = fault_frequencies(self.machine.bearing, self.rpm)
         e = self.evidence
-        self.ledger.add("shaft speed", round(self.observation.rpm, 1), " rpm", "sensor")
+        self.ledger.add("shaft speed, reported", round(self.observation.rpm, 1), " rpm", "sensor")
+        if e.speed is not None and e.speed.from_signal:
+            self.ledger.add(
+                "shaft speed, measured from the 1x peak", round(e.speed.rpm, 1), " rpm", "physics"
+            )
+        elif e.speed is not None:
+            self.ledger.add(f"reported speed kept: {e.speed.note}", None, "", "physics")
         self.ledger.add("shaft frequency (1x)", round(ff.shaft, 2), " Hz", "physics")
         self.ledger.add("predicted BPFO", round(ff.bpfo, 2), " Hz", "physics")
         self.ledger.add("predicted BPFI", round(ff.bpfi, 2), " Hz", "physics")
         self.ledger.add("2x relative to 1x", round(e.ratio_2x_1x(), 3), "", "sensor")
         self.ledger.add("half-order peak, relative to 1x", round(e.amp_half_x, 3), "", "sensor")
-        self.ledger.add("envelope peak at BPFO", round(e.env_bpfo, 2), "x median", "sensor")
-        self.ledger.add("envelope peak at BPFI", round(e.env_bpfi, 2), "x median", "sensor")
+        if e.env_bpfo is not None and e.env_bpfi is not None:
+            self.ledger.add("envelope peak at BPFO", round(e.env_bpfo, 2), "x median", "sensor")
+            self.ledger.add("envelope peak at BPFI", round(e.env_bpfi, 2), "x median", "sensor")
+        else:
+            self.ledger.add(
+                f"envelope not available: a {self.observation.sample_rate_hz:.0f} Hz capture "
+                "cannot see the bearing resonance band",
+                None,
+                "",
+                "physics",
+            )
         self.ledger.add("crest factor", round(e.crest_factor, 2), "", "sensor")
         if self.observation.temperature_c is not None:
             self.ledger.add(
                 "housing temperature", round(self.observation.temperature_c, 1), " C", "sensor"
             )
+        envelope = (
+            f"envelope at BPFO = {e.env_bpfo:.1f}x median"
+            if e.env_bpfo is not None
+            else "no envelope at this sample rate"
+        )
         self.state.transcript.append(
-            f"Anomaly on {self.machine.name} at {self.observation.rpm:.0f} rpm. "
-            f"2x/1x = {e.ratio_2x_1x():.2f}, envelope at BPFO = {e.env_bpfo:.1f}x median, "
-            f"crest factor {e.crest_factor:.1f}."
+            f"Anomaly on {self.machine.name} at {self.rpm:.0f} rpm. "
+            f"2x/1x = {e.ratio_2x_1x():.2f}, {envelope}, crest factor {e.crest_factor:.1f}."
         )
 
     # -------------------------------------------------------- virtual experiments
@@ -156,7 +181,7 @@ class Investigation:
         for h in self.state.hypotheses:
             if h.rejected:
                 continue
-            sig = predicted_signature(h.kind, self.machine, self.observation.rpm)
+            sig = predicted_signature(h.kind, self.machine, self.rpm)
             sim = synthesize(sig, sample_rate_hz=fs, duration_s=dur, seed=self.seed + 101)
             corr = spectral_correlation(real, sim, fs)
             h.correlation = corr
@@ -213,6 +238,8 @@ class Investigation:
         for test in CATALOG:
             if test.id in self.state.requested_tests:
                 continue
+            if not self.evidence.envelope_available and test.feature in feat.ENVELOPE_FEATURES:
+                continue  # this sensor cannot answer it, so it is not worth asking for
             preds = np.array([test.predict(k) for k in kinds], dtype=float)
             if np.any(np.isnan(preds)):
                 continue
@@ -298,7 +325,13 @@ class Investigation:
         }
         if test.feature not in table:
             raise ValueError(f"{test.feature} cannot be read from a capture; a person reports it")
-        return float(table[test.feature])
+        value = table[test.feature]
+        if value is None:
+            raise ValueError(
+                f"{test.feature} needs an envelope, and a {observation.sample_rate_hz:.0f} Hz "
+                "capture cannot see the resonance band"
+            )
+        return float(value)
 
     # ------------------------------------------------------------------ conclude
     def conclude(self) -> Conclusion:
