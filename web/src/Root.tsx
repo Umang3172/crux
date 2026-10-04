@@ -41,7 +41,7 @@ export function Root() {
     <div className="shell">
       <header className="topbar">
         <span className="wordmark">Crux</span>
-        <span className="tagline">MechNova · the one measurement that decides</span>
+        <span className="tagline">The one measurement that decides</span>
         <nav className="g-views" aria-label="View">
           <button aria-pressed={view === "guided"} onClick={() => choose("guided")}>
             Guided
@@ -50,13 +50,20 @@ export function Root() {
             Engineer view
           </button>
         </nav>
-        <span className="models">
+        <span
+          className="models"
+          title={Object.entries(models)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\n")}
+        >
           <span className={`dot${online === false ? " down" : ""}`} />
-          {online === false
-            ? "engine unreachable"
-            : Object.entries(models)
-                .map(([k, v]) => `${k}=${v}`)
-                .join("  ") || "…"}
+          {online === null
+            ? "Connecting"
+            : online === false
+              ? "Engine unreachable"
+              : Object.values(models).every((v) => v.startsWith("offline"))
+                ? "Engine ready, Gemini off"
+                : "Engine ready, Gemini on"}
         </span>
       </header>
       {view === "guided" ? <Guided /> : <App embedded />}

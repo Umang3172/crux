@@ -18,17 +18,17 @@ import type { AlignedData, Options } from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { RunParams, Spectra, spectra } from "../api";
 
-const REAL = "#57a9ff";
+const REAL = "#14222c";
 /** One colour per simulated suspect: the leader, then the rival it cannot yet beat. */
-const SIMS = ["#35c89a", "#f2a65a"];
+const SIMS = ["#1597a5", "#d7383b"];
 const HEIGHT = 230;
 
 function options(width: number, band: "raw" | "envelope", suspects: string[]): Options {
   const axis = {
-    stroke: "#64717d",
-    grid: { stroke: "#19212a", width: 1 },
-    ticks: { stroke: "#1f2831", width: 1 },
-    font: "11px ui-monospace, monospace",
+    stroke: "#7f909c",
+    grid: { stroke: "#e1e7eb", width: 1 },
+    ticks: { stroke: "#d3dce1", width: 1 },
+    font: "11px Archivo, system-ui, sans-serif",
   };
   return {
     width,

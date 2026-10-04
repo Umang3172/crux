@@ -1,27 +1,158 @@
 /**
- * The machine on screen: a chilled-water pump in a data hall's cooling loop.
+ * The machine on screen: chilled-water pump 2 in a data hall's cooling loop.
  *
- * A motor drives a centrifugal pump through a coupling, on a bolted skid. The
- * pump pushes chilled water to the server racks and takes it back. This is a
- * rotating machine, so every fault Crux reasons about (imbalance, misalignment,
- * looseness, bearing damage) has a place on the drawing.
+ * A finned motor drives an end-suction pump through a coupling, on a bolted
+ * skid, in front of a row of server cabinets. Chilled water leaves the pump up a
+ * riser to the cabinets; warm water returns low into the pump's suction. Every
+ * fault Crux reasons about has a place here: the impeller (imbalance), the
+ * coupling (misalignment), the skid bolts (looseness), the drive-end bearing
+ * (race defects).
  *
- * The scene shows symptoms, not causes: before the verdict it only shakes in
- * proportion to the measured vibration level, so it never gives the answer
- * away. After the verdict it points at the part Crux blamed.
+ * Before the verdict the scene only shakes in proportion to the measured
+ * vibration, so it never gives the answer away. After it, the blamed part turns
+ * red and is labelled.
  */
 
+import { useEffect, useMemo, useState } from "react";
 import { Part } from "./plain";
+import { Solid, Vec3, box, cylinder, lit, onCircle, pipe, project, sortSolids, toPoints } from "./iso";
 
 export type SceneStatus = "off" | "running" | "investigating" | "decided" | "healthy";
 
-const LAMP: Record<SceneStatus, string> = {
-  off: "#3b4752",
-  running: "#35c89a",
-  investigating: "#f2b134",
-  decided: "#ff7a45",
-  healthy: "#35c89a",
+const SCALE = 22;
+const AXIS_Z = 2.35;
+
+const PAINT = {
+  floor: "#D9E1E6",
+  skid: "#3B4752",
+  motor: "#2F6690",
+  motorDark: "#285878",
+  steel: "#B4C1C9",
+  shaft: "#D2DADF",
+  bolt: "#8E9CA6",
+  cabinet: "#46535E",
+  unit: "#56646F",
+  insulation: "#E4EAEE",
 };
+
+const FAULT = "#D7383B";
+
+const SUPPLY: Vec3[] = [
+  [10.35, 2, 3.9],
+  [10.35, 2, 6.6],
+  [10.35, -6.3, 6.6],
+  [1.5, -6.3, 6.6],
+  [1.5, -6.3, 5.2],
+];
+const RETURN: Vec3[] = [
+  [11.6, 2, AXIS_Z],
+  [16.6, 2, AXIS_Z],
+  [16.6, -5.35, AXIS_Z],
+];
+
+/** Where each part's label points. */
+const ANCHOR: Record<Exclude<Part, "none">, Vec3> = {
+  rotor: [10.35, 3.2, 3.6],
+  coupling: [8.5, 2.62, 2.9],
+  bearing: [7.45, 2.75, 3.0],
+  base: [13.6, 4, 0.55],
+};
+
+function buildScene(): Solid[] {
+  const s: Solid[] = [];
+
+  // Server cabinets along the back wall, each with a column of server faces.
+  for (let i = 0; i < 6; i++) {
+    const x0 = -1.2 + i * 3;
+    s.push(box([x0, -7.2, 0], [x0 + 2.86, -5.4, 5.2], PAINT.cabinet, { layer: 1 }));
+  }
+
+  s.push(box([0, 0, 0], [14.6, 4, 0.55], PAINT.skid, { layer: 1, part: "base" }));
+  for (const [x, y] of [
+    [0.55, 0.55],
+    [0.55, 3.45],
+    [7.3, 0.55],
+    [7.3, 3.45],
+    [14.05, 0.55],
+    [14.05, 3.45],
+  ]) {
+    s.push(cylinder("z", [x, y, 0.55], 0.2, 0.2, PAINT.bolt, { part: "base", segments: 12 }));
+  }
+
+  // Motor: feet, fan cover, a finned body, terminal box, drive-end shield.
+  s.push(box([1.4, 0.75, 0.55], [2.4, 3.25, 1.1], PAINT.motorDark));
+  s.push(box([5.3, 0.75, 0.55], [6.3, 3.25, 1.1], PAINT.motorDark));
+  s.push(cylinder("x", [0.3, 2, AXIS_Z], 0.85, 1.38, PAINT.motorDark));
+  let x = 1.15;
+  let fin = true;
+  while (x < 6.9) {
+    const len = fin ? 0.14 : 0.42;
+    s.push(cylinder("x", [x, 2, AXIS_Z], Math.min(len, 6.9 - x), fin ? 1.64 : 1.5, PAINT.motor));
+    x += len;
+    fin = !fin;
+  }
+  s.push(box([3.2, 1.35, 3.7], [4.7, 2.65, 4.5], PAINT.motor));
+  s.push(cylinder("x", [6.9, 2, AXIS_Z], 0.36, 1.28, PAINT.motor));
+
+  // Drive-end bearing, shaft and coupling.
+  s.push(cylinder("x", [7.26, 2, AXIS_Z], 0.46, 0.74, PAINT.steel, { part: "bearing" }));
+  s.push(cylinder("x", [7.72, 2, AXIS_Z], 0.4, 0.22, PAINT.shaft, { segments: 16 }));
+  s.push(cylinder("x", [8.12, 2, AXIS_Z], 0.8, 0.62, PAINT.steel, { part: "coupling" }));
+  s.push(cylinder("x", [8.92, 2, AXIS_Z], 0.5, 0.22, PAINT.shaft, { segments: 16 }));
+
+  // Pump: volute around the impeller, front cover.
+  s.push(cylinder("x", [9.42, 2, AXIS_Z], 1.9, 1.78, PAINT.motor, { part: "rotor" }));
+  s.push(cylinder("x", [11.32, 2, AXIS_Z], 0.28, 1.15, PAINT.steel, { part: "rotor" }));
+
+  s.push(...pipe(SUPPLY, 0.36, PAINT.insulation));
+  s.push(...pipe(RETURN, 0.4, PAINT.insulation));
+  return sortSolids(s);
+}
+
+/** Bounds of the drawing in screen units, with room for the label. */
+const FLOOR: Vec3[] = [
+  [-1.9, -7.8, 0],
+  [17.6, -7.8, 0],
+  [17.6, 5.4, 0],
+  [-1.9, 5.4, 0],
+];
+
+function viewBox(solids: Solid[]): string {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const all = [...solids.flatMap((solid) => solid.faces.flatMap((f) => f.pts)), ...FLOOR];
+  for (const p of all) {
+        const [x, y] = project(p);
+        x0 = Math.min(x0, x * SCALE);
+        y0 = Math.min(y0, y * SCALE);
+        x1 = Math.max(x1, x * SCALE);
+        y1 = Math.max(y1, y * SCALE);
+  }
+  const pad = 12;
+  return `${x0 - pad} ${y0 - pad - 40} ${x1 - x0 + pad * 2} ${y1 - y0 + pad * 2 + 40}`;
+}
+
+function usePhase(running: boolean): number {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let frame = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      if (now - last > 33) {
+        setPhase((p) => (p + 0.22) % (2 * Math.PI));
+        last = now;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [running]);
+  return phase;
+}
 
 export function PumpScene({
   status,
@@ -35,100 +166,141 @@ export function PumpScene({
   highlight: Part | null;
   highlightLabel?: string;
 }) {
+  const solids = useMemo(buildScene, []);
+  const box = useMemo(() => viewBox(solids), [solids]);
   const running = status !== "off";
-  // Shake grows with how far the reading is above normal, capped so the drawing
-  // stays readable. A healthy pump still hums a little.
-  const amp = running ? Math.min(3.5, 0.3 + Math.max(0, vibration - 1) * 1.1) : 0;
-  const hl = (part: Part) => (highlight === part ? " g-hl" : "");
+  const phase = usePhase(running);
+  const amp = running ? Math.min(3, 0.25 + Math.max(0, vibration - 1) * 0.9) : 0;
+
+  const shadow: Vec3[] = [
+    [-0.4, -0.3, 0],
+    [15.4, -0.3, 0],
+    [15.4, 4.9, 0],
+    [-0.4, 4.9, 0],
+  ];
+
+  // The coupling's bolt heads turn with the shaft: the one sign the pump is running.
+  const bolts = Array.from({ length: 6 }, (_, i) => {
+    const t = phase + (i / 6) * 2 * Math.PI;
+    const c = onCircle("x", [8.93, 2, AXIS_Z], 0.4, t, 0);
+    return Array.from({ length: 10 }, (_, j) => onCircle("x", c, 0.075, (j / 10) * 2 * Math.PI, 0));
+  });
+
+  const isCabinet = (s: Solid) => s.layer === 1 && s.part !== "base";
+  const cabinets = solids.filter(isCabinet);
+  const machine = solids.filter((s) => !isCabinet(s));
+  const anchor = highlight && highlight !== "none" ? project(ANCHOR[highlight]) : null;
+  const labelWidth = (highlightLabel?.length ?? 0) * 7.4 + 28;
 
   return (
     <svg
-      className={`g-scene${running ? " running" : ""}`}
-      viewBox="0 0 720 300"
+      className={`iso${running ? " running" : ""}`}
+      viewBox={box}
       role="img"
-      aria-label="A chilled-water pump in a data hall cooling loop: motor, coupling and pump on a bolted base, piped to the server racks"
+      aria-label="Chilled-water pump 2: a motor driving a pump through a coupling on a bolted skid, piped to a row of server cabinets"
     >
-      {/* Server racks, the reason the pump exists. */}
-      <g className="g-rack">
-        <rect x="24" y="44" width="86" height="196" rx="6" />
-        {Array.from({ length: 7 }, (_, row) => (
-          <g key={row}>
-            <rect x="34" y={56 + row * 25} width="66" height="17" rx="2" className="g-unit" />
-            <circle cx="42" cy={64.5 + row * 25} r="2.4" className="g-led" style={{ animationDelay: `${row * 0.37}s` }} />
-            <circle cx="50" cy={64.5 + row * 25} r="2.4" className="g-led" style={{ animationDelay: `${row * 0.21 + 0.5}s` }} />
-          </g>
-        ))}
-        <text x="67" y="262" textAnchor="middle" className="g-cap">Server racks</text>
-      </g>
+      <defs>
+        <filter id="iso-soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="9" />
+        </filter>
+      </defs>
 
-      {/* The loop: chilled water out of the pump to the racks, warm water back. */}
-      <path className="g-pipe" d="M600 124 V30 H110 V60" />
-      <path className="g-pipe" d="M110 222 V276 H690 V176 H652" />
-      <path className={`g-flow cold${running ? "" : " still"}`} d="M600 124 V30 H110 V60" />
-      <path className={`g-flow warm${running ? "" : " still"}`} d="M110 222 V276 H690 V176 H652" />
-      <text x="355" y="22" textAnchor="middle" className="g-cap">chilled water to the racks</text>
-      <text x="400" y="292" textAnchor="middle" className="g-cap">warm water back to the pump</text>
+      <polygon points={toPoints(FLOOR, SCALE)} fill={lit(PAINT.floor, [0, 0, 1])} />
+      <polygon points={toPoints(shadow, SCALE)} className="iso-shadow" filter="url(#iso-soft)" />
 
-      <g className="g-machine" style={{ ["--amp" as string]: `${amp}px` }}>
-        {/* Skid and its bolts: where looseness lives. */}
-        <g className={`g-part${hl("base")}`}>
-          <rect x="258" y="226" width="410" height="20" rx="3" className="g-base" />
-          {[282, 392, 532, 644].map((x) => (
-            <g key={x}>
-              <rect x={x - 9} y="214" width="18" height="12" className="g-foot" />
-              <circle cx={x} cy="236" r="4.5" className="g-bolt" />
-            </g>
-          ))}
-        </g>
-
-        {/* Motor, with its cooling fins and fan cover. */}
-        <rect x="270" y="150" width="20" height="52" rx="4" className="g-body dim" />
-        <rect x="290" y="128" width="160" height="94" rx="10" className="g-body" />
-        {Array.from({ length: 9 }, (_, i) => (
-          <line key={i} x1={306 + i * 16} y1="136" x2={306 + i * 16} y2="214" className="g-fin" />
-        ))}
-        <text x="370" y="182" textAnchor="middle" className="g-label">Motor</text>
-        <circle cx="304" cy="116" r="6" fill={LAMP[status]} className={running ? "g-lamp on" : "g-lamp"} />
-
-        {/* Shaft through the coupling to the pump. */}
-        <rect x="450" y="171" width="104" height="10" rx="3" className="g-shaft" />
-        <g className={`g-part${hl("coupling")}`}>
-          <rect x="486" y="157" width="34" height="38" rx="4" className="g-coupling" />
-          <line x1="494" y1="160" x2="494" y2="192" className={`g-stripe${running ? " move" : ""}`} />
-          <line x1="512" y1="160" x2="512" y2="192" className={`g-stripe${running ? " move" : ""}`} />
-        </g>
-
-        {/* Drive-end bearing: where race faults live. */}
-        <g className={`g-part${hl("bearing")}`}>
-          <circle cx="462" cy="176" r="12" className="g-bearing" />
-          <circle cx="462" cy="176" r="5" className="g-bearing-in" />
-        </g>
-
-        {/* Pump volute and the impeller spinning inside it: where imbalance lives. */}
-        <g className={`g-part${hl("rotor")}`}>
-          <circle cx="600" cy="176" r="52" className="g-body" />
-          <circle cx="600" cy="176" r="36" className="g-volute" />
-          <g className={running ? "g-spin" : ""} style={{ transformOrigin: "600px 176px" }}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <path
-                key={i}
-                d="M600 176 q 10 -14 4 -31"
-                className="g-blade"
-                transform={`rotate(${i * 60} 600 176)`}
-              />
+      {cabinets.map((s, i) => (
+          <g key={`cab-${i}`}>
+            {s.faces.map((f, j) => (
+              <polygon key={j} points={toPoints(f.pts, SCALE)} fill={lit(f.color, f.n)} stroke={lit(f.color, f.n)} strokeWidth={0.6} />
             ))}
-            <circle cx="600" cy="176" r="6" className="g-hub" />
           </g>
-        </g>
-        <text x="600" y="250" textAnchor="middle" className="g-label">Pump</text>
+        ))}
+      <Cabinets />
+
+      <g className="iso-machine" style={{ ["--amp" as string]: `${amp}px` }}>
+        {machine.map((s, i) => {
+            const hot = !!highlight && s.part === highlight;
+            return (
+              <g key={i} className={hot ? "iso-hot" : undefined}>
+                {s.faces.map((f, j) => {
+                  const fill = lit(hot ? FAULT : f.color, f.n);
+                  return <polygon key={j} points={toPoints(f.pts, SCALE)} fill={fill} stroke={fill} strokeWidth={0.6} />;
+                })}
+              </g>
+            );
+          })}
+        {bolts.map((pts, i) => (
+          <polygon key={i} points={toPoints(pts, SCALE)} fill={lit(PAINT.bolt, [1, 0, 0])} />
+        ))}
       </g>
 
-      {highlight && highlight !== "none" && highlightLabel && (
-        <g className="g-callout">
-          <rect x="300" y="62" width="270" height="40" rx="8" />
-          <text x="435" y="87" textAnchor="middle">{highlightLabel}</text>
+      <polyline className={`iso-flow supply${running ? "" : " still"}`} points={toPoints(SUPPLY, SCALE)} />
+      <polyline className={`iso-flow return${running ? "" : " still"}`} points={toPoints([...RETURN].reverse(), SCALE)} />
+
+      {anchor && highlightLabel && (
+        <g className="iso-callout">
+          <line
+            x1={anchor[0] * SCALE}
+            y1={anchor[1] * SCALE}
+            x2={anchor[0] * SCALE + 40}
+            y2={anchor[1] * SCALE - 92}
+          />
+          <circle cx={anchor[0] * SCALE} cy={anchor[1] * SCALE} r={4} />
+          <rect
+            x={anchor[0] * SCALE + 40 - labelWidth / 2}
+            y={anchor[1] * SCALE - 92 - 30}
+            width={labelWidth}
+            height={30}
+            rx={15}
+          />
+          <text x={anchor[0] * SCALE + 40} y={anchor[1] * SCALE - 92 - 10} textAnchor="middle">
+            {highlightLabel}
+          </text>
         </g>
       )}
     </svg>
+  );
+}
+
+/** Server faces and status lights on the cabinets' front panels. */
+function Cabinets() {
+  const units: { pts: Vec3[]; led: Vec3[][] }[] = [];
+  for (let i = 0; i < 6; i++) {
+    const x0 = -1.2 + i * 3;
+    for (let k = 0; k < 7; k++) {
+      const z0 = 0.45 + k * 0.64;
+      const y = -5.39;
+      units.push({
+        pts: [
+          [x0 + 0.22, y, z0],
+          [x0 + 2.64, y, z0],
+          [x0 + 2.64, y, z0 + 0.5],
+          [x0 + 0.22, y, z0 + 0.5],
+        ],
+        led: [0.45, 0.72].map((dx) => [
+          [x0 + dx, y + 0.001, z0 + 0.19],
+          [x0 + dx + 0.13, y + 0.001, z0 + 0.19],
+          [x0 + dx + 0.13, y + 0.001, z0 + 0.31],
+          [x0 + dx, y + 0.001, z0 + 0.31],
+        ]),
+      });
+    }
+  }
+  return (
+    <g>
+      {units.map((u, i) => (
+        <g key={i}>
+          <polygon points={toPoints(u.pts, SCALE)} fill={lit(PAINT.unit, [0, 1, 0])} />
+          {u.led.map((l, j) => (
+            <polygon
+              key={j}
+              points={toPoints(l, SCALE)}
+              className="iso-led"
+              style={{ animationDelay: `${((i * 7 + j * 3) % 11) * 0.23}s` }}
+            />
+          ))}
+        </g>
+      ))}
+    </g>
   );
 }

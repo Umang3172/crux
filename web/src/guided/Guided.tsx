@@ -17,7 +17,7 @@ import { Ledger } from "../components/Ledger";
 import { Phase, Step, investigate } from "../run";
 import { LiveTrace } from "./LiveTrace";
 import { PumpScene, SceneStatus } from "./PumpScene";
-import { BEARING_FAULTS, CardState, SuspectCard } from "./SuspectCard";
+import { BEARING_FAULTS, RowState, SuspectRow } from "./SuspectRow";
 import {
   CHECK_TEXT,
   FAULT_IDS,
@@ -43,7 +43,7 @@ const STAGES: { phase: Phase; label: string }[] = [
 
 const NEXT_LABEL: Record<Phase, string> = {
   observe: "Test every suspect",
-  experiments: "What does Crux need?",
+  experiments: "See what Crux needs",
   request: "I've done the check",
   measurement: "Continue",
   conclusion: "Run another case",
@@ -134,8 +134,8 @@ export function Guided() {
         : "decided"
       : "investigating";
 
-  const cardState = useCallback(
-    (kind: string, i: Investigation): CardState => {
+  const rowState = useCallback(
+    (kind: string, i: Investigation): RowState => {
       if (!step || step.prior) return "waiting";
       if (!revealed) return "testing";
       const h = i.hypotheses.find((x) => x.kind === kind);
@@ -159,63 +159,84 @@ export function Guided() {
 
   return (
     <div className="g-shell">
-      <section className="g-hero">
-        <div className="g-hero-text">
-          <h1>Find out why the cooling pump is shaking</h1>
-          <p>
-            This chilled-water pump keeps a data hall's servers cool. When it starts vibrating, Crux
-            lists every likely cause, tests each one on a virtual copy of the pump, and asks you for
-            one quick check only if it still can't tell. Then it tells you what's wrong and what to
-            do.
-          </p>
-        </div>
-      </section>
+      <header className="g-hero">
+        <p className="g-asset">Chilled-water pump 2, data hall B</p>
+        <h1>Why is the cooling pump shaking?</h1>
+        <p className="g-lede">
+          This pump keeps a row of servers cool. Crux lists every likely cause, tests each one on a
+          virtual copy of the pump, and asks you for one quick check only when it still can't tell.
+        </p>
+      </header>
 
       <div className="g-stage">
-        <div className="g-machine-panel">
+        <figure className="g-scene">
           <PumpScene
             status={sceneStatus}
             vibration={current ? vibration : 1}
             highlight={top ? faultText(top.kind).part : null}
-            highlightLabel={top ? `Crux: ${faultText(top.kind).name}` : undefined}
+            highlightLabel={top ? faultText(top.kind).name : undefined}
           />
-          <div className="g-readouts">
-            <div className="g-readout">
-              <span>Vibration</span>
-              <b className={vibration > 1.3 ? "warn" : ""}>
-                {current ? `${vibration.toFixed(1)}× normal` : "–"}
-              </b>
+          <dl className="g-readouts">
+            <div>
+              <dt>Vibration</dt>
+              <dd className={current && vibration > 1.3 ? "warn" : ""}>
+                {current ? (
+                  <>
+                    {vibration.toFixed(1)}
+                    <small>× normal</small>
+                  </>
+                ) : (
+                  "–"
+                )}
+              </dd>
             </div>
-            <div className="g-readout">
-              <span>Bearing temperature</span>
-              <b>
-                {current?.reading.temperature_c != null
-                  ? `${current.reading.temperature_c.toFixed(1)} °C`
-                  : "–"}
-              </b>
+            <div>
+              <dt>Bearing</dt>
+              <dd>
+                {current?.reading.temperature_c != null ? (
+                  <>
+                    {current.reading.temperature_c.toFixed(1)}
+                    <small>°C</small>
+                  </>
+                ) : (
+                  "–"
+                )}
+              </dd>
             </div>
-            <div className="g-readout">
-              <span>Speed</span>
-              <b>{current ? `${current.reading.rpm.toFixed(0)} rpm` : "–"}</b>
+            <div>
+              <dt>Speed</dt>
+              <dd>
+                {current ? (
+                  <>
+                    {current.reading.rpm.toFixed(0)}
+                    <small>rpm</small>
+                  </>
+                ) : (
+                  "–"
+                )}
+              </dd>
             </div>
-            <div className="g-readout trace">
-              <span>Vibration sensor</span>
-              <LiveTrace waveform={current?.reading.waveform ?? []} running={!!current} />
+            <div className="g-readout-trace">
+              <dt>Sensor</dt>
+              <dd>
+                <LiveTrace waveform={current?.reading.waveform ?? []} running={!!current} />
+              </dd>
             </div>
-          </div>
-        </div>
+          </dl>
+        </figure>
 
-        <div className="g-side">
+        <aside className="g-sheet">
           {!current && (
-            <section className="g-card g-setup">
-              <h2>1. What's wrong with the pump?</h2>
-              <p className="g-muted">Pick a problem to feed in, or let Crux face a hidden one.</p>
-              <div className="g-options">
+            <div className="g-setup">
+              <h2>What's wrong with the pump?</h2>
+              <p className="g-muted">Feed in a fault, or let Crux face a hidden one.</p>
+              <div className="g-options" role="radiogroup" aria-label="Fault to feed in">
                 {SCENARIOS.map((s) => (
                   <button
                     key={s.id}
-                    className={`g-option${scenario === s.id ? " on" : ""}`}
-                    aria-pressed={scenario === s.id}
+                    role="radio"
+                    aria-checked={scenario === s.id}
+                    className={`g-option${scenario === s.id ? " on" : ""}${s.hint ? " wide" : ""}`}
                     onClick={() => setScenario(s.id)}
                     disabled={loading}
                   >
@@ -224,12 +245,13 @@ export function Guided() {
                   </button>
                 ))}
               </div>
-              <h2>2. How bad is it?</h2>
-              <div className="g-segment">
+              <h2>How bad is it?</h2>
+              <div className="g-segment" role="radiogroup" aria-label="Severity">
                 {SEVERITY_LEVELS.map((l) => (
                   <button
                     key={l.label}
-                    aria-pressed={severity === l.value}
+                    role="radio"
+                    aria-checked={severity === l.value}
                     className={severity === l.value ? "on" : ""}
                     onClick={() => setSeverity(l.value)}
                     disabled={loading || scenario === "healthy"}
@@ -239,30 +261,38 @@ export function Guided() {
                 ))}
               </div>
               <button className="g-primary" onClick={() => void start()} disabled={loading}>
-                {loading ? "Taking a reading…" : "Start the pump and investigate"}
+                {loading ? "Taking a reading…" : "Start the pump"}
               </button>
               {error && <p className="g-error">{error}</p>}
-            </section>
+            </div>
           )}
 
           {current && step && inv && (
-            <section className="g-card g-story">
+            <div className="g-story">
               <ol className="g-progress" aria-label="Investigation progress">
                 {STAGES.map((s, i) => (
                   <li
                     key={s.phase}
                     className={i < stageIndex ? "done" : i === stageIndex ? "now" : ""}
+                    aria-current={i === stageIndex ? "step" : undefined}
                   >
-                    {s.label}
+                    <span>{s.label}</span>
                   </li>
                 ))}
               </ol>
 
-              <StepText step={step} inv={inv} current={current} tests={tests} vibration={vibration} revealed={revealed} />
+              <StepText
+                step={step}
+                inv={inv}
+                current={current}
+                tests={tests}
+                vibration={vibration}
+                revealed={revealed}
+              />
 
               <div className="g-nav">
                 <button
-                  className="g-secondary"
+                  className="g-quiet"
                   onClick={() => setCursor((c) => Math.max(0, c - 1))}
                   disabled={cursor === 0}
                 >
@@ -276,41 +306,41 @@ export function Guided() {
                   {NEXT_LABEL[step.phase]}
                 </button>
               </div>
-            </section>
+            </div>
           )}
-        </div>
+        </aside>
       </div>
 
       {current && inv && (
-        <section className="g-suspects-wrap">
+        <section className="g-lineup" aria-labelledby="g-lineup-title">
           <header>
-            <h2>The suspects</h2>
+            <h2 id="g-lineup-title">The suspects</h2>
             <p className="g-muted">
-              Each card is one possible cause. Crux runs a virtual copy of the pump with that fault and
-              checks how well its vibration matches the real reading.
+              Each suspect gets a virtual copy of the pump running with that fault. The closer its
+              vibration is to the real reading, the more likely it becomes.
             </p>
           </header>
-          <div className="g-suspects">
-            {/* A fixed order: ranking the cards would give the answer away before testing. */}
+          <ol className="g-rows">
+            {/* A fixed order: ranking the rows would give the answer away before testing. */}
             {FAULT_IDS.filter((k) => inv.hypotheses.some((x) => x.kind === k)).map((kind) => {
               const h = inv.hypotheses.find((x) => x.kind === kind)!;
               return (
-                <SuspectCard
+                <SuspectRow
                   key={h.kind}
                   h={h}
-                  state={cardState(h.kind, inv)}
+                  state={rowState(h.kind, inv)}
                   spectra={current.spectra[h.kind] ?? null}
                 />
               );
             })}
-          </div>
+          </ol>
         </section>
       )}
 
       {current && step && inv && (
         <section className="g-details">
-          <button className="g-secondary" onClick={() => setDetails((d) => !d)} aria-expanded={details}>
-            {details ? "Hide the technical details" : "Show the technical details"}
+          <button className="g-quiet" onClick={() => setDetails((d) => !d)} aria-expanded={details}>
+            {details ? "Hide the engine's working" : "Show the engine's working"}
           </button>
           {details && (
             <div className="g-details-grid">
@@ -322,9 +352,8 @@ export function Guided() {
       )}
 
       <p className="g-footnote">
-        Demo data: the sensor readings come from a physics model of the pump, not from a real
-        machine, and the answer to Crux's check is supplied by the same model. Crux never sees which
-        fault was fed in.
+        Demo data. The readings come from a physics model of the pump, not a real machine, and the
+        same model answers Crux's checks. Crux is never told which fault was fed in.
       </p>
     </div>
   );
