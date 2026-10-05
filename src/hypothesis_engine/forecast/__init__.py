@@ -18,17 +18,22 @@ from .models import (
     when_to_fix,
 )
 from .onset import detect_onset
+from .percent import HealthCard, health_card, health_percent, weakest
 
 __all__ = [
     "AverageLife",
     "Forecast",
     "Forecaster",
+    "HealthCard",
     "QuantileGBM",
     "RunHealth",
     "SnapshotHealth",
     "TrendExtrapolation",
     "detect_onset",
     "get_forecaster",
+    "health_card",
+    "health_percent",
     "snapshot_health",
+    "weakest",
     "when_to_fix",
 ]

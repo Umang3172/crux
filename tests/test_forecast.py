@@ -26,6 +26,7 @@ from hypothesis_engine.forecast.models import (
     when_to_fix,
 )
 from hypothesis_engine.forecast.onset import BASELINE_SNAPSHOTS, CONSECUTIVE, detect_onset
+from hypothesis_engine.forecast.percent import HealthCard, health_card, health_percent, weakest
 from hypothesis_engine.physics.frequencies import bearing_multipliers
 
 FS = 25_600.0
@@ -307,3 +308,72 @@ needs_ims = pytest.mark.skipif(
 def test_real_ims_download_is_complete() -> None:
     found = {int(r.condition.removeprefix("test")): len(r) for r in runs.ims_runs()}
     assert found == runs.IMS_FILES
+
+
+# --- health percent ------------------------------------------------------------
+
+
+def _flat(peaks: list[float]) -> RunHealth:
+    """A run whose peak follows `peaks` after ten healthy snapshots at exactly 1."""
+    peak = np.array([1.0] * BASELINE_SNAPSHOTS + peaks)
+    n = len(peak)
+    return RunHealth(
+        "part",
+        "synthetic",
+        "",
+        True,
+        np.arange(n, dtype=float),
+        peak / 4,
+        peak,
+        np.full(n, 3.0),
+        np.full(n, 4.0),
+        np.tile([0.7, 0.2, 0.08, 0.02], (n, 1)),
+    )
+
+
+def test_percent_is_full_when_new_and_empty_at_the_danger_line() -> None:
+    assert health_percent(_flat([1.0] * 10))[-1] == 100.0
+    assert health_percent(_flat([DANGER_FACTOR] * 10))[-1] == 0.0
+    assert health_percent(_flat([30.0] * 10))[-1] == 0.0  # past the line, not negative
+
+
+def test_each_doubling_takes_the_same_bite() -> None:
+    two, four = (health_percent(_flat([x] * 10))[-1] for x in (2.0, 4.0))
+    assert 100 - two == pytest.approx(100 * np.log10(2))
+    assert two - four == pytest.approx(100 - two)
+
+
+def test_percent_never_rises_after_damage() -> None:
+    p = health_percent(_flat([5.0] * 10 + [1.0] * 10))
+    assert np.all(np.diff(p) <= 0)
+    assert p[-1] == pytest.approx(100 * (1 - np.log10(5)))
+
+
+def test_one_knock_does_not_move_the_percent() -> None:
+    assert health_percent(_flat([1.0] * 5 + [9.0] + [1.0] * 5))[-1] == 100.0
+
+
+def test_percent_uses_only_the_past() -> None:
+    h = _run("b", life=200, onset_at=120)
+    full = health_percent(h)
+    for n in (40, 130, 180):
+        assert health_percent(h.prefix(n))[-1] == full[n - 1]
+
+
+def test_card_says_normal_until_the_watcher_fires_then_gives_a_range() -> None:
+    h = _run("b", life=200, onset_at=120)
+    early = health_card(h.prefix(100), TrendExtrapolation())
+    late = health_card(h.prefix(190), TrendExtrapolation())
+    assert (early.status, early.forecast) == ("normal", None)
+    assert late.status == "attention" and late.forecast is not None
+    assert late.percent < early.percent
+
+
+def test_a_machine_shows_its_worst_part() -> None:
+    ok, worn, flagged = (
+        HealthCard("a", 99.0, "normal"),
+        HealthCard("b", 70.0, "normal"),
+        HealthCard("c", 90.0, "attention"),
+    )
+    assert weakest([ok, worn]) is worn
+    assert weakest([ok, worn, flagged]) is flagged  # a fired watcher outranks a lower number

@@ -26,6 +26,7 @@ from hypothesis_engine.forecast.models import (
     TrendExtrapolation,
     onset_of,
 )
+from hypothesis_engine.forecast.percent import health_percent
 
 OUT = runs.DATA_ROOT / "forecast"
 TABLES = {"xjtu": OUT / "health_xjtu.csv", "ims": OUT / "health_ims.csv"}
@@ -84,6 +85,30 @@ def _watcher_lines(runs_: list[health.RunHealth]) -> list[str]:
     return lines
 
 
+#: Hours before the end at which the percent is reported.
+PERCENT_HOURS = (24.0, 5.0, 1.0, 0.25)
+
+
+def _percent_lines(runs_: list[health.RunHealth]) -> list[str]:
+    """What the health percent read before each failure. A dash: the run was shorter."""
+    heads = " | ".join(f"{x:g} h before" for x in PERCENT_HOURS)
+    lines = [
+        f"| bearing | outcome | 90% or more for (share of life) | at the alarm | {heads} | at the end |",
+        "|---|---|---|---|" + "---|" * len(PERCENT_HOURS) + "---|",
+    ]
+    for h in sorted(runs_, key=lambda h: h.run_id):
+        p = health_percent(h)
+        left_h = (h.t_end - h.t) / 60
+        at = [f"{p[left_h <= x][0]:.0f}%" if left_h[0] > x else "-" for x in PERCENT_HOURS]
+        o = onset_of(h)
+        alarm = f"{p[o]:.0f}%" if o is not None else "no alarm"
+        outcome = f"failed: {h.failure_mode}" if h.failed else "survived the test"
+        lines.append(
+            f"| {h.run_id} | {outcome} | {(p >= 90).mean():.0%} | {alarm} | {' | '.join(at)} | {p[-1]:.0f}% |"
+        )
+    return lines
+
+
 def cmd_evaluate(args: argparse.Namespace) -> int:
     name = args.dataset
     if not TABLES[name].exists():
@@ -122,6 +147,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                 f"| {method} | trained on {name}, tested on IMS | {t.runs_scored} | {_fmt(t.norm_error)} | {_fmt(t.coverage, True)} | {_fmt(t.late, True)} |"
             )
     lines += ["", f"Watcher on every {name} bearing (running hours)", "", *_watcher_lines(every)]
+    lines += ["", f"Health percent on every {name} bearing", "", *_percent_lines(every)]
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"results_{name}.json").write_text(json.dumps(report, indent=2))
     text = "\n".join(lines)

@@ -23,6 +23,27 @@ engine, never reads or writes a belief, and is not part of the physics layer
    - `gbm-residual`: the same trees learn how wrong the trend is. That ratio has no units, so it has a chance of carrying over to a rig with a different time scale.
 4. **Evaluation** (`evaluate.py`). Leave-one-bearing-out on XJTU-SY, then train on all of XJTU-SY and test on IMS with no refitting. The split is always by bearing.
 
+## Health percent
+
+`percent.py` turns the same trend into one number per part, like a phone's
+battery health: 100% vibrates as it did when new, 0% is at the danger line.
+
+- Each doubling of the peak above its healthy maximum costs the same,
+  log10(2), about 30 points, because vibration grows by multiplying.
+- A trailing median of `SMOOTH_SNAPSHOTS` stops one knock moving the number.
+- It never rises again, because damage does not heal.
+- A machine shows its worst part (`weakest`), and a part the watcher has
+  flagged outranks a lower number on a part it has not.
+
+It is not life left, so it is never shown alone. `health_card()` adds the
+watcher's status and, once it has fired, the time-left range. `evaluate`
+reports what the percent read before each failure.
+
+On IMS (development set), the peak-based percent fell before the RMS watcher
+fired on test 1 bearing 3: below 50% about 51 running hours before the end,
+when the watcher fired 5 hours before it. The ratchet also locks in shaking
+from a failing neighbour: test 3 bearing 4 survived but ends at 54%.
+
 ## Getting the data (a human does this)
 
 | Set | Role | Get it | Put it in |
@@ -100,6 +121,7 @@ A learned model is only worth shipping if it beats both `average-life` and
 | `MIN_RISE` | the level doubles | set on IMS (development set): healthy bearings drift up to about 25% between restarts |
 | `STOPPED_FRACTION` | 10% of healthy RMS | chosen; IMS stop files sit near 1% |
 | `TREND_WINDOW` | 15 snapshots | chosen |
+| `SMOOTH_SNAPSHOTS` | 6 snapshots | chosen; see `percent.py` |
 | `BANDS_HZ` | 0–1, 1–3, 3–6, 6–10 kHz | chosen; 10 kHz is the IMS Nyquist limit |
 | GBM settings | 300 trees, rate 0.05, 15 leaves, 20 per leaf | chosen once, not tuned on held-out bearings |
 
