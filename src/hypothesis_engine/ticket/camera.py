@@ -106,11 +106,14 @@ class NoInspector:
 
 PROMPT = """You are looking at one CCTV still of an industrial machine whose
 vibration monitor has just raised an alarm. Context: {context}
-List only things you can actually see that a maintenance technician should
-check: leaks, oil or water on the floor, smoke, discolouration from heat, a
-loose or missing guard, a thrown or frayed belt, debris, loose fasteners, or a
-person in danger. Do not guess at internal faults you cannot see. If nothing is
-visibly wrong, return an empty list. Set hazard only if someone could be hurt."""
+Report only problems that are plainly visible in this image: a liquid leak or
+oil or water on the floor, smoke, scorch marks or discolouration, a guard that
+is missing or hanging off, a belt that is off its pulley or torn, debris
+against moving parts, or a person in danger. Do not report anything you would
+have to assume, such as loose bolts, wear, misalignment or internal damage:
+those cannot be seen in a photo. Most stills show nothing wrong; then return
+an empty list. Confidence is how sure you are that the problem is really in
+the image. Set hazard only if someone could be hurt."""
 
 _SCHEMA = {
     "type": "array",
@@ -162,11 +165,44 @@ class GeminiInspector:
         ]
 
 
+class LocalInspector:
+    """The same look on a local vision model through Ollama (Gemma 4 reads images)."""
+
+    def __init__(self) -> None:
+        from ..agents import ollama
+
+        if not ollama.available():
+            raise RuntimeError("no local model")
+        self._ollama = ollama
+        self.name = f"ollama:{ollama.model()}"
+
+    def look(self, still: Still, context: str) -> list[Finding]:
+        schema = {"type": "object", "properties": {"findings": _SCHEMA}, "required": ["findings"]}
+        reply = self._ollama.chat(
+            PROMPT.format(context=context), schema=schema, images=[still.image]
+        )
+        return [
+            Finding(
+                str(i["what"]),
+                str(i["where"]),
+                max(0.0, min(1.0, float(i["confidence"]))),
+                bool(i["hazard"]),
+            )
+            for i in json.loads(reply)["findings"]
+        ]
+
+
 def get_inspector() -> Inspector:
+    """Gemini, else a local vision model if OLLAMA_MODEL is set and answering, else nobody."""
     if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
         try:
             return GeminiInspector()
         except Exception:  # pragma: no cover - adapter is optional
+            pass
+    if os.getenv("OLLAMA_MODEL"):
+        try:
+            return LocalInspector()
+        except Exception:  # pragma: no cover - server down or model missing
             pass
     return NoInspector()
 

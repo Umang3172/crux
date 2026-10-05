@@ -2,7 +2,7 @@
 
 Order of preference, per role:
 
-    Narrator : Gemini (GOOGLE_API_KEY)     -> template
+    Narrator : Gemini (GOOGLE_API_KEY)     -> local model (OLLAMA_MODEL) -> template
     Gate     : Jev (TYPESAFE_API_KEY)      -> rules
 
 Never raises because a key is missing. `describe()` tells you what you are
@@ -24,6 +24,13 @@ def get_narrator() -> Narrator:
 
             return GeminiNarrator()
         except Exception:  # pragma: no cover - adapter is optional
+            pass
+    if os.getenv("OLLAMA_MODEL"):
+        try:
+            from .ollama import OllamaNarrator
+
+            return OllamaNarrator()
+        except Exception:  # pragma: no cover - server down or model missing
             pass
     return TemplateNarrator()
 

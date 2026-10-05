@@ -129,8 +129,19 @@ machine. The dataset's answer key is never read.
 Cameras are listed per machine in `data/cameras.json` (git-ignored, like the
 stills): `{"<machine id>": {"kind": "file" | "http", "path" | "url": ..., "label": ...}}`.
 With `GOOGLE_API_KEY` set, Gemini looks at the still and returns typed
-findings, marked unconfirmed on the ticket; without it, the still is attached
-and the ticket says nobody has looked at it.
+findings, marked unconfirmed on the ticket. Until then a local model can do the
+same on this machine: `OLLAMA_MODEL=gemma4:latest uv run hypengine serve` uses
+Gemma 4 through Ollama (`agents/ollama.py`) for the ticket writer, the camera
+look and the narrator. Without either, the still is attached and the ticket says
+nobody has looked at it.
+
+Two guards hold whichever model writes: a sentence whose numbers are not in the
+evidence it cites is removed, and evidence a ticket must state (reading, alarm,
+range, planned-stop risk, camera, cause, part) that no kept sentence cites is
+put back in its template wording. On a first try (6 Oct 2026), Gemma 4 8B
+reported "loose fasteners" at 0.8 to 0.9 confidence on two normal rig photos;
+the camera prompt now asks only for problems plainly visible in a photo, and on
+the same photos it reports nothing.
 
 ## Getting the data (a human does this)
 

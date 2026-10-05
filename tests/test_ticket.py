@@ -89,7 +89,8 @@ def _ticket(**over):
 
 def test_a_model_cannot_slip_in_a_number_nobody_measured() -> None:
     t = _ticket(writer=_Liar())
-    assert [s.text for s in t.sentences] == ["Health is 41%."]
+    texts = [s.text for s in t.sentences]
+    assert "Health is 41%." in texts and "It will fail in exactly 6 hours." not in texts
     assert [s.text for s in t.removed] == ["It will fail in exactly 6 hours."]
 
 
@@ -177,3 +178,33 @@ def test_a_near_certain_chance_is_never_written_as_certain() -> None:
     t = _ticket(risk=0.99996)
     s = next(s for s in t.sentences if "E4" in s.cites)
     assert "more than 99%" in s.text and "100%" not in s.text
+
+
+class _Forgetful:
+    name = "forgetful"
+
+    def write(self, evidence, facts):
+        return [Sentence("Health reads 41% (E1).", ("E1",))]
+
+
+def test_what_a_model_leaves_out_is_put_back_from_templates() -> None:
+    t = _ticket(writer=_Forgetful())
+    cited = {c for s in t.sentences for c in s.cites}
+    assert {"E1", "E2", "E3", "E4", "E6", "E7"} <= cited
+    assert t.sentences[0].text == "Health reads 41%."  # inline citation stripped
+    assert any("added from templates" in n for n in t.notes)
+
+
+def test_citation_marks_a_model_leaves_in_its_text_are_removed() -> None:
+    class _Marks:
+        name = "marks"
+
+        def write(self, evidence, facts):
+            return [
+                Sentence("Health reads 41% [E1]}.", ("E1",)),
+                Sentence("Run on 40Hz10kN at 10 kN (E0).", ("E0",)),
+            ]
+
+    t = _ticket(writer=_Marks(), machine_name="run 3-1 (40Hz10kN)")
+    texts = [s.text for s in t.sentences]
+    assert "Health reads 41%." in texts and "Run on 40Hz10kN at 10 kN." in texts

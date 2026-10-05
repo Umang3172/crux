@@ -74,6 +74,16 @@ class Ticket:
 # ------------------------------------------------------------------ the check
 
 _NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?")
+# "(E1)", "[E1, E2]" or stray JSON braces a model leaves in its text; the screen
+# shows citations itself.
+_INLINE_CITE = re.compile(r"\s*[(\[](?:E\d+(?:,\s*)?)+[)\]]|[{}]")
+# Evidence side: every digit run counts, so "40Hz10kN" offers both 40 and 10.
+_ANY_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+#: Evidence every ticket must state, when it exists: the reading, the alarm, the
+#: time-left range, the planned-stop risk, the camera, what is known of the
+#: cause, and the part to have ready.
+_MUST_CARRY = ("E1", "E2", "E3", "E4", "E5", "E6", "E7")
 
 
 def _matches(written: str, values: tuple[float, ...]) -> bool:
@@ -194,11 +204,56 @@ class GeminiWriter:
         return [Sentence(str(i["text"]), tuple(str(c) for c in i.get("cites", []))) for i in items]
 
 
+_SENTENCES = {
+    "type": "object",
+    "properties": {
+        "sentences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "cites": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["text", "cites"],
+            },
+        }
+    },
+    "required": ["sentences"],
+}
+
+
+class LocalWriter:
+    """The same job on a local model through Ollama (Gemma 4 until Gemini is set up)."""
+
+    def __init__(self) -> None:
+        from ..agents import ollama
+
+        if not ollama.available():
+            raise RuntimeError("no local model")
+        self._ollama = ollama
+        self.name = f"ollama:{ollama.model()}"
+
+    def write(self, evidence: list[Evidence], facts: dict) -> list[Sentence]:
+        listing = "\n".join(f"{e.id} ({e.kind}): {e.statement}" for e in evidence)
+        prompt = WRITER_PROMPT.replace("Return JSON: [", 'Return JSON: {"sentences": [').replace(
+            "...]}].", "...]}]}."
+        )
+        items = json.loads(self._ollama.chat(prompt + listing, schema=_SENTENCES))["sentences"]
+        return [Sentence(str(i["text"]), tuple(str(c) for c in i.get("cites", []))) for i in items]
+
+
 def get_writer() -> Writer:
+    """Gemini, else a local model if OLLAMA_MODEL is set and answering, else templates."""
     if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
         try:
             return GeminiWriter()
         except Exception:  # pragma: no cover - adapter is optional
+            pass
+    if os.getenv("OLLAMA_MODEL"):
+        try:
+            return LocalWriter()
+        except Exception:  # pragma: no cover - server down or model missing
             pass
     return TemplateWriter()
 
@@ -297,7 +352,18 @@ def draft(
         notes.append(f"{who.name} failed ({type(e).__name__}); written from templates instead")
         who = TemplateWriter()
         sentences = who.write(ev, facts)
+    sentences = [Sentence(_INLINE_CITE.sub("", x.text).strip(), x.cites) for x in sentences]
     kept, removed = check(sentences, ev)
+    # A model may leave out what matters most. Every piece of evidence a ticket
+    # must carry gets its plain template sentence back if no kept sentence cites it.
+    cited = {c for x in kept for c in x.cites}
+    missing = [i for i in _MUST_CARRY if i in {e.id for e in ev} and i not in cited]
+    if missing:
+        fallback = {c: x for x in TemplateWriter().write(ev, facts) for c in x.cites}
+        for i in missing:
+            if fallback.get(i) is not None and fallback[i] not in kept:
+                kept.append(fallback[i])
+        notes.append(f"{who.name} left out {', '.join(missing)}; added from templates")
     return Ticket(
         id=ticket_id,
         machine=machine,
@@ -322,4 +388,4 @@ def draft(
 
 
 def _numbers_in(text: str) -> tuple[float, ...]:
-    return tuple(float(n) for n in _NUMBER.findall(text))
+    return tuple(float(n) for n in _ANY_NUMBER.findall(text))
