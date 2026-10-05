@@ -16,6 +16,8 @@ correlations, to judge whether the engine should work this way.
 Needs the XJTU-SY files and `scripts/forecast.py table --dataset xjtu`.
 """
 
+from __future__ import annotations
+
 from dataclasses import replace
 
 import numpy as np
@@ -23,68 +25,72 @@ import numpy as np
 from hypothesis_engine.data import xjtu
 from hypothesis_engine.forecast import health, runs
 from hypothesis_engine.forecast.models import onset_of
-from hypothesis_engine.models import FaultKind
+from hypothesis_engine.models import FaultKind, MachineSpec
 from hypothesis_engine.physics.compare import spectral_correlation
-from hypothesis_engine.physics.signatures import DEFAULT_HYPOTHESES, predicted_signature
+from hypothesis_engine.physics.signatures import DEFAULT_HYPOTHESES, Signature, predicted_signature
 from hypothesis_engine.physics.synth import synthesize
 
-
-def fault_only(kind, m, rpm):
-    sig = predicted_signature(kind, m, rpm)
-    base_labels = {t.label for t in predicted_signature(FaultKind.HEALTHY, m, rpm).tones}
-    return replace(sig, tones=tuple(t for t in sig.tones if t.label not in base_labels), noise=0.0)
+TABLE = runs.DATA_ROOT / "forecast" / "health_xjtu.csv"
+IN_CATALOGUE = {"outer race": "outer_race", "inner race": "inner_race"}
+SEED = 7 + 101  # the engine's simulation seed
 
 
-def score(run, real_i, base_i, base2_i):
-    m = xjtu.machine(run)
-    rpm = m.nominal_rpm
-    fs = run.fs
-    real, base, base2 = run.load(real_i), run.load(base_i), run.load(base2_i)
+def fault_only(kind: FaultKind, machine: MachineSpec, rpm: float) -> Signature:
+    """The suspect's signature without the textbook machine's running tones or noise."""
+    sig = predicted_signature(kind, machine, rpm)
+    running = {t.label for t in predicted_signature(FaultKind.HEALTHY, machine, rpm).tones}
+    return replace(sig, tones=tuple(t for t in sig.tones if t.label not in running), noise=0.0)
+
+
+def correlations(run: runs.Run, reading: int, healthy: int, other_healthy: int) -> dict[str, float]:
+    machine = xjtu.machine(run)
+    real, base = run.load(reading), run.load(healthy)
     n = len(real)
-    dur = n / fs
-    added = max(np.mean(real**2) - np.mean(base**2), 1e-12)
+    gained = max(float(np.mean(real**2) - np.mean(base**2)), 1e-12)
     out = {}
-    for k in DEFAULT_HYPOTHESES:
-        if k is FaultKind.HEALTHY:
-            sim = base2
+    for kind in DEFAULT_HYPOTHESES:
+        if kind is FaultKind.HEALTHY:
+            sim = run.load(other_healthy)
         else:
-            f = synthesize(fault_only(k, m, rpm), sample_rate_hz=fs, duration_s=dur, seed=108)[:n]
-            f = f * np.sqrt(added / max(np.mean(f**2), 1e-12))
-            sim = base + f
-        out[k.value] = spectral_correlation(real, sim, fs)
+            f = synthesize(
+                fault_only(kind, machine, machine.nominal_rpm),
+                sample_rate_hz=run.fs,
+                duration_s=n / run.fs,
+                seed=SEED,
+            )[:n]
+            sim = base + f * np.sqrt(gained / max(float(np.mean(f**2)), 1e-12))
+        out[kind.value] = spectral_correlation(real, sim, run.fs)
     return out
 
 
-tables = {
-    h.run_id: h
-    for h in (
-        health.trim_stopped(x) for x in health.load(runs.DATA_ROOT / "forecast" / "health_xjtu.csv")
-    )
-}
-truth_map = {"outer race": "outer_race", "inner race": "inner_race"}
-right = total = 0
-healthy_ok = 0
-for run in runs.xjtu_runs():
-    h = tables[run.run_id]
-    o = onset_of(h)
-    ctrl = score(run, 5, 1, 2)
-    lead_c = max(ctrl, key=ctrl.get)
-    healthy_ok += lead_c == "healthy"
-    if o is None:
-        print(f"{run.run_id:28s} no alarm | control leader {lead_c}")
-        continue
-    s = score(run, int(round(h.t[o])), 1, 2)
-    ranked = sorted(s.items(), key=lambda kv: -kv[1])
-    lead = ranked[0][0]
-    t = truth_map.get(run.failure_mode)
-    if t:
-        total += 1
-        right += lead == t
+def main() -> int:
+    tables = {h.run_id: h for h in (health.trim_stopped(x) for x in health.load(TABLE))}
+    right = total = calm = 0
+    found = runs.xjtu_runs()
+    for run in found:
+        h = tables[run.run_id]
+        control = correlations(run, 5, 1, 2)  # an early, healthy minute
+        control_lead = max(control, key=control.get)
+        calm += control_lead == "healthy"
+        o = onset_of(h)
+        if o is None:
+            print(f"{run.run_id:28s} no alarm | healthy minute led by {control_lead}")
+            continue
+        scores = correlations(run, int(round(h.t[o])), 1, 2)
+        ranked = sorted(scores.items(), key=lambda kv: -kv[1])
+        truth = IN_CATALOGUE.get(run.failure_mode)
+        if truth:
+            total += 1
+            right += ranked[0][0] == truth
+        top = ", ".join(f"{k} {v:.2f}" for k, v in ranked[:3])
+        print(
+            f"{run.run_id:28s} {run.failure_mode[:24]:24s} -> {top} | healthy minute led by {control_lead}"
+        )
     print(
-        f"{run.run_id:28s} truth={run.failure_mode[:24]:24s} -> "
-        + ", ".join(f"{k} {v:.2f}" for k, v in ranked[:3])
-        + f" | control leader {lead_c}"
+        f"leader right on {right}/{total} diagnosable bearings; a healthy minute led by healthy on {calm}/{len(found)}"
     )
-print(
-    f"leader right on {right}/{total} diagnosable bearings; healthy control led by 'healthy' on {healthy_ok}/15"
-)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
