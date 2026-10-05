@@ -5,6 +5,7 @@
     uv run python scripts/forecast.py evaluate   # leave-one-bearing-out on XJTU-SY, then IMS
     uv run python scripts/forecast.py train      # fit on all XJTU-SY -> data/forecast/model.pkl
     uv run python scripts/forecast.py replay     # what the maintenance screen shows -> replay.json
+    uv run python scripts/forecast.py metro      # the watcher on MetroPT-3's air compressor
 
 Needs the run-to-failure data a human downloaded into data/xjtu/ and data/ims/
 (docs/FORECAST.md). Touches no network. Results land in data/forecast/, which
@@ -18,7 +19,7 @@ import json
 import sys
 from datetime import UTC, datetime
 
-from hypothesis_engine.forecast import health, replay, runs
+from hypothesis_engine.forecast import health, metropt, replay, runs
 from hypothesis_engine.forecast.evaluate import as_records, leave_one_out, summarise, transfer
 from hypothesis_engine.forecast.models import (
     DEFAULT_MODEL,
@@ -182,6 +183,39 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_metro(args: argparse.Namespace) -> int:
+    if not metropt.METRO_CSV.exists():
+        print(f"no MetroPT-3 CSV at {metropt.METRO_CSV}", file=sys.stderr)
+        return 1
+    h = metropt.hourly()
+    line = metropt.limit(h.signal, h.hour)
+    verdicts, false, months = metropt.score(h, line)
+    lines = [
+        "The bearing watcher's frozen rules on MetroPT-3 (air compressor, air leaks)",
+        "",
+        f"Signal: loaded share over the last {metropt.WINDOW_H} h. Healthy month: mean "
+        f"{h.signal[h.hour < metropt.BASELINE_END].mean():.3f}; alarm line {line:.3f}.",
+        "",
+        "| failure window | warned before it began | hours of warning (negative: the alarm came during it) |",
+        "|---|---|---|",
+    ]
+    for v in verdicts:
+        lead = f"{v.lead_h:.0f}" if v.lead_h is not None else "-"
+        lines.append(
+            f"| {v.failure[0]} to {v.failure[1]} | {'yes' if v.warned else 'no'} | {lead} |"
+        )
+    lines += [
+        "",
+        f"Alarms that warned of nothing: {len(false)} in {months:.1f} months "
+        f"({len(false) / months:.1f} a month).",
+    ]
+    OUT.mkdir(parents=True, exist_ok=True)
+    text = "\n".join(lines)
+    (OUT / "results_metropt.md").write_text(text + "\n")
+    print(text)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -199,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("replay", help="precompute the maintenance screen's replays")
     rp.add_argument("--method", choices=list(METHODS), default="gbm-residual")
     rp.set_defaults(func=cmd_replay)
+    mt = sub.add_parser("metro", help="the watcher on MetroPT-3's air compressor")
+    mt.set_defaults(func=cmd_metro)
     args = ap.parse_args(argv)
     return args.func(args)
 

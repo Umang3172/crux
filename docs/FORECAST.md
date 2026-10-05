@@ -62,10 +62,22 @@ part, so no range on screen comes from a model that saw that bearing. Without
 `GET /maintenance/machines/{id}` serve it (`api/maintenance.py`); with no health
 tables on the server the list is empty and says why.
 
+## A different machine: MetroPT-3
+
+`metropt.py` runs the same watcher on a metro train's air compressor (UCI
+dataset 791, CC BY 4.0): no vibration, and the failures are air leaks. The signal
+was fixed from what a leak does before any failure window was looked at: the
+share of time the compressor runs loaded (`DV_eletric`), over the trailing 24
+hours. The first month is healthy, as UCI recommends, and the watcher's rules
+are unchanged. `scripts/forecast.py metro` reports, per company-reported
+failure, whether an alarm came before it and how early, and how many alarms
+warned of nothing.
+
 ## Getting the data (a human does this)
 
 | Set | Role | Get it | Put it in |
 |---|---|---|---|
+| MetroPT-3, one air compressor, 4 reported air leaks | the watcher on a non-vibration machine | archive.ics.uci.edu/dataset/791 (208 MB CSV) | `data/metropt/MetroPT3(AirCompressor).csv` |
 | XJTU-SY, 15 bearings, accelerated run-to-failure | fit and compare | links at biaowang.tech/xjtu-sy-bearing-datasets (Google Drive, Dropbox, ...). Cite Wang et al., IEEE Trans. Reliability 69(1):401-412, 2020 | `data/xjtu/<condition>/BearingX_Y/N.csv` |
 | IMS (NASA), 3 tests, 4 bearings each | transfer test only | `uv run python scripts/fetch_ims.py` | `data/ims/<1st_test etc.>/<timestamp files>` |
 

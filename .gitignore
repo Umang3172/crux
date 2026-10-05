@@ -23,6 +23,7 @@ data/rig/*
 !data/rig/.gitkeep
 data/ims/
 data/xjtu/
+data/metropt/
 *.mat
 *.npz
 captures/
