@@ -631,3 +631,58 @@
   padding: 7px 16px;
   font-weight: 600;
 }
+
+.m-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.m-ticket-btn.quiet {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.m-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border-left: 4px solid var(--ask);
+}
+
+.m-finding.sure {
+  border-left-color: var(--physics);
+}
+
+.m-ranked {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.m-ranked li {
+  display: grid;
+  grid-template-columns: 120px 1fr 40px;
+  gap: 8px;
+  align-items: center;
+}
+
+.m-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.m-bar span {
+  display: block;
+  height: 100%;
+  background: var(--physics);
+}

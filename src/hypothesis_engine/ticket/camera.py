@@ -140,6 +140,21 @@ class GeminiInspector:
         self.name = f"gemini:{self.model}"
         self._client = genai.Client()
 
+    def confirm(self, still: Still, finding: Finding) -> bool:
+        from google.genai import types  # type: ignore
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=[
+                types.Part.from_bytes(data=still.image, mime_type=still.mime),
+                CONFIRM.format(what=finding.what, where=finding.where),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json", response_schema=_YES_NO
+            ),
+        )
+        return bool(json.loads(response.text or "{}").get("visible", False))
+
     def look(self, still: Still, context: str) -> list[Finding]:
         from google.genai import types  # type: ignore
 
@@ -163,6 +178,18 @@ class GeminiInspector:
             )
             for i in items
         ]
+
+
+CONFIRM = """Look at this CCTV still again, carefully. Someone said it shows: {what},
+at {where}. Is that plainly visible in this image, beyond doubt? Reflections,
+shadows, shiny floors, cables and normal parts of the machine do not count, and
+"nothing wrong" is not a finding. Answer yes only if you can point to it."""
+
+_YES_NO = {
+    "type": "object",
+    "properties": {"visible": {"type": "boolean"}, "sure": {"type": "number"}},
+    "required": ["visible", "sure"],
+}
 
 
 class LocalInspector:
@@ -191,6 +218,14 @@ class LocalInspector:
             for i in json.loads(reply)["findings"]
         ]
 
+    def confirm(self, still: Still, finding: Finding) -> bool:
+        reply = self._ollama.chat(
+            CONFIRM.format(what=finding.what, where=finding.where),
+            schema=_YES_NO,
+            images=[still.image],
+        )
+        return bool(json.loads(reply)["visible"])
+
 
 def get_inspector() -> Inspector:
     """Gemini, else a local vision model if OLLAMA_MODEL is set and answering, else nobody."""
@@ -208,15 +243,24 @@ def get_inspector() -> Inspector:
 
 
 def inspect(still: Still, context: str, inspector: Inspector | None = None) -> CameraLook:
+    """Look once, then keep only what a focused second look confirms.
+
+    Vision models report things that are not there (on 6 Oct 2026 a local 8B
+    model saw a leak in a shiny floor). A finding goes on the ticket only if a
+    yes/no question about that one thing, asked fresh, says it is plainly visible.
+    """
     who = inspector or get_inspector()
     try:
-        findings = who.look(still, context)
-        note = (
-            "" if who.name != "offline" else "Gemini is off: nobody has looked at this still yet."
-        )
+        first = who.look(still, context)
+        confirm = getattr(who, "confirm", None)
+        findings = [f for f in first if confirm is None or confirm(still, f)]
+        if who.name == "offline":
+            note = "No model is on: nobody has looked at this still yet."
+        elif len(findings) < len(first):
+            note = f"{len(first) - len(findings)} first-look finding(s) not confirmed on a second look, left out."
+        else:
+            note = ""
     except Exception as e:  # a failed look must not lose the still
-        findings, note = (
-            [],
-            f"The camera check failed ({type(e).__name__}); look at the still by eye.",
-        )
+        findings = []
+        note = f"The camera check failed ({type(e).__name__}); look at the still by eye."
     return CameraLook(still.camera, still.taken_at, findings, who.name, note)

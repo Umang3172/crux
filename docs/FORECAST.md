@@ -140,8 +140,22 @@ evidence it cites is removed, and evidence a ticket must state (reading, alarm,
 range, planned-stop risk, camera, cause, part) that no kept sentence cites is
 put back in its template wording. On a first try (6 Oct 2026), Gemma 4 8B
 reported "loose fasteners" at 0.8 to 0.9 confidence on two normal rig photos;
-the camera prompt now asks only for problems plainly visible in a photo, and on
-the same photos it reports nothing.
+the camera prompt now asks only for problems plainly visible in a photo, and
+every first-look finding must survive a fresh yes/no question about that one
+thing. With both, it reported nothing on 8 of 8 looks at the normal rig photos;
+on the dataset's photos of a fractured outer race and cage it reported
+"discolouration" (not the crack) on half the looks. A local 8B model is a
+stand-in, not a measured inspector: it needs a labelled photo set.
+
+## Alarm to investigation
+
+`POST /maintenance/investigate` runs the investigation on the recording at the
+chosen moment (`investigation/recorded.py`): the snapshot is the reading, and
+each check Crux asks for is answered from the snapshots that follow. The ticket
+quotes the result: the cause if the investigation is sure, otherwise the
+leading suspect, its belief and the checks it asked for. XJTU-SY only; the IMS
+bearing dimensions are not on file (TBD). How well it does on these bearings is
+in Results above, and `scripts/diagnose_runs.py` reproduces it.
 
 ## Getting the data (a human does this)
 

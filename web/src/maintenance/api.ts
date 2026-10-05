@@ -132,3 +132,19 @@ export const approveTicket = (id: string, by: string) =>
   send<Ticket>(`/maintenance/tickets/${id}/approve`, { by });
 
 export const stillUrl = (id: string) => `${BASE}/maintenance/tickets/${id}/still`;
+
+// ------------------------------------------------------------------ investigation
+
+export type Finding = {
+  confident: boolean;
+  leader: { kind: string; label: string; belief: number };
+  ranked: { kind: string; label: string; belief: number }[];
+  asked: string[];
+  answered: { test: string; value: number }[];
+  transcript: string[];
+  statement: string;
+  reading: string;
+};
+
+export const investigate = (machine: string, part: string, at_h: number) =>
+  send<Finding>("/maintenance/investigate", { machine, part, at_h });

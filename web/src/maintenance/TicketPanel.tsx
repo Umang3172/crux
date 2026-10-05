@@ -7,7 +7,16 @@
  */
 
 import { useEffect, useState } from "react";
-import { PartReplay, Ticket, approveTicket, draftTicket, risk, stillUrl } from "./api";
+import {
+  Finding,
+  PartReplay,
+  Ticket,
+  approveTicket,
+  draftTicket,
+  investigate,
+  risk,
+  stillUrl,
+} from "./api";
 
 function pct(x: number): string {
   return x < 0.01 ? "under 1%" : x > 0.99 ? "over 99%" : `${Math.round(x * 100)}%`;
@@ -32,12 +41,24 @@ export function TicketPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [who, setWho] = useState("");
+  const [finding, setFinding] = useState<Finding | null>(null);
+  const [looking, setLooking] = useState(false);
 
   // A ticket belongs to one part at one moment; a new part starts clean.
   useEffect(() => {
     setTicket(null);
+    setFinding(null);
     setError(null);
   }, [machine, part.part]);
+
+  const look = () => {
+    setLooking(true);
+    setError(null);
+    investigate(machine, part.part, now)
+      .then(setFinding)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLooking(false));
+  };
 
   useEffect(() => {
     if (!alarmed || playing) {
@@ -89,6 +110,38 @@ export function TicketPanel({
         <p className="m-odds">
           Chance it reaches the danger line first: <strong>{pct(odds)}</strong>
         </p>
+      )}
+      <div className="m-actions">
+        <button className="m-ticket-btn quiet" onClick={look} disabled={looking}>
+          {looking ? "Investigating…" : "Investigate what is wrong"}
+        </button>
+      </div>
+      {finding && (
+        <div className={`m-finding${finding.confident ? " sure" : ""}`}>
+          <p className="m-finding-head">
+            {finding.confident ? "Crux's answer" : "Not settled yet"}:{" "}
+            <strong>{finding.leader.label}</strong> ({Math.round(finding.leader.belief * 100)}%
+            belief)
+          </p>
+          <ul className="m-ranked">
+            {finding.ranked.map((r) => (
+              <li key={r.kind}>
+                <span>{r.label}</span>
+                <span className="m-bar">
+                  <span style={{ width: `${Math.round(r.belief * 100)}%` }} />
+                </span>
+                <span>{Math.round(r.belief * 100)}%</span>
+              </li>
+            ))}
+          </ul>
+          {finding.asked.length > 0 && (
+            <p className="m-fine">
+              Checks Crux asked for: {finding.asked.join(", ")}. Answered from the recording that
+              followed, as a technician's capture would be.
+            </p>
+          )}
+          <p className="m-fine">Reading: {finding.reading}.</p>
+        </div>
       )}
       <button className="m-ticket-btn" onClick={write} disabled={busy}>
         {busy ? "Writing…" : ticket ? "Write a new ticket for this moment" : "Draft repair ticket"}

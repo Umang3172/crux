@@ -208,3 +208,16 @@ def test_citation_marks_a_model_leaves_in_its_text_are_removed() -> None:
     t = _ticket(writer=_Marks(), machine_name="run 3-1 (40Hz10kN)")
     texts = [s.text for s in t.sentences]
     assert "Health reads 41%." in texts and "Run on 40Hz10kN at 10 kN." in texts
+
+
+class _Doubter(_Seer):
+    name = "doubter"
+
+    def confirm(self, still, finding):
+        return False
+
+
+def test_a_finding_the_second_look_does_not_confirm_is_left_out() -> None:
+    still = camera.Still("m", "Bay 2 camera", b"x", "image/jpeg", "now")
+    look = camera.inspect(still, "ctx", _Doubter())
+    assert look.findings == [] and "not confirmed" in look.note

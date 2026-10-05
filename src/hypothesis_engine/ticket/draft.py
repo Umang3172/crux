@@ -340,7 +340,7 @@ def draft(
         diagnosis
         or "Not investigated yet: Crux will ask for the one check that settles what is wrong."
     )
-    ev.append(Evidence("E6", "status", diag))
+    ev.append(Evidence("E6", "status", diag, _numbers_in(diag)))
     facts["diagnosis_sentence"] = diag
     ev.append(Evidence("E7", "record", f"fitted bearing: {bearing}", _numbers_in(bearing)))
 

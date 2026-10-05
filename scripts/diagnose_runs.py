@@ -86,12 +86,15 @@ def main(argv: list[str] | None = None) -> int:
                 return None  # a check no recording can answer
 
         st = inv.run(max_requests=args.max_requests, oracle=answer)
+        lead = st.leader()
+        # An engine may close a case with no conclusion ("unresolved"): read the leader then.
         c = st.conclusion
-        verdict = c.root_cause.value if c.confidence >= CONCLUDE_ABOVE else "unresolved"
+        confident = c is not None and c.confidence >= CONCLUDE_ABOVE
+        verdict = c.root_cause.value if confident else "unresolved"
         g = grade(run.failure_mode, verdict)
         tally[g] = tally.get(g, 0) + 1
         lines.append(
-            f"| {run.run_id} | {run.failure_mode} | {verdict} | {c.root_cause.value} {c.confidence:.2f} "
+            f"| {run.run_id} | {run.failure_mode} | {verdict} | {lead.kind.value} {lead.posterior:.2f} "
             f"| {', '.join(st.requested_tests) or 'none'} | {g} |"
         )
     lines += ["", "Totals: " + "; ".join(f"{k}: {v}" for k, v in sorted(tally.items()))]
