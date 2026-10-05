@@ -152,8 +152,8 @@ class TemplateWriter:
         if "E4" in ids:
             out.append(
                 Sentence(
-                    f"Waiting for the planned stop in {_h(facts['stop_in_h'])} hours carries a "
-                    f"{chance(facts['risk'])[0]} chance it reaches the danger line first.",
+                    f"If it waits for the planned stop in {_h(facts['stop_in_h'])} hours, the chance "
+                    f"it reaches the danger line first is {chance(facts['risk'])[0]}.",
                     ("E4",),
                 )
             )

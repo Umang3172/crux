@@ -97,7 +97,7 @@ def test_the_offline_ticket_passes_its_own_check() -> None:
     t = _ticket()
     assert t.written_by == "template" and not t.removed
     text = " ".join(s.text for s in t.sentences)
-    assert "3.2 to 34 hours" in text and "43% chance" in text and "LDK UER204" in text
+    assert "3.2 to 34 hours" in text and "is 43%" in text and "LDK UER204" in text
     assert "Not investigated yet" in text and t.status == "draft"
 
 
