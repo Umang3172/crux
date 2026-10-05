@@ -195,6 +195,13 @@ def new_ticket(req: TicketRequest) -> dict[str, Any]:
     if run is not None:
         minute = min(max(int(round(req.at_h * 60)), 0), len(run) - 1)
         diagnosis = _investigate(run.run_id, minute)["statement"]
+    from ..fleet import Memory, machine_type_of
+    from ..fleet.memory import MEMORY_FILE
+
+    situation = " ".join(
+        filter(None, [diagnosis, look and draft_note(look), "vibration rising alarm"])
+    )
+    recalled = Memory(MEMORY_FILE).recall(machine_type_of(m["machine"]), situation, k=2)
     tid = f"T-{next(_IDS):04d}"
     t = draft_ticket(
         ticket_id=tid,
@@ -213,6 +220,7 @@ def new_ticket(req: TicketRequest) -> dict[str, Any]:
         look=look,
         has_still=still is not None,
         diagnosis=diagnosis,
+        lessons=[f"{x.title} ({x.source}): {x.do}" for x in recalled],
     )
     _TICKETS[tid] = t
     if still is not None:
@@ -231,6 +239,10 @@ def ticket_still(ticket_id: str) -> Response:
     if still is None:
         raise HTTPException(404, "no camera still on this ticket")
     return Response(still.image, media_type=still.mime)
+
+
+def draft_note(look: camera.CameraLook) -> str:
+    return " ".join(f"{f.what} {f.where}" for f in look.findings)
 
 
 class Approval(BaseModel):

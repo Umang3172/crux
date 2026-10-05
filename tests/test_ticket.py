@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from hypothesis_engine.api import maintenance
 from hypothesis_engine.api.app import app
+from hypothesis_engine.fleet import memory
 from hypothesis_engine.forecast import health, replay
 from hypothesis_engine.forecast.models import Forecast
 from hypothesis_engine.forecast.schedule import risk_before
@@ -139,6 +140,7 @@ def test_what_the_camera_saw_is_marked_unconfirmed(tmp_path) -> None:
 def server(tmp_path, monkeypatch):
     monkeypatch.setattr(replay, "REPLAY_FILE", tmp_path / "replay.json")
     monkeypatch.setattr(camera, "REGISTRY", tmp_path / "cameras.json")
+    monkeypatch.setattr(memory, "MEMORY_FILE", tmp_path / "memory.jsonl")
     maintenance._machines.cache_clear()
     health.save([_run("xjtu/c/Bearing1_1", 240, 120)], tmp_path / "health_xjtu.csv")
     (tmp_path / "still.jpg").write_bytes(b"\xff\xd8still")
@@ -221,3 +223,15 @@ def test_a_finding_the_second_look_does_not_confirm_is_left_out() -> None:
     still = camera.Still("m", "Bay 2 camera", b"x", "image/jpeg", "now")
     look = camera.inspect(still, "ctx", _Doubter())
     assert look.findings == [] and "not confirmed" in look.note
+
+
+def test_a_sentence_that_drops_the_chance_does_not_count_as_stating_it() -> None:
+    class _Vague:
+        name = "vague"
+
+        def write(self, evidence, facts):
+            return [Sentence("There is a planned stop in 24 hours.", ("E4",))]
+
+    t = _ticket(writer=_Vague())
+    e4 = [s.text for s in t.sentences if "E4" in s.cites]
+    assert e4 and all("43%" in x for x in e4)

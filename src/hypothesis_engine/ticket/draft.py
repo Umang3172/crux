@@ -35,6 +35,7 @@ class Evidence:
     kind: str  # sensor | forecast | camera | record | status
     statement: str
     numbers: tuple[float, ...] = ()
+    key: tuple[float, ...] = ()  # numbers a sentence citing this must state, e.g. a range's ends
 
 
 @dataclass(frozen=True)
@@ -82,8 +83,8 @@ _ANY_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 #: Evidence every ticket must state, when it exists: the reading, the alarm, the
 #: time-left range, the planned-stop risk, the camera, what is known of the
-#: cause, and the part to have ready.
-_MUST_CARRY = ("E1", "E2", "E3", "E4", "E5", "E6", "E7")
+#: cause, the part to have ready, and lessons from past cases.
+_MUST_CARRY = ("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8")
 
 
 def _matches(written: str, values: tuple[float, ...]) -> bool:
@@ -171,6 +172,8 @@ class TemplateWriter:
             out.append(Sentence(facts["camera_sentence"], ("E5",)))
         out.append(Sentence(facts["diagnosis_sentence"], ("E6",)))
         out.append(Sentence(f"Bearing to have ready: {facts['bearing']}.", ("E7",)))
+        if "E8" in ids:
+            out.append(Sentence(facts["lessons_sentence"], ("E8",)))
         return out
 
 
@@ -288,6 +291,7 @@ def draft(
     look: CameraLook | None,
     has_still: bool,
     diagnosis: str | None = None,
+    lessons: list[str] | None = None,
     writer: Writer | None = None,
 ) -> Ticket:
     """Collect the evidence, have it written up, and keep only what the evidence backs."""
@@ -317,6 +321,7 @@ def draft(
                 "forecast",
                 f"time left to the danger line: {lo:.1f} to {hi:.1f} hours, most likely {mid:.1f}",
                 (lo, mid, hi),
+                key=(lo, hi),
             )
         )
         facts.update(fix_within_h=(lo, hi), likely_h=mid)
@@ -328,6 +333,7 @@ def draft(
                 "forecast",
                 f"planned stop in {stop_in_h:.1f} hours; chance of reaching the line first {said}",
                 (stop_in_h, risk * 100, shown),
+                key=(shown,),
             )
         )
         facts.update(stop_in_h=stop_in_h, risk=risk)
@@ -343,6 +349,10 @@ def draft(
     ev.append(Evidence("E6", "status", diag, _numbers_in(diag)))
     facts["diagnosis_sentence"] = diag
     ev.append(Evidence("E7", "record", f"fitted bearing: {bearing}", _numbers_in(bearing)))
+    if lessons:
+        said = "Past cases say: " + " ".join(lessons)
+        ev.append(Evidence("E8", "lesson", said, _numbers_in(said)))
+        facts["lessons_sentence"] = said
 
     who = writer or get_writer()
     notes: list[str] = []
@@ -356,8 +366,23 @@ def draft(
     kept, removed = check(sentences, ev)
     # A model may leave out what matters most. Every piece of evidence a ticket
     # must carry gets its plain template sentence back if no kept sentence cites it.
-    cited = {c for x in kept for c in x.cites}
-    missing = [i for i in _MUST_CARRY if i in {e.id for e in ev} and i not in cited]
+    by_id = {e.id: e for e in ev}
+
+    def states(x: Sentence, e: Evidence) -> bool:
+        written = _NUMBER.findall(x.text)
+        return all(any(_matches(w, (k,)) for w in written) for k in e.key)
+
+    # A sentence that cites a range or a chance but leaves its numbers out does not carry it.
+    vague = {
+        i
+        for i in _MUST_CARRY
+        if i in by_id
+        and by_id[i].key
+        and not any(i in x.cites and states(x, by_id[i]) for x in kept)
+    }
+    kept = [x for x in kept if not (set(x.cites) & vague and len(x.cites) == 1)]
+    cited = {c for x in kept for c in x.cites} - vague
+    missing = [i for i in _MUST_CARRY if i in by_id and i not in cited]
     if missing:
         fallback = {c: x for x in TemplateWriter().write(ev, facts) for c in x.cites}
         for i in missing:

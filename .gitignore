@@ -27,6 +27,9 @@ data/metropt/
 # CCTV stills and the camera list: site images, never committed.
 data/cameras/
 data/cameras.json
+# Learning across sites: the demo hub and this site's memory, updates and keys.
+data/hub/
+data/site/
 *.mat
 *.npz
 captures/

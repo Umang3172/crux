@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MachineReplay, MachineSummary, PartReplay, TimeLeft, machine, machines } from "./api";
+import { Learning } from "./Learning";
 import { TicketPanel } from "./TicketPanel";
 import "./maintenance.css";
 
@@ -607,6 +608,7 @@ export function Maintenance() {
           </aside>
         </div>
       )}
+      {current && <Learning machineType="rolling bearing" />}
     </div>
   );
 }

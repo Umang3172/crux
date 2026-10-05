@@ -14,6 +14,7 @@ import {
   approveTicket,
   draftTicket,
   investigate,
+  reportOutcome,
   risk,
   stillUrl,
 } from "./api";
@@ -42,12 +43,17 @@ export function TicketPanel({
   const [error, setError] = useState<string | null>(null);
   const [who, setWho] = useState("");
   const [finding, setFinding] = useState<Finding | null>(null);
+  const [found, setFound] = useState("");
+  const [right, setRight] = useState(true);
+  const [major, setMajor] = useState(false);
+  const [learned, setLearned] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
 
   // A ticket belongs to one part at one moment; a new part starts clean.
   useEffect(() => {
     setTicket(null);
     setFinding(null);
+    setLearned(null);
     setError(null);
   }, [machine, part.part]);
 
@@ -205,6 +211,55 @@ export function TicketPanel({
             Written by {ticket.written_by}; every sentence checked against the evidence.
             {ticket.notes.length ? ` ${ticket.notes.join(" ")}` : ""}
           </p>
+          {ticket.status === "approved" && !learned && (
+            <div className="m-outcome">
+              <p className="m-finding-head">After the repair: what did you find?</p>
+              <input
+                placeholder="e.g. spall on the outer race"
+                value={found}
+                onChange={(e) => setFound(e.target.value)}
+                aria-label="What was found"
+              />
+              <div className="m-outcome-row">
+                <label>
+                  <input type="radio" checked={right} onChange={() => setRight(true)} /> Crux was
+                  right
+                </label>
+                <label>
+                  <input type="radio" checked={!right} onChange={() => setRight(false)} /> Crux was
+                  wrong
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={major}
+                    onChange={(e) => setMajor(e.target.checked)}
+                  />{" "}
+                  Major failure: warn other sites now
+                </label>
+              </div>
+              <button
+                onClick={() =>
+                  reportOutcome(ticket.id, found.trim(), right, ticket.approved_by, major)
+                    .then((r) =>
+                      setLearned(
+                        `Lesson saved: “${r.lesson.title}”` +
+                          (r.alert
+                            ? " · sent to every site now"
+                            : r.sent_to_hub
+                              ? " · sent to the hub"
+                              : ""),
+                      ),
+                    )
+                    .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                }
+                disabled={!found.trim()}
+              >
+                Close the case
+              </button>
+            </div>
+          )}
+          {learned && <p className="m-fine">{learned}</p>}
           {ticket.status === "draft" && (
             <div className="m-approve">
               <input

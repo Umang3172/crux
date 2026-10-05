@@ -189,3 +189,8 @@ def replay(req: StartRequest) -> dict[str, Any]:
 from .maintenance import router as _maintenance  # noqa: E402
 
 app.include_router(_maintenance)
+
+# Learning across sites: lessons, signed updates and what a technician found.
+from .fleet import router as _fleet  # noqa: E402
+
+app.include_router(_fleet)

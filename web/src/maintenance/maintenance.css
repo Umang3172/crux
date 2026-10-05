@@ -686,3 +686,107 @@
   height: 100%;
   background: var(--physics);
 }
+
+/* ------------------------------------------------------------ learning */
+
+.m-learning h3 {
+  margin-top: 4px;
+}
+
+.m-news {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  color: var(--coolant-ink);
+}
+
+.m-update {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border-left: 4px solid var(--coolant);
+}
+
+.m-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.m-table th,
+.m-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.m-table th {
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.m-table tr.better td {
+  color: var(--coolant-ink);
+  font-weight: 600;
+}
+
+.m-approve button.danger {
+  background: var(--fault);
+}
+
+.m-lessons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.m-lessons li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  font-size: 14px;
+}
+
+.m-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.m-outcome input[type="text"],
+.m-outcome > input {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.m-outcome-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.m-outcome > button {
+  align-self: flex-start;
+  background: var(--ink);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-weight: 600;
+}

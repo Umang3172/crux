@@ -148,3 +148,66 @@ export type Finding = {
 
 export const investigate = (machine: string, part: string, at_h: number) =>
   send<Finding>("/maintenance/investigate", { machine, part, at_h });
+
+// ------------------------------------------------------------------ learning across sites
+
+export type Score = {
+  model: string;
+  error: number | null;
+  late: number | null;
+  inside: number | null;
+};
+export type Report = {
+  passes: boolean | null;
+  reason: string;
+  runs?: number;
+  current?: Score;
+  candidate?: Score;
+};
+export type FleetStatus = {
+  site: string;
+  active: number | null;
+  staged: { version: number; report: Report } | null;
+  history: { version: number | null; approved_by: string; at: string }[];
+  hub_versions: number[];
+  lessons: number;
+  model: string;
+};
+export type Lesson = {
+  id: string;
+  machine_type: string;
+  title: string;
+  when: string;
+  do: string;
+  avoid: string;
+  outcome: "success" | "failure";
+  source: string;
+  confirmed_by: string;
+};
+
+export const fleetStatus = () => get<FleetStatus>("/fleet/status");
+export const fleetPull = () =>
+  send<{
+    alerts: { version: number; lessons: string[] }[];
+    staged: unknown;
+    rejected: { why: string }[];
+  }>("/fleet/pull", {});
+export const fleetApprove = (by: string) => send<{ active: number }>("/fleet/approve", { by });
+export const fleetRollback = (by: string) =>
+  send<{ active: number | null }>("/fleet/rollback", { by });
+export const fleetLessons = (machine_type: string) =>
+  get<Lesson[]>(`/fleet/lessons?${new URLSearchParams({ machine_type, k: "20" })}`);
+export const reportOutcome = (
+  ticket_id: string,
+  found: string,
+  right: boolean,
+  by: string,
+  major: boolean,
+) =>
+  send<{ lesson: Lesson; sent_to_hub: boolean; alert: string | null }>("/fleet/outcome", {
+    ticket_id,
+    found,
+    right,
+    by,
+    major,
+  });
