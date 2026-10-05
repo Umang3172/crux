@@ -1,0 +1,466 @@
+/*
+ * Predictive maintenance. Same paper tones and type as the guided view; colour
+ * only with meaning: coolant teal for a part with no alarm, red once Crux has
+ * raised one, amber for the time-left range a person has to act on.
+ */
+
+.m-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 32px;
+}
+
+.m-hero {
+  max-width: 64ch;
+}
+
+.m-kicker {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--coolant-ink);
+}
+
+.m-hero h1 {
+  margin-top: 6px;
+  font-size: clamp(30px, 4.6vw, 52px);
+  line-height: 1.02;
+  font-weight: 700;
+  font-stretch: 125%;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.m-lede {
+  margin-top: 14px;
+  font-size: 17px;
+  color: var(--ink-dim);
+}
+
+.m-muted {
+  color: var(--ink-dim);
+}
+
+.m-empty {
+  color: var(--ink-dim);
+  padding: 12px 0;
+}
+
+/* ------------------------------------------------------------ machines */
+
+.m-machines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.m-machines button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 200px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+}
+
+.m-machines button[aria-pressed="true"] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.m-machine-name {
+  font-weight: 600;
+}
+
+.m-machine-meta {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* ------------------------------------------------------------ stage */
+
+.m-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1020px) {
+  .m-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.m-sheet {
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow:
+    0 1px 2px rgb(20 34 44 / 6%),
+    0 18px 40px -24px rgb(20 34 44 / 35%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.m-sheet h2 {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.m-sheet h3 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.m-machine-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.m-overall {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 13px;
+}
+
+.m-overall strong {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 650;
+  font-stretch: 87.5%;
+  color: var(--coolant-ink);
+}
+
+.m-overall strong.alarmed {
+  color: var(--fault);
+}
+
+/* ------------------------------------------------------------ parts */
+
+.m-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.m-part {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--panel-2);
+  text-align: left;
+}
+
+.m-part.selected {
+  border-color: var(--ink);
+  background: var(--panel);
+}
+
+.m-part-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.m-part-pct {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 650;
+  font-stretch: 87.5%;
+}
+
+.m-part-range {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ask-ink);
+}
+
+.m-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--coolant-soft);
+  color: var(--coolant-ink);
+}
+
+.m-chip.alarmed {
+  background: var(--fault-soft);
+  color: var(--fault);
+}
+
+.m-battery-case {
+  fill: var(--panel);
+  stroke: var(--ink-faint);
+  stroke-width: 1.5;
+}
+
+.m-battery-cap {
+  fill: var(--ink-faint);
+}
+
+.m-battery-fill {
+  fill: var(--coolant);
+  transition: width 0.2s;
+}
+
+.m-battery.alarmed .m-battery-fill {
+  fill: var(--fault);
+}
+
+/* ------------------------------------------------------------ timeline */
+
+.m-timeline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.m-timeline input[type="range"] {
+  width: 100%;
+  accent-color: var(--ink);
+}
+
+.m-play {
+  background: var(--ink);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-weight: 600;
+  min-width: 84px;
+}
+
+.m-clock {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.m-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.m-segment {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.m-segment button {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: 999px;
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.m-segment button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow:
+    0 1px 2px rgb(20 34 44 / 10%),
+    0 0 0 1px var(--line);
+}
+
+.m-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.m-toggle input {
+  accent-color: var(--fault);
+}
+
+/* ------------------------------------------------------------ charts */
+
+.m-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.m-grid {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+}
+
+.m-tick {
+  font-size: 11px;
+  fill: var(--ink-faint);
+}
+
+.m-line polyline {
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+
+.m-line.selected polyline {
+  stroke: var(--ink);
+  stroke-width: 2.6;
+}
+
+.m-line polyline.m-hit {
+  stroke: transparent;
+  stroke-width: 12;
+}
+
+.m-alarm-dot {
+  fill: var(--fault);
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+
+.m-fail-mark {
+  font-size: 18px;
+  font-weight: 700;
+  fill: var(--fault);
+}
+
+.m-now line {
+  stroke: var(--ask);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.m-now text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ask-ink);
+}
+
+.m-band {
+  fill: var(--ask);
+  fill-opacity: 0.28;
+  stroke: none;
+}
+
+.m-mid {
+  fill: none;
+  stroke: var(--ask-ink);
+  stroke-width: 2;
+}
+
+.m-truth {
+  stroke: var(--fault);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.m-legend {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-top: -8px;
+}
+
+.m-key {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  vertical-align: middle;
+  margin-right: 2px;
+  background: var(--ink);
+}
+
+.m-key.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fault);
+}
+
+.m-key.cross {
+  width: auto;
+  height: auto;
+  background: none;
+  color: var(--fault);
+  font-weight: 700;
+}
+
+.m-key.band {
+  height: 10px;
+  background: rgb(240 165 28 / 28%);
+}
+
+.m-key.mid {
+  background: var(--ask-ink);
+}
+
+.m-key.truth {
+  background: repeating-linear-gradient(90deg, var(--fault) 0 5px, transparent 5px 8px);
+}
+
+/* ------------------------------------------------------------ side */
+
+.m-big {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.m-big strong {
+  display: block;
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 650;
+  font-stretch: 87.5%;
+  margin-bottom: 6px;
+}
+
+.m-fixby {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--ask-ink);
+}
+
+.m-story {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.m-fine {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.m-play:focus-visible,
+.m-machines button:focus-visible,
+.m-part:focus-visible,
+.m-segment button:focus-visible {
+  outline: 2px solid var(--coolant);
+  outline-offset: 2px;
+}

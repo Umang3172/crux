@@ -11,6 +11,7 @@ const API_PATHS = [
   "/replay",
   "/spectrum",
   "/capture",
+  "/maintenance",
   "/openapi.json",
 ];
 

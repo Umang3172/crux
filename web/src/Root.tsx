@@ -11,11 +11,13 @@ import App from "./App";
 import { health } from "./api";
 import { Guided } from "./guided/Guided";
 import "./guided/guided.css";
+import { Maintenance } from "./maintenance/Maintenance";
 
-type View = "guided" | "engineer";
+type View = "guided" | "engineer" | "maintenance";
 
 function initialView(): View {
-  return window.location.hash === "#engineer" ? "engineer" : "guided";
+  const hash = window.location.hash.slice(1);
+  return hash === "engineer" || hash === "maintenance" ? hash : "guided";
 }
 
 export function Root() {
@@ -34,7 +36,7 @@ export function Root() {
 
   const choose = (v: View) => {
     setView(v);
-    window.history.replaceState(null, "", v === "engineer" ? "#engineer" : "#");
+    window.history.replaceState(null, "", v === "guided" ? "#" : `#${v}`);
   };
 
   return (
@@ -48,6 +50,9 @@ export function Root() {
           </button>
           <button aria-pressed={view === "engineer"} onClick={() => choose("engineer")}>
             Engineer view
+          </button>
+          <button aria-pressed={view === "maintenance"} onClick={() => choose("maintenance")}>
+            Predictive maintenance
           </button>
         </nav>
         <span
@@ -66,7 +71,7 @@ export function Root() {
                 : "Engine ready, Gemini on"}
         </span>
       </header>
-      {view === "guided" ? <Guided /> : <App embedded />}
+      {view === "guided" ? <Guided /> : view === "maintenance" ? <Maintenance /> : <App embedded />}
     </div>
   );
 }
