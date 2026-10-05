@@ -109,6 +109,57 @@ if "/spectrum" not in {getattr(route, "path", None) for route in app.routes}:
         }
 
 
+class CaptureRequest(BaseModel):
+    fault: FaultKind = Field(default=FaultKind.OUTER_RACE, description="Fault induced on the rig.")
+    rpm: float | None = None
+    severity: float = 1.0
+    seed: int = 1234
+
+
+#: Points in the waveform preview. Enough to draw a trace that looks like vibration
+#: on a phone or a projector; the full capture never leaves the server.
+PREVIEW_POINTS = 600
+
+#: The healthy baseline is rendered at its own fixed seed, so the "times normal"
+#: figure compares against one reference machine, not against a moving target.
+BASELINE_SEED = 4242
+
+
+if "/capture" not in {getattr(route, "path", None) for route in app.routes}:
+
+    @app.post("/capture")
+    def capture(req: CaptureRequest) -> dict[str, Any]:
+        """The sensor reading behind a case, for the gauges and the live trace.
+
+        The same capture `/investigations` and `/replay` diagnose, reduced to what
+        a person reads off a handheld meter: vibration level against a healthy
+        machine of the same type, housing temperature, speed, and a short slice of
+        the waveform. Presentation only; nothing here moves a belief.
+        """
+        observation = synthetic_capture(
+            req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed
+        )
+        baseline = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, rpm=req.rpm, seed=BASELINE_SEED)
+        x = np.asarray(observation.waveform, dtype=float)
+        rms = float(np.sqrt(np.mean(x**2)))
+        baseline_rms = float(np.sqrt(np.mean(np.asarray(baseline.waveform) ** 2)))
+        # A quarter of a second shows several shaft turns at ~30 Hz.
+        window = x[: int(0.25 * observation.sample_rate_hz)]
+        step = max(1, len(window) // PREVIEW_POINTS)
+        preview = window[::step][:PREVIEW_POINTS]
+        return {
+            "rpm": round(observation.rpm, 1),
+            "temperature_c": None
+            if observation.temperature_c is None
+            else round(observation.temperature_c, 1),
+            "rms": round(rms, 4),
+            "baseline_rms": round(baseline_rms, 4),
+            "sample_rate_hz": observation.sample_rate_hz / step,
+            "waveform": [round(float(v), 4) for v in preview],
+            "source": observation.source,
+        }
+
+
 # Last, so every API route above wins the match. `html=True` serves index.html
 # for the bare origin. When the bundle is absent (a plain `uvicorn` run before
 # `npm run build`) the API simply serves itself.

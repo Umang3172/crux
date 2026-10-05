@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..signals.features import envelope_spectrum, magnitude_spectrum
+from ..signals.features import envelope_available, envelope_spectrum, magnitude_spectrum
 
 
 def _binned_log(freqs: np.ndarray, mag: np.ndarray, f_max: float, bin_hz: float) -> np.ndarray:
@@ -84,5 +84,7 @@ def spectral_correlation(
     structure right to score well.
     """
     raw = raw_spectrum_correlation(real, simulated, sample_rate_hz, f_max, bin_hz)
+    if not envelope_available(sample_rate_hz):
+        return raw  # no envelope to compare; the raw spectrum is all the evidence there is
     env = envelope_correlation(real, simulated, sample_rate_hz, min(f_max, 400.0), bin_hz)
     return float((1.0 - envelope_weight) * raw + envelope_weight * env)

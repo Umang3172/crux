@@ -4,7 +4,15 @@ import { defineConfig } from "vite";
 // In production the container serves this bundle and the API from one origin,
 // so the client uses relative paths. The dev server proxies the same paths, so
 // `VITE_API_BASE=""` behaves exactly like the deployed build while you work.
-const API_PATHS = ["/health", "/tests", "/investigations", "/replay", "/spectrum", "/openapi.json"];
+const API_PATHS = [
+  "/health",
+  "/tests",
+  "/investigations",
+  "/replay",
+  "/spectrum",
+  "/capture",
+  "/openapi.json",
+];
 
 export default defineConfig({
   plugins: [react()],

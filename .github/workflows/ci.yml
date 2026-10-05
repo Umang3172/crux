@@ -20,22 +20,21 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install 3.11
-
+      # The project's own virtualenv, resolved from uv.lock. Installing into the
+      # runner's system Python fails: Ubuntu marks it externally managed.
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --frozen --python 3.11 --extra dev
 
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Test
-        run: pytest -q
+        run: uv run pytest -q
 
       - name: The demo still tells a story
         run: |
-          hypengine demo --fault outer_race --no-verify
-          hypengine demo --fault misalignment --no-verify
+          uv run hypengine demo --fault outer_race --no-verify
+          uv run hypengine demo --fault misalignment --no-verify
 
   web:
     # The deployed link is a submission requirement, and the image builds the UI
