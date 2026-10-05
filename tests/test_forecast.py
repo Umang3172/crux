@@ -377,3 +377,16 @@ def test_a_machine_shows_its_worst_part() -> None:
     )
     assert weakest([ok, worn]) is worn
     assert weakest([ok, worn, flagged]) is flagged  # a fired watcher outranks a lower number
+
+
+def test_an_unreadable_snapshot_is_left_out_not_patched(tmp_path) -> None:
+    folder = tmp_path / "35Hz12kN" / "Bearing1_1"
+    folder.mkdir(parents=True)
+    rng = np.random.default_rng(0)
+    for k in range(1, 5):
+        rows = "\n".join(f"{a},{b}" for a, b in rng.standard_normal((64, 2)))
+        (folder / f"{k}.csv").write_text("H,V\n" + rows + "\n")
+    (folder / "3.csv").write_text("H,V\n1,2\n3\n")  # cut short, as a bad unpack leaves it
+    (h,) = health.build_many(runs.xjtu_runs(tmp_path))
+    assert list(h.t) == [0.0, 1.0, 3.0]
+    assert h.extra["damaged_files"] == "3.csv"

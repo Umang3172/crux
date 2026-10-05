@@ -24,6 +24,9 @@ data/rig/*
 data/ims/
 data/xjtu/
 data/metropt/
+# CCTV stills and the camera list: site images, never committed.
+data/cameras/
+data/cameras.json
 *.mat
 *.npz
 captures/

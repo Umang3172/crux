@@ -34,6 +34,13 @@ CHART_POINTS = 400
 #: every few pixels when the alarm-to-failure stretch fills the chart.
 FORECAST_POINTS = 80
 
+#: The bearing fitted on each rig, for the ticket's parts line: IMS readme
+#: ("Rexnord ZA-2115 double row bearings"), XJTU-SY authors' page (LDK UER204).
+_BEARING = {
+    "ims": "Rexnord ZA-2115 (double row)",
+    "xjtu-sy": "LDK UER204",
+}
+
 _SOURCE = {
     "ims": "NASA IMS run-to-failure test (University of Cincinnati)",
     "xjtu-sy": "XJTU-SY accelerated run-to-failure test (Xi'an Jiaotong University)",
@@ -71,6 +78,7 @@ class MachineReplay:
     source: str
     end_h: float
     parts: list[PartReplay]
+    bearing: str = "TBD"
 
 
 def _label(h: RunHealth) -> str:
@@ -142,6 +150,7 @@ def machine_replay(
         source=_SOURCE.get(ordered[0].source, ordered[0].source),
         end_h=_hours(max(h.t_end for h in ordered)),
         parts=[replay_part(h, forecaster_for(h)) for h in ordered],
+        bearing=_BEARING.get(ordered[0].source, "TBD"),
     )
 
 

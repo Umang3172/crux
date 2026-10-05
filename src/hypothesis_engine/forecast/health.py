@@ -154,13 +154,26 @@ def build_many(
     out = []
     for files, members in groups.items():
         snaps: dict[str, list[SnapshotHealth]] = {r.run_id: [] for r in members}
+        times: list[float] = []
+        damaged: list[str] = []
         for i, f in enumerate(files):
-            table = read_table(f)
+            # A file that cannot be read whole is left out, never patched: the
+            # minute is missing from the trend, which the watcher tolerates.
+            try:
+                table = read_table(f)
+            except ValueError:
+                damaged.append(f.name)
+                continue
+            times.append(members[0].times_min[i])
             for r in members:
                 snaps[r.run_id].append(snapshot_health(table[:, r.channel], r.fs))
             if progress is not None:
                 progress(members[0].run_id, i + 1, len(files))
-        out.extend(from_snapshots(r, r.times_min, snaps[r.run_id]) for r in members)
+        for r in members:
+            h = from_snapshots(r, times, snaps[r.run_id])
+            if damaged:
+                h.extra["damaged_files"] = ",".join(damaged)
+            out.append(h)
     return out
 
 

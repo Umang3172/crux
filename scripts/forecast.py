@@ -52,7 +52,11 @@ def _table(name: str) -> None:
         if i == n or i % 500 == 0:
             print(f"  {run_id}: {i}/{n} snapshots", flush=True)
 
-    health.save(health.build_many(found, progress), TABLES[name])
+    built = health.build_many(found, progress)
+    for h in built:
+        if h.extra.get("damaged_files"):
+            print(f"  {h.run_id}: left out unreadable {h.extra['damaged_files']}")
+    health.save(built, TABLES[name])
     print(f"wrote {TABLES[name]}")
 
 
