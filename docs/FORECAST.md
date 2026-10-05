@@ -1,4 +1,4 @@
-# When to fix: the forecaster
+# Predictive maintenance: when to fix, and a health percent
 
 The investigation decides **what** is wrong. This answers **when** it becomes
 urgent: how many minutes until the bearing's vibration crosses the danger line,
@@ -43,6 +43,24 @@ On IMS (development set), the peak-based percent fell before the RMS watcher
 fired on test 1 bearing 3: below 50% about 51 running hours before the end,
 when the watcher fired 5 hours before it. The ratchet also locks in shaking
 from a failing neighbour: test 3 bearing 4 survived but ends at 54%.
+
+## The screen
+
+The web app's "Predictive maintenance" view replays recorded bearing lives:
+scrub or play the timeline, and every battery, alarm and time-left range is
+what Crux would have said at that moment from the snapshots so far. "Show what
+really happened" adds the true failure. One machine is an IMS test (four
+bearings on one shaft, shown as its worst part) or one XJTU-SY run.
+
+```bash
+uv run python scripts/forecast.py replay     # writes data/forecast/replay.json
+```
+
+`replay` gives every part a time-left model fitted on every *other* failed
+part, so no range on screen comes from a model that saw that bearing. Without
+`replay.json` the API falls back to the trend. `GET /maintenance/machines` and
+`GET /maintenance/machines/{id}` serve it (`api/maintenance.py`); with no health
+tables on the server the list is empty and says why.
 
 ## Getting the data (a human does this)
 

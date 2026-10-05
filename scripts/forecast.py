@@ -4,6 +4,7 @@
     uv run python scripts/forecast.py table      # raw snapshots -> data/forecast/*.csv (slow, once)
     uv run python scripts/forecast.py evaluate   # leave-one-bearing-out on XJTU-SY, then IMS
     uv run python scripts/forecast.py train      # fit on all XJTU-SY -> data/forecast/model.pkl
+    uv run python scripts/forecast.py replay     # what the maintenance screen shows -> replay.json
 
 Needs the run-to-failure data a human downloaded into data/xjtu/ and data/ims/
 (docs/FORECAST.md). Touches no network. Results land in data/forecast/, which
@@ -17,7 +18,7 @@ import json
 import sys
 from datetime import UTC, datetime
 
-from hypothesis_engine.forecast import health, runs
+from hypothesis_engine.forecast import health, replay, runs
 from hypothesis_engine.forecast.evaluate import as_records, leave_one_out, summarise, transfer
 from hypothesis_engine.forecast.models import (
     DEFAULT_MODEL,
@@ -168,6 +169,19 @@ def cmd_train(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_replay(args: argparse.Namespace) -> int:
+    found = replay.available_runs()
+    if not found:
+        print("no health tables: run `table` first", file=sys.stderr)
+        return 1
+    machines = replay.build_all(found, replay.held_out(METHODS[args.method], found))
+    replay.save(machines)
+    print(
+        f"wrote {replay.REPLAY_FILE}: {len(machines)} machines, {args.method}, each part held out"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -182,6 +196,9 @@ def main(argv: list[str] | None = None) -> int:
     tr = sub.add_parser("train", help="fit the shipped model on all of XJTU-SY")
     tr.add_argument("--target", choices=["direct", "residual"], default="residual")
     tr.set_defaults(func=cmd_train)
+    rp = sub.add_parser("replay", help="precompute the maintenance screen's replays")
+    rp.add_argument("--method", choices=list(METHODS), default="gbm-residual")
+    rp.set_defaults(func=cmd_replay)
     args = ap.parse_args(argv)
     return args.func(args)
 

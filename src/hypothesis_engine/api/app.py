@@ -182,3 +182,10 @@ def replay(req: StartRequest) -> dict[str, Any]:
     state.extra["ground_truth"] = req.fault.value
     _INVESTIGATIONS[state.id] = inv
     return serialise(state)
+
+
+# Predictive maintenance: replays of recorded bearing lives. Its own module, and
+# it reads no investigation, so nothing it serves can move a belief.
+from .maintenance import router as _maintenance  # noqa: E402
+
+app.include_router(_maintenance)
