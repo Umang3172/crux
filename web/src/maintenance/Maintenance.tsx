@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MachineReplay, MachineSummary, PartReplay, TimeLeft, machine, machines } from "./api";
+import { TicketPanel } from "./TicketPanel";
 import "./maintenance.css";
 
 // ------------------------------------------------------------------ helpers
@@ -429,17 +430,23 @@ export function Maintenance() {
       </section>
 
       <nav className="m-machines" aria-label="Machine">
-        {list.map((m) => (
-          <button
-            key={m.machine}
-            aria-pressed={current?.machine === m.machine}
-            onClick={() => open(m.machine)}
-          >
-            <span className="m-machine-name">{m.name}</span>
-            <span className="m-machine-meta">
-              {hours(m.end_h)} of running · {m.parts} {m.parts === 1 ? "bearing" : "bearings"}
-            </span>
-          </button>
+        {groups(list).map(([source, rows]) => (
+          <div key={source} className="m-group">
+            <span className="m-group-name">{source}</span>
+            <div className="m-group-items">
+              {rows.map((m) => (
+                <button
+                  key={m.machine}
+                  aria-pressed={current?.machine === m.machine}
+                  onClick={() => open(m.machine)}
+                  title={m.name}
+                >
+                  <span className="m-machine-name">{shortName(m.name)}</span>
+                  <span className="m-machine-meta">{hours(m.end_h)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
@@ -571,6 +578,13 @@ export function Maintenance() {
                 <p key={s}>{s}</p>
               ))}
             </div>
+            <TicketPanel
+              machine={current.machine}
+              part={focus.part}
+              now={now}
+              alarmed={focus.alarmed}
+              playing={playing}
+            />
             <h3>Time left: Crux's range{reveal ? " vs what happened" : ""}</h3>
             <TimeLeftChart part={focus.part} now={now} reveal={reveal} />
             {focus.alarmed && (
@@ -595,6 +609,24 @@ export function Maintenance() {
       )}
     </div>
   );
+}
+
+/** Machines grouped by the test they come from, in the order the API lists them. */
+function groups(list: MachineSummary[]): [string, MachineSummary[]][] {
+  const out = new Map<string, MachineSummary[]>();
+  for (const m of list) {
+    const key = m.source.split(" (")[0];
+    out.set(key, [...(out.get(key) ?? []), m]);
+  }
+  return [...out.entries()];
+}
+
+/** "XJTU-SY run 1-1 (35Hz12kN)" -> "Run 1-1"; "NASA test rig, test 2" -> "Test 2". */
+function shortName(name: string): string {
+  const b = name.match(/run (\d+-\d+)/);
+  if (b) return `Run ${b[1]}`;
+  const t = name.match(/test (\d+)/);
+  return t ? `Test ${t[1]}` : name;
 }
 
 /** How far before the first alarm the "final stretch" view starts. */

@@ -110,6 +110,15 @@ def _h(x: float) -> str:
     return f"{x:.1f}" if x < 10 else f"{x:.0f}"
 
 
+def chance(p: float) -> tuple[str, float]:
+    """A probability in words, never "0%" or "100%": the model is not that sure."""
+    if p > 0.99:
+        return "more than 99%", 99.0
+    if p < 0.01:
+        return "less than 1%", 1.0
+    return f"{p * 100:.0f}%", p * 100
+
+
 class Writer(Protocol):
     name: str
 
@@ -144,7 +153,7 @@ class TemplateWriter:
             out.append(
                 Sentence(
                     f"Waiting for the planned stop in {_h(facts['stop_in_h'])} hours carries a "
-                    f"{facts['risk'] * 100:.0f}% chance it reaches the danger line first.",
+                    f"{chance(facts['risk'])[0]} chance it reaches the danger line first.",
                     ("E4",),
                 )
             )
@@ -257,12 +266,13 @@ def draft(
         )
         facts.update(fix_within_h=(lo, hi), likely_h=mid)
     if stop_in_h is not None and risk is not None:
+        said, shown = chance(risk)
         ev.append(
             Evidence(
                 "E4",
                 "forecast",
-                f"planned stop in {stop_in_h:.1f} hours; chance of reaching the line first {risk * 100:.0f}%",
-                (stop_in_h, risk * 100),
+                f"planned stop in {stop_in_h:.1f} hours; chance of reaching the line first {said}",
+                (stop_in_h, risk * 100, shown),
             )
         )
         facts.update(stop_in_h=stop_in_h, risk=risk)

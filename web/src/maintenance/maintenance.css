@@ -50,19 +50,37 @@
 
 .m-machines {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.m-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.m-group-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.m-group-items {
+  display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .m-machines button {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  min-width: 200px;
-  padding: 12px 16px;
+  gap: 0;
+  min-width: 104px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 12px;
   background: var(--panel);
   text-align: left;
 }
@@ -463,4 +481,153 @@
 .m-segment button:focus-visible {
   outline: 2px solid var(--coolant);
   outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ plan and ticket */
+
+.m-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.m-stop {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.m-stop input {
+  width: 64px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.m-odds strong {
+  color: var(--ask-ink);
+  font-size: 17px;
+}
+
+.m-ticket-btn {
+  align-self: flex-start;
+  background: var(--ink);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-weight: 600;
+}
+
+.m-error {
+  color: var(--fault);
+  font-size: 13px;
+}
+
+.m-ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--ask);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.m-ticket.approved {
+  border-left-color: var(--coolant);
+}
+
+.m-ticket header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.m-ticket-id {
+  font-weight: 700;
+}
+
+.m-chip.draft {
+  background: var(--ask-soft);
+  color: var(--ask-ink);
+}
+
+.m-hazard {
+  color: var(--fault);
+  font-weight: 600;
+}
+
+.m-sentences {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.m-cite {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--physics);
+  background: rgb(107 91 214 / 12%);
+  cursor: help;
+}
+
+.m-still {
+  margin: 0;
+}
+
+.m-still img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.m-still figcaption {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-top: 4px;
+}
+
+.m-removed summary {
+  font-size: 13px;
+  color: var(--fault);
+  cursor: pointer;
+}
+
+.m-approve {
+  display: flex;
+  gap: 8px;
+}
+
+.m-approve input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.m-approve button {
+  background: var(--coolant-ink);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-weight: 600;
 }

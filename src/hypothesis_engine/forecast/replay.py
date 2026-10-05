@@ -82,7 +82,9 @@ class MachineReplay:
 
 
 def _label(h: RunHealth) -> str:
-    """`ims/test1/bearing3` -> "Bearing 3"; `xjtu/35Hz12kN/Bearing1_1` -> "Bearing 1-1"."""
+    """`ims/test1/bearing3` -> "Bearing 3". An XJTU-SY run tests one bearing: "Test bearing"."""
+    if h.source == "xjtu-sy":
+        return "Test bearing"
     last = h.run_id.rsplit("/", 1)[-1]
     if last.lower().startswith("bearing"):
         return "Bearing " + last[len("bearing") :].replace("_", "-")
@@ -137,7 +139,8 @@ def _machine_name(key: str, parts: Sequence[RunHealth]) -> str:
     if key.startswith("ims/"):
         return f"NASA test rig, {key.split('/', 1)[1].replace('test', 'test ')}"
     h = parts[0]
-    return f"XJTU-SY {h.run_id.rsplit('/', 1)[-1].replace('_', '-')} ({h.condition})"
+    run = h.run_id.rsplit("/", 1)[-1].replace("Bearing", "").replace("_", "-")
+    return f"XJTU-SY run {run} ({h.condition})" if h.source == "xjtu-sy" else h.run_id
 
 
 def machine_replay(

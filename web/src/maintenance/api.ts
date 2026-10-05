@@ -60,3 +60,75 @@ export const machines = () =>
   get<{ machines: MachineSummary[]; note: string }>("/maintenance/machines");
 
 export const machine = (id: string) => get<MachineReplay>(`/maintenance/machines/${encodeURI(id)}`);
+
+// ------------------------------------------------------------------ tickets
+
+export type Evidence = { id: string; kind: string; statement: string; numbers: number[] };
+export type Sentence = { text: string; cites: string[] };
+export type CameraFinding = { what: string; where: string; confidence: number; hazard: boolean };
+export type CameraLook = {
+  camera: string;
+  taken_at: string;
+  findings: CameraFinding[];
+  inspected_by: string;
+  note: string;
+};
+
+export type Ticket = {
+  id: string;
+  machine: string;
+  machine_name: string;
+  part: string;
+  part_label: string;
+  at_h: number;
+  status: "draft" | "approved";
+  fix_within_h: [number, number] | null;
+  likely_h: number | null;
+  stop_in_h: number | null;
+  risk_before_stop: number | null;
+  sentences: Sentence[];
+  removed: Sentence[];
+  evidence: Evidence[];
+  camera: CameraLook | null;
+  has_still: boolean;
+  written_by: string;
+  safety: string;
+  approved_by: string;
+  hazard: boolean;
+  notes: string[];
+};
+
+async function send<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? `${response.status} ${response.statusText}`);
+  }
+  return (await response.json()) as T;
+}
+
+export const risk = (machine: string, part: string, at_h: number, stop_in_h: number) =>
+  get<{ risk: number | null; note: string }>(
+    `/maintenance/risk?${new URLSearchParams({
+      machine,
+      part,
+      at_h: String(at_h),
+      stop_in_h: String(stop_in_h),
+    })}`,
+  );
+
+export const draftTicket = (
+  machine: string,
+  part: string,
+  at_h: number,
+  stop_in_h: number | null,
+) => send<Ticket>("/maintenance/tickets", { machine, part, at_h, stop_in_h });
+
+export const approveTicket = (id: string, by: string) =>
+  send<Ticket>(`/maintenance/tickets/${id}/approve`, { by });
+
+export const stillUrl = (id: string) => `${BASE}/maintenance/tickets/${id}/still`;

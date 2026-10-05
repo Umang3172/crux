@@ -171,3 +171,9 @@ def test_a_ticket_needs_an_alarm_then_carries_the_still_and_waits_for_a_person(s
     assert c.post(f"/maintenance/tickets/{t['id']}/approve", json={"by": ""}).status_code == 422
     done = c.post(f"/maintenance/tickets/{t['id']}/approve", json={"by": "Asha"}).json()
     assert done["status"] == "approved" and done["approved_by"] == "Asha"
+
+
+def test_a_near_certain_chance_is_never_written_as_certain() -> None:
+    t = _ticket(risk=0.99996)
+    s = next(s for s in t.sentences if "E4" in s.cites)
+    assert "more than 99%" in s.text and "100%" not in s.text

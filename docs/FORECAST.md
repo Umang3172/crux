@@ -73,6 +73,65 @@ are unchanged. `scripts/forecast.py metro` reports, per company-reported
 failure, whether an alarm came before it and how early, and how many alarms
 warned of nothing.
 
+## Results (6 Oct 2026)
+
+Reproduce with `scripts/forecast.py evaluate`, `metro` and `scripts/diagnose_runs.py`.
+
+**Watcher, XJTU-SY (test set, rules frozen 3 Oct):** fired before failure on 14
+of 15 bearings; the one it missed is a cage failure (Bearing1_4). Warning ranged
+from 0.1 to 6.4 running hours on accelerated lives of 0.7 to 42 hours.
+
+**Time left, XJTU-SY, one bearing held out (14 scored):**
+
+| method | median error / life after alarm | inside p10–p90 (aim 80%) | p10 too late |
+|---|---|---|---|
+| average-life | 2.00 | 52% | 40% |
+| trend | 0.69 | 27% | 49% |
+| gbm-direct | 0.59 | 34% | 34% |
+| gbm-residual (shipped; chosen before the test) | 0.60 | 42% | 33% |
+
+The learned models beat both baselines on error, but the ranges are too
+narrow: the truth falls inside p10–p90 well under the 80% they claim, and a
+third of the time even the early end is too late.
+
+**Learned at one lab, used at another:** trained on XJTU-SY and tested on IMS
+with no refitting, gbm-residual scores 0.45 / 32% / 17% and gbm-direct 0.41 /
+22% / 2%; trained on three IMS bearings instead (development run), gbm-residual
+scored 1.59 / 43% / 28%. Four IMS bearings: a hint, not proof.
+
+**MetroPT-3:** the unchanged watcher warned before 1 of 4 air leaks (22 hours
+ahead), came during 2 and missed 1, with about 7 alarms a month that warned of
+nothing. The first month is not representative of later use; a load-aware
+baseline is the open fix.
+
+**Diagnosis at the alarm (XJTU-SY, engine as on this branch):** first read: 1
+right and confident, 3 "cannot tell" where that is the right answer, 10
+unresolved. With checks answered from the next recorded minute: 2 right, 4
+confidently wrong (including the cage failure called outer race), 2 right to
+say it cannot tell, 6 unresolved. The investigation is not yet fit to name a
+fault on these bearings; tickets say "not investigated yet" until it is.
+
+**Data note:** in our copy of XJTU-SY, `40Hz10kN/Bearing3_4/1105.csv` came out
+truncated where it spans two volumes of the multi-part archive; the table
+builder leaves unreadable files out and says so.
+
+## Repair tickets and the CCTV look
+
+`ticket/` turns an alarm into a draft work order (`POST /maintenance/tickets`):
+health, alarm, time-left range, the chance of reaching the danger line before
+the next planned stop (`forecast/schedule.py`, the range read as a
+log-normal), a CCTV still and what an inspector saw in it, and the bearing to
+have ready. A writer (Gemini, or templates offline) turns the evidence into
+sentences that cite it, and `check` drops any sentence with a number its
+evidence does not hold. A person approves the ticket; nothing touches the
+machine. The dataset's answer key is never read.
+
+Cameras are listed per machine in `data/cameras.json` (git-ignored, like the
+stills): `{"<machine id>": {"kind": "file" | "http", "path" | "url": ..., "label": ...}}`.
+With `GOOGLE_API_KEY` set, Gemini looks at the still and returns typed
+findings, marked unconfirmed on the ticket; without it, the still is attached
+and the ticket says nobody has looked at it.
+
 ## Getting the data (a human does this)
 
 | Set | Role | Get it | Put it in |
@@ -152,6 +211,7 @@ A learned model is only worth shipping if it beats both `average-life` and
 | `STOPPED_FRACTION` | 10% of healthy RMS | chosen; IMS stop files sit near 1% |
 | `TREND_WINDOW` | 15 snapshots | chosen |
 | `SMOOTH_SNAPSHOTS` | 6 snapshots | chosen; see `percent.py` |
+| `WINDOW_H`, `REACH_H` (MetroPT-3) | 24 h, 24 h | chosen; see `metropt.py` |
 | `BANDS_HZ` | 0–1, 1–3, 3–6, 6–10 kHz | chosen; 10 kHz is the IMS Nyquist limit |
 | GBM settings | 300 trees, rate 0.05, 15 leaves, 20 per leaf | chosen once, not tuned on held-out bearings |
 
