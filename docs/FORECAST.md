@@ -99,10 +99,20 @@ with no refitting, gbm-residual scores 0.45 / 32% / 17% and gbm-direct 0.41 /
 22% / 2%; trained on three IMS bearings instead (development run), gbm-residual
 scored 1.59 / 43% / 28%. Four IMS bearings: a hint, not proof.
 
-**MetroPT-3:** the unchanged watcher warned before 1 of 4 air leaks (22 hours
-ahead), came during 2 and missed 1, with about 7 alarms a month that warned of
-nothing. The first month is not representative of later use; a load-aware
-baseline is the open fix.
+**MetroPT-3:** with the first month as normal, the unchanged watcher warned
+before 1 of 4 air leaks (22 hours ahead), came during 2 and missed 1, with
+about 7 alarms a month that warned of nothing: the compressor's use changed
+after the first month. With the compressor's own last 28 days as normal (the
+latest day and flagged hours left out; chosen before the run), it flagged all
+4 leaks, 1 of them before it began (5 hours ahead), and false alarms fell to
+2.6 a month. Earlier warning is still open.
+
+**Every machine has its own normal.** Nothing here uses a fleet-wide
+threshold: each machine is compared with itself. A fixed first-month normal
+mistakes a lasting change in use for a fault; a rolling one (`rolling_limits`)
+absorbs slow drift that stays under the line, keeps flagging a sudden lasting
+step until a person accepts it as the new normal (not built yet), and never
+learns flagged hours as normal.
 
 **Diagnosis at the alarm (XJTU-SY, engine as on this branch):** first read: 1
 right and confident, 3 "cannot tell" where that is the right answer, 10
@@ -237,6 +247,7 @@ A learned model is only worth shipping if it beats both `average-life` and
 | `TREND_WINDOW` | 15 snapshots | chosen |
 | `SMOOTH_SNAPSHOTS` | 6 snapshots | chosen; see `percent.py` |
 | `WINDOW_H`, `REACH_H` (MetroPT-3) | 24 h, 24 h | chosen; see `metropt.py` |
+| `ROLL_DAYS`, `GAP_H` (MetroPT-3) | 28 days, 24 h | chosen before the run; see `metropt.py` |
 | `BANDS_HZ` | 0–1, 1–3, 3–6, 6–10 kHz | chosen; 10 kHz is the IMS Nyquist limit |
 | GBM settings | 300 trees, rate 0.05, 15 leaves, 20 per leaf | chosen once, not tuned on held-out bearings |
 

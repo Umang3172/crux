@@ -192,27 +192,39 @@ def cmd_metro(args: argparse.Namespace) -> int:
         print(f"no MetroPT-3 CSV at {metropt.METRO_CSV}", file=sys.stderr)
         return 1
     h = metropt.hourly()
-    line = metropt.limit(h.signal, h.hour)
-    verdicts, false, months = metropt.score(h, line)
+    fixed = metropt.limit(h.signal, h.hour)
     lines = [
-        "The bearing watcher's frozen rules on MetroPT-3 (air compressor, air leaks)",
+        "The bearing watcher's rules on MetroPT-3 (air compressor, air leaks)",
         "",
         f"Signal: loaded share over the last {metropt.WINDOW_H} h. Healthy month: mean "
-        f"{h.signal[h.hour < metropt.BASELINE_END].mean():.3f}; alarm line {line:.3f}.",
-        "",
-        "| failure window | warned before it began | hours of warning (negative: the alarm came during it) |",
-        "|---|---|---|",
+        f"{h.signal[h.hour < metropt.BASELINE_END].mean():.3f}; fixed alarm line {fixed:.3f}.",
     ]
-    for v in verdicts:
-        lead = f"{v.lead_h:.0f}" if v.lead_h is not None else "-"
-        lines.append(
-            f"| {v.failure[0]} to {v.failure[1]} | {'yes' if v.warned else 'no'} | {lead} |"
-        )
-    lines += [
-        "",
-        f"Alarms that warned of nothing: {len(false)} in {months:.1f} months "
-        f"({len(false) / months:.1f} a month).",
-    ]
+    for label, line in (
+        ("Normal = the first month (fixed)", fixed),
+        (
+            f"Normal = its own last {metropt.ROLL_DAYS} days, the latest "
+            f"{metropt.GAP_H} h and flagged hours left out (rolling)",
+            metropt.rolling_limits(h.signal, h.hour),
+        ),
+    ):
+        verdicts, false, months = metropt.score(h, line)
+        lines += [
+            "",
+            f"**{label}**",
+            "",
+            "| failure window | warned before it began | hours of warning (negative: during it) |",
+            "|---|---|---|",
+        ]
+        for v in verdicts:
+            lead = f"{v.lead_h:.0f}" if v.lead_h is not None else "-"
+            lines.append(
+                f"| {v.failure[0]} to {v.failure[1]} | {'yes' if v.warned else 'no'} | {lead} |"
+            )
+        lines += [
+            "",
+            f"Alarms that warned of nothing: {len(false)} in {months:.1f} months "
+            f"({len(false) / months:.1f} a month).",
+        ]
     OUT.mkdir(parents=True, exist_ok=True)
     text = "\n".join(lines)
     (OUT / "results_metropt.md").write_text(text + "\n")

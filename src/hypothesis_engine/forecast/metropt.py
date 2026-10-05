@@ -48,6 +48,16 @@ WINDOW_H = 24
 #: "The first month can be used for training the model" (UCI dataset page).
 BASELINE_END = np.datetime64("2020-03-01T00:00")
 
+#: A rolling baseline: how much recent history counts as normal. Chosen before
+#: the run: four weeks spans four weekly timetables, so a lasting change in use
+#: becomes the new normal within a month, while a leak (hours to days) still
+#: stands out against it.
+ROLL_DAYS = 28
+
+#: The latest hours are kept out of the rolling baseline, so a fault that is
+#: still developing is not learned as normal before it is flagged.
+GAP_H = 24
+
 #: An alarm that starts this long before a failure window counts as a warning
 #: for it. Chosen: a day is enough to plan a repair, and a longer reach would
 #: credit alarms that may have nothing to do with the leak.
@@ -112,15 +122,47 @@ def limit(signal: np.ndarray, hour: np.ndarray) -> float:
     return max(mean + SIGMA_K * std, mean * (1.0 + MIN_RISE))
 
 
+def rolling_limits(
+    signal: np.ndarray, hour: np.ndarray, roll_days: int = ROLL_DAYS, gap_h: int = GAP_H
+) -> np.ndarray:
+    """Per hour, the watcher's limit from that machine's own recent normal.
+
+    Until the first month is over, the first month's limit holds. After that the
+    limit at hour t comes from the hours in [t - gap - roll, t - gap) that were
+    under their own limit: hours already flagged never become normal. Causal.
+    """
+    fixed = limit(signal, hour)
+    t = hour.astype("int64")
+    start = int(BASELINE_END.astype("datetime64[h]").astype("int64"))
+    lims = np.full(len(signal), fixed)
+    normal = np.zeros(len(signal), dtype=bool)
+    lo = 0
+    for i in range(len(signal)):
+        if t[i] >= start:
+            while t[lo] < t[i] - gap_h - roll_days * 24:
+                lo += 1
+            window = [k for k in range(lo, i) if t[k] < t[i] - gap_h and normal[k]]
+            if len(window) > 1:
+                base = signal[window]
+                mean, std = float(np.mean(base)), float(np.std(base, ddof=1))
+                lims[i] = max(mean + SIGMA_K * std, mean * (1.0 + MIN_RISE))
+        normal[i] = signal[i] <= lims[i]
+    return lims
+
+
 def alarms(
-    signal: np.ndarray, line: float, consecutive: int = CONSECUTIVE
+    signal: np.ndarray, line: float | np.ndarray, consecutive: int = CONSECUTIVE
 ) -> list[tuple[int, int]]:
-    """(fired, cleared) index pairs: fired on the last of `consecutive` hours above."""
+    """(fired, cleared) index pairs: fired on the last of `consecutive` hours above.
+
+    `line` is one limit for every hour, or one limit per hour (a rolling baseline).
+    """
+    lines = np.broadcast_to(np.asarray(line, dtype=float), np.shape(signal))
     out: list[tuple[int, int]] = []
     run = 0
     fired: int | None = None
     for i, v in enumerate(signal):
-        if v > line:
+        if v > lines[i]:
             run += 1
             if run >= consecutive and fired is None:
                 fired = i
@@ -140,7 +182,9 @@ class Verdict:
     lead_h: float | None  # alarm to window start; negative when it came during the window
 
 
-def score(h: Hourly, line: float) -> tuple[list[Verdict], list[tuple[str, str]], float]:
+def score(
+    h: Hourly, line: float | np.ndarray
+) -> tuple[list[Verdict], list[tuple[str, str]], float]:
     """Per failure: was there a warning, and how early. Then the alarms that warned of nothing.
 
     Returns (verdicts, false alarms as (fired, cleared) times, months watched

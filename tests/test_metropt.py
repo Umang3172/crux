@@ -50,3 +50,25 @@ def test_a_warning_is_credited_only_within_reach_of_a_failure() -> None:
     assert verdicts[1].warned and verdicts[1].lead_h == 10.0
     assert not verdicts[3].warned
     assert len(false) == 1 and false[0][0].startswith("2020-03-15")
+
+
+def test_slow_drift_becomes_the_new_normal_but_a_leak_still_fires() -> None:
+    hour = np.arange(np.datetime64("2020-02-01T00", "h"), np.datetime64("2020-07-01T00", "h"))
+    rng = np.random.default_rng(0)
+    s = 0.05 + 0.001 * rng.standard_normal(len(hour))
+    start = int(np.where(hour == m.BASELINE_END)[0][0])
+    s[start:] *= np.linspace(1.0, 3.0, len(hour) - start)  # use triples over four months
+    leak = int(np.where(hour == np.datetime64("2020-06-20T00", "h"))[0][0])
+    s[leak : leak + 12] *= 3.0  # a leak, half a day
+    fixed = m.alarms(s, m.limit(s, hour))
+    rolling = m.alarms(s, m.rolling_limits(s, hour))
+    assert fixed and hour[fixed[0][0]] < hour[leak]  # the fixed line mistakes drift for a fault
+    assert [hour[f] for f, _ in rolling] == [hour[leak + m.CONSECUTIVE - 1]]  # only the leak
+
+
+def test_a_sudden_lasting_step_keeps_alarming_until_a_person_accepts_it() -> None:
+    hour = np.arange(np.datetime64("2020-02-01T00", "h"), np.datetime64("2020-05-01T00", "h"))
+    s = np.full(len(hour), 0.05)
+    s[hour >= np.datetime64("2020-03-10T00", "h")] = 0.15  # three times the old level, for good
+    lims = m.rolling_limits(s, hour)
+    assert lims[-1] == lims[0]  # flagged hours never become normal on their own
