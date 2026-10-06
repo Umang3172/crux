@@ -66,9 +66,11 @@ export function Root() {
             ? "Connecting"
             : online === false
               ? "Engine unreachable"
-              : Object.values(models).every((v) => v.startsWith("offline"))
-                ? "Engine ready, Gemini off"
-                : "Engine ready, Gemini on"}
+              : Object.values(models).some((v) => v.startsWith("gemini"))
+                ? "Engine ready, Gemini on"
+                : Object.values(models).some((v) => v.startsWith("ollama"))
+                  ? "Engine ready, local model on"
+                  : "Engine ready, Gemini off"}
         </span>
       </header>
       {view === "guided" ? <Guided /> : view === "maintenance" ? <Maintenance /> : <App embedded />}
