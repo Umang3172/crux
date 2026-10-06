@@ -30,6 +30,7 @@ data/cameras.json
 # Learning across sites: the demo hub and this site's memory, updates and keys.
 data/hub/
 data/site/
+data/lens/
 *.mat
 *.npz
 captures/

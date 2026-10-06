@@ -43,8 +43,12 @@ def chat(
     schema: dict | None = None,
     images: list[bytes] | None = None,
     system: str | None = None,
+    temperature: float | None = None,
 ) -> str:
-    """One non-streaming chat turn; returns the reply text (JSON text when `schema` is given)."""
+    """One non-streaming chat turn; returns the reply text (JSON text when `schema` is given).
+
+    `temperature` 0 makes a reading repeatable (the same photo gives the same box).
+    """
     name = model()
     if not name:
         raise RuntimeError("OLLAMA_MODEL is not set")
@@ -58,6 +62,8 @@ def chat(
     body: dict = {"model": name, "messages": messages, "stream": False, "think": False}
     if schema is not None:
         body["format"] = schema
+    if temperature is not None:
+        body["options"] = {"temperature": temperature}
     req = urllib.request.Request(
         f"{HOST}/api/chat",
         data=json.dumps(body).encode(),

@@ -194,3 +194,8 @@ app.include_router(_maintenance)
 from .fleet import router as _fleet  # noqa: E402
 
 app.include_router(_fleet)
+
+# Crux Lens: a phone video of a machine, read by a vision model and by the physics.
+from .lens import router as _lens  # noqa: E402
+
+app.include_router(_lens)

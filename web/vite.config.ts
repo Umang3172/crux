@@ -13,6 +13,7 @@ const API_PATHS = [
   "/capture",
   "/maintenance",
   "/fleet",
+  "/lens",
   "/openapi.json",
 ];
 
