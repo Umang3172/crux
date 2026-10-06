@@ -11,6 +11,8 @@ import App from "./App";
 import { health } from "./api";
 import { Guided } from "./guided/Guided";
 import "./guided/guided.css";
+import { DIAGRAMS } from "./how/diagrams";
+import { HowItWorks } from "./how/HowItWorks";
 import { Lens } from "./lens/Lens";
 import { Maintenance } from "./maintenance/Maintenance";
 
@@ -77,6 +79,7 @@ export function Root() {
                   : "Engine ready, Gemini off"}
         </span>
       </header>
+      <HowItWorks id={view} diagram={DIAGRAMS[view]} />
       {view === "guided" ? (
         <Guided />
       ) : view === "maintenance" ? (
