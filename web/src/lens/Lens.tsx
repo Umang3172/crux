@@ -202,7 +202,9 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
         <h2>{scan.machine}</h2>
         <div className="l-still" ref={img} onClick={tap} data-drawing={drawing !== false}>
           <img src={stillUrl(scan.id, still)} alt={`Still from the video of ${scan.machine}`} />
-          {showMap && scan.shake_area && <Heat grid={scan.shake} area={scan.shake_area} />}
+          {showMap && scan.shake_area && scan.shake?.length ? (
+            <Heat grid={scan.shake} area={scan.shake_area} />
+          ) : null}
           <div
             className="l-box"
             style={{
@@ -235,7 +237,7 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
                 ? "Tap one corner…"
                 : "…now the opposite corner"}
           </button>
-          {scan.shake.length > 0 && (
+          {(scan.shake?.length ?? 0) > 0 && (
             <button className="l-btn quiet" onClick={() => setShowMap(!showMap)}>
               {showMap ? "Hide where it shakes" : "Show where it shakes"}
             </button>
@@ -285,7 +287,7 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
           )}
         </div>
 
-        {scan.notes.map((n) => (
+        {(scan.notes ?? []).map((n) => (
           <p key={n} className="l-warn">
             {n}
           </p>
@@ -301,7 +303,7 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
               placeholder="e.g. 1480"
             />
           </label>
-          {scan.candidates.length > 0 && (
+          {(scan.candidates?.length ?? 0) > 0 && (
             <div className="l-chips">
               <span className="l-dim">Strongest shaking in the video:</span>
               {scan.candidates.map((c) => (
