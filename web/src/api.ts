@@ -58,6 +58,30 @@ export type Outcome = { test_id: string; feature: string; value: number };
 /** What a person typed about the machine. Shown, never scored (`investigation/notes.py`). */
 export type Note = { id: string; text: string; by: string; hazards: string[]; at: string };
 
+/** One measurement on the menu, as the engine weighed it (`engine.Considered`). */
+export type Considered = {
+  test_id: string;
+  name: string;
+  minutes: number;
+  downtime: string;
+  /** Expected information in nats, and per technician-minute. Null if it was not weighed. */
+  gain: number | null;
+  gain_per_minute: number | null;
+  /** The chance its answer brings some suspect to the bar. */
+  settle_chance: number | null;
+  /** How far apart the two leading suspects are expected to read, in sigmas. */
+  apart_sigma: number | null;
+  fate:
+    | "chosen"
+    | "less_per_minute"
+    | "cannot_settle"
+    | "leaders_too_close"
+    | "already_taken"
+    | "no_prediction";
+  /** Why it won or lost, in the engine's words. */
+  why: string;
+};
+
 /** Why the engine asked for a measurement, in its own numbers (`engine.request`). */
 export type RequestNumbers = {
   test_id: string;
@@ -69,6 +93,8 @@ export type RequestNumbers = {
   chance_of_settling: number;
   expected_info_gain: number;
   gain_per_minute: number;
+  /** Everything on the menu as it was weighed, the chosen one included. */
+  considered?: Considered[];
 };
 
 export type Investigation = {
@@ -85,6 +111,8 @@ export type Investigation = {
   unresolved_reason: string | null;
   /** The numbers behind the latest requested measurement, if one was requested. */
   request: RequestNumbers | null;
+  /** Set when the engine weighed the menu and asked for nothing, with the menu. */
+  no_test?: { reason: string; considered: Considered[] } | null;
   conclusion: Conclusion | null;
   /** Notes from people. Not evidence: apart from the ledger. */
   notes: Note[];

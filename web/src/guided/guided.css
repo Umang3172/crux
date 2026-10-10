@@ -747,3 +747,52 @@
     animation: none;
   }
 }
+
+/* The menu of checks, as the engine weighed it. */
+.g-menu summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.g-menu table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.g-menu th,
+.g-menu td {
+  padding: 6px 8px 6px 0;
+  text-align: left;
+  font-weight: 400;
+  vertical-align: top;
+  border-top: 1px solid var(--line-soft);
+}
+
+.g-menu thead th {
+  border-top: 0;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
+.g-menu tbody th small {
+  display: block;
+  color: var(--ink-dim);
+}
+
+.g-menu tr.chosen th {
+  font-weight: 600;
+}
+
+.g-menu tr.chosen th small {
+  color: var(--ask-ink);
+  font-weight: 600;
+}
+
+.g-menu p {
+  margin-top: 8px;
+  font-size: 13px;
+}
+

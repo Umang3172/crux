@@ -11,7 +11,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Capture, EvidenceTest, Investigation, Spectra, capture, catalogue, spectra } from "../api";
+import {
+  Capture,
+  Considered,
+  EvidenceTest,
+  Investigation,
+  Spectra,
+  capture,
+  catalogue,
+  spectra,
+} from "../api";
 import { Beliefs } from "../components/Beliefs";
 import { Ledger } from "../components/Ledger";
 import { NotesPanel } from "../notes/Notes";
@@ -394,6 +403,44 @@ export function Guided() {
   );
 }
 
+/**
+ * The whole menu as the engine weighed it: what each check costs, its chance of
+ * settling the case, and why it won or lost. Every number and every reason is
+ * the engine's (`engine.Considered`); this only lays them out.
+ */
+function Menu({ rows, summary }: { rows: Considered[]; summary: string }) {
+  return (
+    <details className="g-menu">
+      <summary>{summary}</summary>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Check</th>
+            <th scope="col">Minutes</th>
+            <th scope="col">Chance it settles the case</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.test_id} className={r.fate}>
+              <th scope="row">
+                {CHECK_TEXT[r.test_id] ?? r.name}
+                <small>{plainSentence(r.why)}</small>
+              </th>
+              <td>{r.minutes.toFixed(0)}</td>
+              <td>{r.settle_chance === null ? "–" : pct(r.settle_chance)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="g-muted">
+        Crux picks the most information per minute among the checks that could settle the case,
+        which is not always the one most likely to settle it.
+      </p>
+    </details>
+  );
+}
+
 function StepText({
   step,
   inv,
@@ -498,6 +545,7 @@ function StepText({
         <p className="g-muted">
           Of every check Crux could ask for, this one tells it the most per minute of your time.
         </p>
+        {asked?.considered && <Menu rows={asked.considered} summary="Why this check and not the others" />}
       </div>
     );
   }
@@ -545,6 +593,9 @@ function StepText({
           <b>What to do:</b> do not open the pump on a guess. Take the check Crux listed, or have it
           inspected, and run the case again with the result.
         </p>
+        {inv.no_test && (
+          <Menu rows={inv.no_test.considered} summary="Every check Crux weighed, and why it asked for none" />
+        )}
         {mystery && (
           <div className="g-reveal">
             The hidden fault was <b>{faultText(current.fault).name}</b>. Crux did not name a cause
