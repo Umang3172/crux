@@ -3,11 +3,14 @@
 
     uv run python scripts/diagnose_runs.py                 # XJTU-SY, every bearing with an alarm
     uv run python scripts/diagnose_runs.py --no-answers    # Crux's first read only
+    uv run python scripts/diagnose_runs.py --textbook      # without the bearing's own normal
 
-For each XJTU-SY bearing the snapshot at the watcher's alarm is the reading.
-When Crux asks for a check, it is answered from the bearing's next recorded
-minute, read the same way a capture would be (`measure_from_capture`). The
-dataset's answer key is used only to score the result, never as input.
+For each XJTU-SY bearing the snapshot at the watcher's alarm is the reading,
+and the bearing's own early minutes are its normal (`investigation.recorded`);
+`--textbook` leaves them out, so the two can be compared. When Crux asks for a
+check, it is answered from the bearing's next recorded minute, handed over as a
+capture. The dataset's answer key is used only to score the result, never as
+input.
 
 A cage fault and the bearings with several damaged parts are not in the
 catalogue: the right answer there is "unresolved". Needs the XJTU-SY files and
@@ -22,7 +25,7 @@ import sys
 from hypothesis_engine.data import xjtu
 from hypothesis_engine.forecast import health, runs
 from hypothesis_engine.forecast.models import onset_of
-from hypothesis_engine.investigation.engine import CONCLUDE_ABOVE, Investigation
+from hypothesis_engine.investigation.recorded import NORMAL_SNAPSHOTS, investigate_recording
 
 TABLE = runs.DATA_ROOT / "forecast" / "health_xjtu.csv"
 OUT = runs.DATA_ROOT / "forecast" / "diagnosis_xjtu.md"
@@ -48,6 +51,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-answers", action="store_true", help="do not answer Crux's requested checks"
     )
     ap.add_argument("--max-requests", type=int, default=2)
+    ap.add_argument(
+        "--textbook",
+        action="store_true",
+        help="score against the textbook machine, not the bearing's own early minutes",
+    )
     args = ap.parse_args(argv)
     if not TABLE.exists():
         print(
@@ -57,7 +65,12 @@ def main(argv: list[str] | None = None) -> int:
     tables = {h.run_id: h for h in (health.trim_stopped(x) for x in health.load(TABLE))}
     lines = [
         "Crux's investigation on XJTU-SY bearings at the watcher's alarm"
-        + (" (first read only)" if args.no_answers else " (checks answered from the next minute)"),
+        + (" (first read only)" if args.no_answers else " (checks answered from the next minute)")
+        + (
+            ", scored against a textbook machine"
+            if args.textbook
+            else ", scored against each bearing's own early minutes"
+        ),
         "",
         "| bearing | failed part (answer key) | Crux's verdict | leader and belief | checks asked | grade |",
         "|---|---|---|---|---|---|",
@@ -70,31 +83,22 @@ def main(argv: list[str] | None = None) -> int:
             lines.append(f"| {run.run_id} | {run.failure_mode} | no alarm | - | - | - |")
             continue
         start = int(round(h.t[o]))  # XJTU-SY: minute n is file n + 1
-        nxt = [start + 1]
-        inv = Investigation(xjtu.machine(run), xjtu.observation(run, start))
-
-        def answer(
-            test_id: str, inv: Investigation = inv, nxt: list[int] = nxt, run=run
-        ) -> float | None:
-            if args.no_answers or nxt[0] >= len(run):
-                return None
-            k = nxt[0]
-            nxt[0] += 1
-            try:
-                return inv.measure_from_capture(test_id, xjtu.observation(run, k))
-            except ValueError:
-                return None  # a check no recording can answer
-
-        st = inv.run(max_requests=args.max_requests, oracle=answer)
+        st = investigate_recording(
+            xjtu.machine(run),
+            lambda i, run=run: xjtu.observation(run, i),
+            start,
+            start + 1 if args.no_answers else len(run),
+            max_requests=args.max_requests,
+            normal=() if args.textbook else NORMAL_SNAPSHOTS,
+        )
         lead = st.leader()
-        # An engine may close a case with no conclusion ("unresolved"): read the leader then.
+        # The engine names a cause only at its bar; anything else is "unresolved".
         c = st.conclusion
-        confident = c is not None and c.confidence >= CONCLUDE_ABOVE
-        verdict = c.root_cause.value if confident else "unresolved"
+        verdict = c.cause if c is not None else "unresolved"
         g = grade(run.failure_mode, verdict)
         tally[g] = tally.get(g, 0) + 1
         lines.append(
-            f"| {run.run_id} | {run.failure_mode} | {verdict} | {lead.kind.value} {lead.posterior:.2f} "
+            f"| {run.run_id} | {run.failure_mode} | {verdict} | {lead.name} {lead.posterior:.2f} "
             f"| {', '.join(st.requested_tests) or 'none'} | {g} |"
         )
     lines += ["", "Totals: " + "; ".join(f"{k}: {v}" for k, v in sorted(tally.items()))]

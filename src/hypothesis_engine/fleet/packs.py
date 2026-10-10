@@ -41,7 +41,7 @@ PACKS: dict[str, Pack] = {
 
 def machine_type_of(machine: str) -> str:
     """The pack a machine belongs to, from its id."""
-    if machine.startswith(("ims/", "xjtu/")):
+    if machine.startswith(("ims/", "xjtu/", "demo/")):
         return "rolling bearing"
     if machine.startswith("metropt"):
         return "air compressor"

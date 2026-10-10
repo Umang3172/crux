@@ -271,7 +271,7 @@ def analyse(
         standing += [k for k in BEARING_KINDS if k in ex.consistent(heard) and k not in standing]
     elif FaultKind.HEALTHY in standing:
         standing += [k for k in BEARING_KINDS if k not in standing]
-    check = ex.next_check(standing)
+    check = ex.next_check(standing, speed)
 
     result = {
         "rpm": speed,

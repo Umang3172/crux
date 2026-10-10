@@ -24,9 +24,9 @@ from pathlib import Path
 
 import numpy as np
 
+from ..data.root import DATA_ROOT
 from ..models import BearingGeometry
 
-DATA_ROOT = Path(__file__).resolve().parents[3] / "data"
 XJTU_DIR = DATA_ROOT / "xjtu"
 IMS_DIR = DATA_ROOT / "ims"
 

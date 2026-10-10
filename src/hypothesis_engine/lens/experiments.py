@@ -29,6 +29,7 @@ import numpy as np
 from ..investigation.catalog import CATALOG, EvidenceTest
 from ..models import SKF_6205_2RS_JEM, FaultKind, MachineSpec
 from ..physics.compare import raw_spectrum_correlation, spectral_correlation
+from ..physics.likelihood import predict_reading
 from ..physics.signatures import DEFAULT_HYPOTHESES, Signature, predicted_signature
 from ..physics.synth import synthesize
 from ..signals.features import estimate_rpm, magnitude_spectrum, peak_near
@@ -231,7 +232,35 @@ def sound_experiments(
     return sorted(out, key=lambda a: -a.score), note
 
 
-def next_check(kinds: list[FaultKind]) -> EvidenceTest | None:
+#: Shaft speed the next check is worked out at when a scan gives none.
+CHECK_RPM = 1800.0
+
+
+def reads(test: EvidenceTest, kind: FaultKind, rpm: float = CHECK_RPM) -> float | None:
+    """What a fault at full strength reads for a catalogue test.
+
+    A value a person reports comes from the catalogue's table. A capture is
+    simulated at the length the test asks for, the way the investigation
+    predicts it, on a machine sampled at the catalogue's default rate.
+    """
+    if test.capture_s is None:
+        return test.predict(kind)
+    machine = MachineSpec("lens", "scanned machine", _ANY_BEARING, rpm)
+    fs = machine.sample_rate_hz
+    found = predict_reading(
+        lambda _severity: predicted_signature(kind, machine, rpm),
+        [None],
+        test.feature,
+        fs,
+        round(test.capture_s * fs),
+        predicted_signature(FaultKind.HEALTHY, machine, rpm).noise,
+        machine,
+        rpm,
+    )
+    return None if found is None else float(found[0][0])
+
+
+def next_check(kinds: list[FaultKind], rpm: float = CHECK_RPM) -> EvidenceTest | None:
     """The catalog measurement that best separates the faults still standing.
 
     Same rule the investigation uses to rank tests (prediction spread over the
@@ -241,7 +270,7 @@ def next_check(kinds: list[FaultKind]) -> EvidenceTest | None:
         return None
     best, best_key = None, None
     for test in CATALOG:
-        preds = [test.predict(k) for k in kinds]
+        preds = [reads(test, k, rpm) for k in kinds]
         if any(p is None for p in preds):
             continue
         spread = (max(preds) - min(preds)) / test.sigma

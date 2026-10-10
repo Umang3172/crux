@@ -26,6 +26,7 @@ from typing import Protocol
 
 import numpy as np
 
+from ..data.root import DATA_ROOT
 from .health import RunHealth
 from .onset import BASELINE_SNAPSHOTS, baseline, detect_onset
 
@@ -292,7 +293,7 @@ class QuantileGBM:
         return model
 
 
-DEFAULT_MODEL = Path(__file__).resolve().parents[3] / "data" / "forecast" / "model.pkl"
+DEFAULT_MODEL = DATA_ROOT / "forecast" / "model.pkl"
 
 
 def get_forecaster(path: str | Path | None = None) -> Forecaster:

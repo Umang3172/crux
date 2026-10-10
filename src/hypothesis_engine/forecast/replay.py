@@ -39,11 +39,14 @@ FORECAST_POINTS = 80
 _BEARING = {
     "ims": "Rexnord ZA-2115 (double row)",
     "xjtu-sy": "LDK UER204",
+    "demo": "SKF 6205-2RS JEM",
 }
 
 _SOURCE = {
     "ims": "NASA IMS run-to-failure test (University of Cincinnati)",
     "xjtu-sy": "XJTU-SY accelerated run-to-failure test (Xi'an Jiaotong University)",
+    # Shown beside every number that comes from it (`data/demo.py`).
+    "demo": "Synthetic pump life (a physics model, not a recording)",
 }
 
 
@@ -85,6 +88,8 @@ def _label(h: RunHealth) -> str:
     """`ims/test1/bearing3` -> "Bearing 3". An XJTU-SY run tests one bearing: "Test bearing"."""
     if h.source == "xjtu-sy":
         return "Test bearing"
+    if h.source == "demo":
+        return "Drive-end bearing"
     last = h.run_id.rsplit("/", 1)[-1]
     if last.lower().startswith("bearing"):
         return "Bearing " + last[len("bearing") :].replace("_", "-")
@@ -139,6 +144,8 @@ def _machine_name(key: str, parts: Sequence[RunHealth]) -> str:
     if key.startswith("ims/"):
         return f"NASA test rig, {key.split('/', 1)[1].replace('test', 'test ')}"
     h = parts[0]
+    if h.source == "demo":
+        return "Chilled-water pump 2 (synthetic)"
     run = h.run_id.rsplit("/", 1)[-1].replace("Bearing", "").replace("_", "-")
     return f"XJTU-SY run {run} ({h.condition})" if h.source == "xjtu-sy" else h.run_id
 

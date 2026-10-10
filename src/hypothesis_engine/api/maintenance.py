@@ -1,25 +1,30 @@
 """Predictive maintenance endpoints: replays of recorded bearing lives.
 
 Read-only. The numbers come from `forecast.replay`, which never touches an
-investigation, so nothing served here can move a belief. With no health tables
-on the server the list is empty and says why, rather than failing.
+investigation, so nothing served here can move a belief. With no recorded run
+on the server (the deployed image ships no dataset) a synthetic pump life
+stands in, labelled as synthetic, so the path from alarm to investigation to
+ticket can still be walked (`data/demo.py`).
 """
 
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from ..data import xjtu
-from ..forecast import replay, runs
+from ..data import demo, xjtu
+from ..forecast import health, replay, runs
+from ..forecast.models import TrendExtrapolation
 from ..forecast.schedule import risk_before_hours
 from ..investigation.catalog import BY_ID
-from ..investigation.engine import CONCLUDE_ABOVE
 from ..investigation.recorded import investigate_recording
+from ..models import FaultKind, InvestigationState, MachineSpec, Observation
 from ..ticket import camera
 from ..ticket.draft import Ticket
 from ..ticket.draft import draft as draft_ticket
@@ -29,7 +34,15 @@ router = APIRouter(prefix="/maintenance", tags=["predictive maintenance"])
 
 @lru_cache(maxsize=1)
 def _machines() -> tuple[dict[str, Any], ...]:
-    return tuple(replay.load_or_build())
+    found = replay.load_or_build()
+    if not found:
+        life = health.build(demo.run())
+        found = replay.to_json(replay.build_all([life], lambda _h: TrendExtrapolation()))
+    return tuple(found)
+
+
+def _only_synthetic() -> bool:
+    return all(m["machine"] == demo.DEMO_ID for m in _machines())
 
 
 @router.get("/machines")
@@ -49,8 +62,13 @@ def machines() -> dict[str, Any]:
                 "lowest_percent": min(p["percent"][-1] for p in parts),
             }
         )
-    note = "" if rows else "No run-to-failure data on this server: run scripts/forecast.py table."
-    return {"machines": rows, "note": note}
+    note = (
+        "No recorded run is on this server, so a synthetic pump life stands in: a physics "
+        "model of the pump, run from new until its bearing fails."
+        if _only_synthetic()
+        else ""
+    )
+    return {"machines": rows, "note": note, "synthetic": _only_synthetic()}
 
 
 def _find(machine: str) -> dict[str, Any]:
@@ -100,41 +118,104 @@ def _xjtu_runs() -> dict[str, runs.Run]:
     return {r.run_id: r for r in runs.xjtu_runs()}
 
 
-@lru_cache(maxsize=256)
-def _investigate(run_id: str, minute: int) -> dict[str, Any]:
-    run = _xjtu_runs()[run_id]
-    st = investigate_recording(
-        xjtu.machine(run), lambda i: xjtu.observation(run, i), minute, len(run)
-    )
-    ranked = sorted(st.hypotheses, key=lambda h: h.posterior, reverse=True)
-    lead = ranked[0]
+def _belief(p: float) -> str:
+    """A belief as the engine words it. Nothing measured is ever 1.00."""
+    return "over 0.99" if p >= 0.995 else f"{p:.2f}"
+
+
+def _statement(st: InvestigationState) -> str:
+    """The investigation's outcome in one or two sentences, for the tab and the ticket."""
     c = st.conclusion
-    confident = c is not None and c.confidence >= CONCLUDE_ABOVE
-    checks = [{"test": o.test_id, "value": round(o.value, 3)} for o in getattr(st, "outcomes", [])]
-    if confident:
-        said = f"Crux's investigation points to {lead.label.lower()} (belief {lead.posterior:.2f})."
-    else:
-        asked = ", ".join(BY_ID[t].name.lower() for t in st.requested_tests) or "nothing more"
+    if c is None:
+        return f"Crux could not name the cause. {st.unresolved_reason or 'The case is still open.'}"
+    lead = st.leader()
+    if c.root_cause is FaultKind.HEALTHY:
         said = (
-            f"Crux could not settle the cause yet: leading suspect {lead.label.lower()} "
-            f"(belief {lead.posterior:.2f}); it asked for {asked}."
+            "Crux finds no fault it can name: the recording fits this machine running "
+            f"normally (belief {_belief(lead.posterior)})."
         )
+        # A healthy verdict states its own limit; pass that on rather than drop it.
+        limit = c.reasoning.partition(" A mild fault would look the same")[2]
+        return said + (f" A mild fault would look the same{limit}" if limit else "")
+    return (
+        f"Crux's investigation points to {lead.label.lower()} (belief {_belief(lead.posterior)})."
+    )
+
+
+@dataclass(frozen=True)
+class Recording:
+    """A recorded life Crux can investigate: the machine it was taken on, how
+    many snapshots it has, how far apart they are, and how to get one."""
+
+    machine: MachineSpec
+    count: int
+    interval_min: float
+    snapshot: Callable[[int], Observation]
+
+    def index_at(self, at_h: float) -> int:
+        """The snapshot nearest a running hour, kept inside the recording."""
+        return min(max(int(round(at_h * 60.0 / self.interval_min)), 0), self.count - 1)
+
+
+def _recording(run_id: str) -> Recording | None:
+    """The snapshots behind a part, if they are on this server and the machine's
+    bearing is on file. The synthetic life always is; a recorded run needs its
+    files, and XJTU-SY is the only rig whose bearing dimensions are known."""
+    if run_id == demo.DEMO_ID:
+        return Recording(demo.DEMO_PUMP, demo.SNAPSHOTS, demo.INTERVAL_MIN, demo.observation)
+    run = _xjtu_runs().get(run_id) if run_id.startswith("xjtu/") else None
+    if run is None:
+        return None
+    return Recording(
+        xjtu.machine(run), len(run), runs.XJTU_INTERVAL_MIN, lambda i: xjtu.observation(run, i)
+    )
+
+
+def _summary(st: InvestigationState) -> dict[str, Any]:
+    lead = st.leader()
     return {
-        "confident": confident,
-        "leader": {"kind": lead.kind.value, "label": lead.label, "belief": lead.posterior},
-        "ranked": [
-            {"kind": h.kind.value, "label": h.label, "belief": h.posterior} for h in ranked[:4]
-        ],
-        "asked": [BY_ID[t].name for t in st.requested_tests],
-        "answered": checks,
-        "transcript": list(st.transcript),
-        "statement": said,
-        "reading": f"recorded minute {minute + 1}; checks answered from the minutes after it",
+        "outcome": st.outcome,
+        "leader": {"kind": lead.name, "label": lead.label, "belief": lead.posterior},
     }
 
 
-def _run_for(m: dict[str, Any], p: dict[str, Any]) -> runs.Run | None:
-    return _xjtu_runs().get(p["part"]) if m["machine"].startswith("xjtu/") else None
+@lru_cache(maxsize=256)
+def _investigate(run_id: str, index: int) -> dict[str, Any]:
+    rec = _recording(run_id)
+    st = investigate_recording(rec.machine, rec.snapshot, index, rec.count)
+    ranked = st.ranked()
+    lead = ranked[0]
+    own = st.extra.get("own_normal")
+    compared = (
+        f"compared with {own['captures']} of this bearing's own early recordings"
+        if own
+        else "no earlier recording to compare with, so a textbook machine stands in"
+    )
+    # The same minute scored the old way, against a textbook machine, so the
+    # screen can show what the machine's own normal changes. Never the answer.
+    textbook = _summary(
+        investigate_recording(rec.machine, rec.snapshot, index, rec.count, normal=())
+    )
+    return {
+        # True only for a verdict: the engine names nothing below its bar.
+        "confident": st.conclusion is not None,
+        "outcome": st.outcome,
+        "reason": st.unresolved_reason,
+        "leader": {"kind": lead.name, "label": lead.label, "belief": lead.posterior},
+        "ranked": [{"kind": h.name, "label": h.label, "belief": h.posterior} for h in ranked[:4]],
+        "asked": [BY_ID[t].name for t in st.requested_tests],
+        "answered": [{"test": o.test_id, "value": round(o.value, 3)} for o in st.outcomes],
+        "own_normal": own,
+        "against_textbook": textbook if own else None,
+        "transcript": list(st.transcript),
+        "statement": _statement(st),
+        "reading": f"recording {index + 1} of {rec.count}, {compared}; checks answered from "
+        "the recordings after it",
+    }
+
+
+def _run_for(m: dict[str, Any], p: dict[str, Any]) -> Recording | None:
+    return _recording(p["part"])
 
 
 class InvestigateRequest(BaseModel):
@@ -148,13 +229,14 @@ def investigate(req: InvestigateRequest) -> dict[str, Any]:
     """What is wrong, from the recording at that moment. XJTU-SY only: its bearing is on file."""
     m = _find(req.machine)
     p = _part(m, req.part)
-    run = _run_for(m, p)
-    if run is None:
+    found = _run_for(m, p)
+    if found is None:
         raise HTTPException(
-            409, "this rig's bearing dimensions are not on file (TBD), so Crux cannot simulate it"
+            409,
+            "Crux cannot investigate this part here: its recordings are not on this server, or "
+            "the rig's bearing dimensions are not on file (TBD), so it cannot be simulated",
         )
-    minute = min(max(int(round(req.at_h * 60)), 0), len(run) - 1)
-    return _investigate(run.run_id, minute)
+    return _investigate(p["part"], found.index_at(req.at_h))
 
 
 class TicketRequest(BaseModel):
@@ -191,10 +273,9 @@ def new_ticket(req: TicketRequest) -> dict[str, Any]:
         context = f"{p['label']} on {m['name']}: vibration {level:.1f} times its normal level"
         look = camera.inspect(still, context)
     diagnosis = None
-    run = _run_for(m, p) if req.investigate else None
-    if run is not None:
-        minute = min(max(int(round(req.at_h * 60)), 0), len(run) - 1)
-        diagnosis = _investigate(run.run_id, minute)["statement"]
+    found = _run_for(m, p) if req.investigate else None
+    if found is not None:
+        diagnosis = _investigate(p["part"], found.index_at(req.at_h))["statement"]
     from ..fleet import Memory, machine_type_of
     from ..fleet.memory import MEMORY_FILE
 

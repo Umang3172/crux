@@ -57,10 +57,20 @@ def server(tmp_path, monkeypatch):
     maintenance._machines.cache_clear()
 
 
-def test_without_data_the_list_is_empty_and_says_why(server) -> None:
+def test_without_data_a_synthetic_life_stands_in_and_says_so(server) -> None:
     _, client = server
     body = client.get("/maintenance/machines").json()
-    assert body["machines"] == [] and "forecast.py table" in body["note"]
+    (only,) = body["machines"]
+    assert only["machine"] == "demo/pump-2" and "Synthetic" in only["source"]
+    assert body["synthetic"] is True and "synthetic pump life stands in" in body["note"]
+
+
+def test_with_recorded_runs_the_synthetic_life_is_not_shown(server) -> None:
+    tmp, client = server
+    health.save([_run("xjtu/c/Bearing1_1", 240, 120)], tmp / "health_xjtu.csv")
+    body = client.get("/maintenance/machines").json()
+    assert [m["machine"] for m in body["machines"]] == ["xjtu/c/Bearing1_1"]
+    assert body["synthetic"] is False and body["note"] == ""
 
 
 def test_endpoints_serve_every_machine_and_its_replay(server) -> None:

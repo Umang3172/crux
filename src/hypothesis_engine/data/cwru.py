@@ -29,8 +29,9 @@ from pathlib import Path
 import numpy as np
 
 from ..models import SKF_6205_2RS_JEM, FaultKind, MachineSpec, Observation
+from .root import DATA_ROOT
 
-DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "cwru"
+DATA_DIR = DATA_ROOT / "cwru"
 
 CWRU_DRIVE_END = MachineSpec(
     machine_id="cwru-de",
