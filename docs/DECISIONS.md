@@ -675,3 +675,41 @@ shows, so it never concludes "healthy"; there the most it can say is that the
 repaired cause is gone, which is the fourth answer. Captures after a repair
 come from the same synthetic rig as the first; not run on a real repair.
 
+## ADR-0025 · A person's note is kept and shown, moves nothing, and is searched for a hazard
+
+**Context.** A technician at the machine sees, hears and smells things no
+sensor reports, and there was nowhere to put them. The investigator's
+instruction already said that text inside a case is data, with no such text to
+apply it to. Free text is also the obvious way to try to steer a language
+model, and the obvious place for someone to mention smoke.
+
+**Decision.** A note is kept with the case under an id of its own (N1, N2),
+apart from the ledger, because it is not evidence. The engine never reads it:
+no note moves a belief, requests a measurement, or opens or closes a case,
+whatever it says, and a note can be added after the verdict. A model sees notes
+in the case as data and has no tool that writes one. A note reaches the
+diagnosis one way: a model may write a suspect for what it describes, and the
+physics tests that suspect like any other. A model's explanation of a verdict
+cannot cite a note.
+
+Each note is searched for a short list of words that describe a hazard
+(`investigation/notes.py`). A match sets a flag on the case, shown above the
+verdict and first in the report: stop, make the machine safe, call a
+supervisor. The flag changes nothing below it. The search errs towards
+flagging: "no smoke" is flagged too, because waving a note through on a "not"
+is the worse mistake, and a person reads the note either way.
+
+`POST /investigations/{id}/notes` takes a note; `/agent/replay` takes one to
+put on the case before the investigator starts.
+
+**Consequence.** What an order in a note can do is bounded by the tools, not by
+the model obeying its instruction: no tool takes a belief, a verdict needs the
+engine's own bar, and a case the evidence settles cannot be closed as
+unresolved (ADR-0022). A model that did obey could still ask for a measurement
+nobody needs, write a suspect the physics then refuses, or say something
+wrong in its own narration. Tested with the offline investigator, which does
+not read notes and so works the case identically with and without one; how a
+real model treats an order in a note has not been tried. The hazard list is
+short, English only, and will miss a hazard described in other words: it is a
+prompt to a person, not a safety system.
+

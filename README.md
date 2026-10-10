@@ -43,6 +43,12 @@ makes false claims on purpose, so the check can be watched removing them. The
 check cannot tell whether a sentence that passes is a fair reading, which is
 why a model never writes the verdict or the action.
 
+A technician can add a note to a case: what they see, hear or smell. It is
+kept and shown, and it is not evidence, so it moves no belief whatever it
+says; an order typed into it does nothing. If its words describe a hazard,
+such as smoke or a leak, the case carries a plain flag above the verdict: stop
+and call a supervisor.
+
 Elsewhere a vision model looks at a camera still or a phone video
 (`ticket/camera.py`, `lens/look.py`). What it sees is shown as unconfirmed and
 never reaches the investigation.

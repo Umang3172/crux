@@ -34,9 +34,11 @@ from ..data.rig import (
 from ..data.stream import CAPTURE_S, MAX_BATCH_SAMPLES, NotEnoughSignal, Stream, Streams
 from ..investigation.catalog import BY_ID, CATALOG
 from ..investigation.engine import Investigation
+from ..investigation.notes import MAX_NOTE_CHARS
+from ..investigation.notes import flag as hazard_flag
 from ..investigation.repair import NothingToVerify, RepairCheck, check_repair
 from ..models import FaultKind, InvestigationState
-from ..tools import CaseNotFound, InMemoryCaseStore, open_case
+from ..tools import CaseNotFound, InMemoryCaseStore, open_case, record_note
 
 app = FastAPI(
     title="Crux",
@@ -90,6 +92,13 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
             for o in state.outcomes
         ],
         "transcript": state.transcript,
+        # What people typed about the machine. Not evidence: apart from the ledger.
+        "notes": [
+            {"id": n.id, "text": n.text, "by": n.by, "hazards": n.hazards, "at": n.at.isoformat()}
+            for n in state.notes
+        ],
+        # Set when a note describes a hazard: a flag for a person, above everything else.
+        "hazard": hazard_flag(state.notes),
         "outcome": state.outcome,
         "unresolved_reason": state.unresolved_reason,
         # Set when the case was scored against the machine's own healthy captures.
@@ -151,6 +160,17 @@ class AgentReplayRequest(StartRequest):
         description="A catalogue fault, or one the catalogue does not list (rolling_element, "
         "unlisted_impact): the investigator has to notice the list is missing a cause.",
     )
+    note: str = Field(
+        default="",
+        max_length=MAX_NOTE_CHARS,
+        description="A technician's note put on the case before the investigator starts. The "
+        "investigator reads it as data; it moves nothing by itself.",
+    )
+
+
+class NoteRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_NOTE_CHARS)
+    by: str = Field(default="technician", max_length=60)
 
 
 class EvidenceRequest(BaseModel):
@@ -387,6 +407,8 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
     )
     case = open_case(_AGENT_CASES, BENCH_RIG, obs, answer_source=_rig_answers(req))
     case.investigation.state.extra["rig"] = _rig_state(req)
+    if req.note.strip():
+        record_note(_AGENT_CASES, case.id, req.note)
     run = await investigate_async(_AGENT_CASES, case.id)
     return {
         "model": run.model,
@@ -488,6 +510,25 @@ def report(investigation_id: str, writer: str = "") -> dict[str, Any]:
     if state.outcome != "open":
         _REPORTS[key] = out
     return out
+
+
+# ------------------------------------------------------------------ a person's note
+
+
+@app.post("/investigations/{investigation_id}/notes")
+def add_note(investigation_id: str, req: NoteRequest) -> dict[str, Any]:
+    """Put what a person sees, hears or smells on the case. A note is not
+    evidence: it moves no belief and neither opens nor closes anything, whatever
+    it says. If its words describe a hazard the case carries a flag for a person."""
+    inv = _case(investigation_id)
+    try:
+        inv.add_note(req.text, by=req.by)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    _REPORTS.pop((inv.state.id, ""), None)  # the report states a hazard first
+    _REPORTS.pop((inv.state.id, "engine"), None)
+    _REPORTS.pop((inv.state.id, "careless"), None)
+    return serialise(inv.state)
 
 
 # ------------------------------------------------------------------ after the repair

@@ -20,6 +20,7 @@ from .cases import (
     mark_unanswerable,
     open_case,
     record_measurement,
+    record_note,
 )
 from .contract import ImpactSpec, SuspectSpec, ToneSpec
 from .investigator import AGENT_TOOL_NAMES, MAX_TEXT_CHARS, InvestigatorTools
@@ -40,4 +41,5 @@ __all__ = [
     "mark_unanswerable",
     "open_case",
     "record_measurement",
+    "record_note",
 ]

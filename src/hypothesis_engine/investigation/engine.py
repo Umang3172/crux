@@ -45,6 +45,7 @@ from ..models import (
     Hypothesis,
     InvestigationState,
     MachineSpec,
+    Note,
     Observation,
     TestOutcome,
 )
@@ -92,6 +93,7 @@ from ..physics.signatures import (
 from ..physics.synth import synthesize
 from ..signals import features as feat
 from .catalog import BY_ID, CATALOG, EvidenceTest
+from .notes import hazards_in, problem_with
 
 #: Below this belief a hypothesis is shown as rejected. It stays in the
 #: distribution and can come back if later evidence favours it.
@@ -401,6 +403,23 @@ class Investigation:
             if h.name == name:
                 return h
         raise KeyError(f"no hypothesis named {name!r}")
+
+    def add_note(self, text: str, by: str = "technician") -> Note:
+        """Keep something a person typed about the machine. It is not evidence:
+        nothing here reads it, so no belief, request or outcome changes. Its words
+        are searched for a hazard (`investigation.notes`). Works on a closed case
+        too: a hazard can be seen after the verdict."""
+        problem = problem_with(text)
+        if problem:
+            raise ValueError(problem)
+        note = Note(
+            id=f"N{len(self.state.notes) + 1}",
+            text=text.strip(),
+            by=by,
+            hazards=hazards_in(text),
+        )
+        self.state.notes.append(note)
+        return note
 
     @property
     def written_suspects(self) -> tuple[OrderSuspect, ...]:

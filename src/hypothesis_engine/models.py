@@ -164,6 +164,18 @@ class Conclusion:
 
 
 @dataclass
+class Note:
+    """Something a person typed about the machine. Kept with the case and shown;
+    never scored, so it moves no belief (`investigation.notes`)."""
+
+    id: str  # N1, N2, ... in the order they were added
+    text: str
+    by: str
+    hazards: list[str] = field(default_factory=list)  # hazards its words describe
+    at: datetime = field(default_factory=_now)
+
+
+@dataclass
 class InvestigationState:
     """Everything about one investigation. The API serialises this."""
 
@@ -180,6 +192,8 @@ class InvestigationState:
     outcome: Literal["open", "concluded", "unresolved"] = "open"
     unresolved_reason: str | None = None
     transcript: list[str] = field(default_factory=list)
+    #: What people typed about the machine. Apart from the ledger: not evidence.
+    notes: list[Note] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def belief(self) -> dict[FaultKind, float]:

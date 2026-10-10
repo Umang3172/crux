@@ -41,14 +41,16 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 from ..investigation.engine import CONCLUDE_ABOVE
+from ..investigation.notes import flag as hazard_flag
 from ..models import FaultKind, InvestigationState
 from ..ticket.draft import Evidence, Sentence, unbacked
 from .factory import gemini_model_id, gemini_route, not_live, switched_off
 
 #: The engine's own statements a model's sentence may cite, beside the ledger.
 VERDICT, WHY, LIMIT = "verdict", "why", "limit"
-#: The parts of a report, in the order they are read.
-ORDER = (VERDICT, WHY, "plain", LIMIT, "action", "change")
+#: The parts of a report, in the order they are read. A hazard a person
+#: reported comes before the verdict: it is the first thing to act on.
+ORDER = ("hazard", VERDICT, WHY, "plain", LIMIT, "action", "change")
 
 ENGINE = "engine"
 
@@ -134,7 +136,7 @@ def _plain(text: str) -> str:
 
 @dataclass(frozen=True)
 class Line:
-    part: str  # verdict | why | plain | limit | action | change
+    part: str  # hazard | verdict | why | plain | limit | action | change
     text: str
     cites: tuple[str, ...]
     by: str  # "engine", or the model that wrote it
@@ -176,7 +178,17 @@ class Report:
 
 
 def engine_lines(state: InvestigationState) -> list[Line]:
-    """The case's result in the engine's own words, every part it has."""
+    """The case's result in the engine's own words, every part it has. A hazard
+    a person's note describes is said first; it changes nothing after it."""
+    flagged = hazard_flag(state.notes)
+    said = _result_lines(state)
+    if flagged is None:
+        return said
+    notes = tuple(n.id for n in state.notes if n.hazards)
+    return [Line("hazard", flagged, notes, ENGINE), *said]
+
+
+def _result_lines(state: InvestigationState) -> list[Line]:
     c = state.conclusion
     known = {e.id for e in state.ledger}
     if c is not None:

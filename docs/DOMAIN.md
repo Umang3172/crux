@@ -248,6 +248,28 @@ judgement call.
 | judgement words | normal, acceptable, expected, typical, nominal, limit(s), range(s) | The same local model called readings "within acceptable limits" and "normal" with no entry saying so. The ledger holds readings; what counts as normal is the engine's to state. A sentence may use one of these words only where the evidence it cites does. A short list from one model's failures, not a complete one. |
 | rounding | a written number matches a value that rounds to it as written | From `ticket/draft.py`, the same rule the repair ticket uses. |
 
+## Hazard words in a note
+
+`investigation/notes.py` searches a person's note for these. Not physics, and
+not a standard: a short list written for this product, every entry a judgement
+call. A stem matches at the start of a word ("smok" finds smoke and smoking);
+"fire", "flame" and "gas" match as whole words, so "fired" and "gasket" do not.
+
+| Hazard | Words |
+|---|---|
+| smoke or fire | smok, smoulder, smolder, fire, flame, burning, burnt, burned, scorch |
+| sparks or electric shock | spark, arcing, arc flash, electric shock, shocked |
+| a leak | leak, dripping, spraying, puddle |
+| damaged wiring | exposed wire, bare wire, frayed, melted, melting |
+| overheating | overheat, too hot to touch, red hot, glowing |
+| a guard off or a part coming loose | guard missing, guard is missing, guard off, guard is off, no guard, came off, coming off, cracked |
+| gas or fumes | gas, fumes |
+
+Left out on purpose: "hot" and "warm" (an ordinary observation, and temperature
+is a measurement on the menu), "shock" alone (a vibration term), "crack" as a
+stem (it finds "crackling"). There is no handling of "no" or "not": a note that
+says there is no smoke is flagged.
+
 ## What a requested measurement will read
 
 `investigation/catalog.py` lists the measurements the engine can ask for. How a

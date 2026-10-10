@@ -20,6 +20,7 @@ from typing import Any
 
 from ..investigation.catalog import BY_ID
 from ..investigation.engine import CONCLUDE_ABOVE, Investigation
+from ..investigation.notes import flag as hazard_flag
 from ..models import Hypothesis
 from ..physics.frequencies import fault_frequencies, kinematic_matches, shaft_hz
 from ..physics.likelihood import LINE_TOLERANCE, Unexplained
@@ -42,6 +43,7 @@ from .contract import (
     KinematicMatchView,
     KinematicReport,
     NextTest,
+    NoteView,
     RequestResult,
     RequestView,
     SuspectReview,
@@ -503,6 +505,11 @@ def _view(case: Case) -> CaseView:
             for e in inv.ledger.items
         ],
         requests=[_request_view(r) for r in case.requests],
+        notes=[
+            NoteView(id=n.id, text=n.text, by=n.by, hazards=list(n.hazards))
+            for n in inv.state.notes
+        ],
+        hazard=hazard_flag(inv.state.notes),
         narration=list(case.narration),
         transcript=list(inv.state.transcript),
     )

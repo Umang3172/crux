@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from ..investigation.engine import Investigation, TestChoice
-from ..models import MachineSpec, Observation
+from ..models import MachineSpec, Note, Observation
 from .contract import SuspectSpec
 
 #: Answers a requested test id with a reading (a number a person would report, or
@@ -166,3 +166,13 @@ def mark_unanswerable(
     case.investigation.could_not_take(req.test_id, why)
     store.put(case)
     return req
+
+
+def record_note(store: CaseStore, case_id: str, text: str, by: str = "technician") -> Note:
+    """Keep what a person typed about the machine. Not an agent tool: a note
+    comes from a person, and a model only reads it, as data. It is not
+    evidence, so it moves nothing; its words are searched for a hazard."""
+    case = store.get(case_id)
+    note = case.investigation.add_note(text, by=by)
+    store.put(case)
+    return note
