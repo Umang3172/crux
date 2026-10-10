@@ -43,9 +43,11 @@ def test_it_asks_for_the_cheap_test_that_separates_the_suspects():
     obs = synthetic_capture(
         FaultKind.OUTER_RACE, BENCH_RIG, severity=0.35, extra_noise=0.45, seed=555
     )
-    inv = Investigation(BENCH_RIG, obs)
+    races = (FaultKind.OUTER_RACE, FaultKind.INNER_RACE)
+    inv = Investigation(BENCH_RIG, obs, candidates=races)
     inv.observe()
     inv.run_virtual_experiments()
+    assert all(h.posterior > 0.2 for h in inv.state.hypotheses), "both races still stand"
     choice = inv.choose_next_test()
     assert choice is not None
     assert choice.test.id == "envelope"

@@ -217,10 +217,17 @@ def test_a_reading_that_fits_nothing_blocks_the_verdict():
 
 
 def test_the_reasoning_does_not_credit_the_leader_with_a_fit_it_did_not_have():
-    capture = synthetic_capture(FaultKind.INNER_RACE, BENCH_RIG, seed=MODERATE_SEED, **MODERATE)
-    inv = Investigation(BENCH_RIG, capture)
-    state = inv.run(oracle=rig_oracle(FaultKind.INNER_RACE, BENCH_RIG, **MODERATE))
-    assert max(inv.fit, key=inv.fit.get) == "healthy", "this case starts out leaning the wrong way"
+    # A moderate inner-race fault whose first capture fits a healthy machine
+    # best. Which seeds lean that way moves with the speed estimate, so take the
+    # first of a few that does rather than lean on one.
+    for seed in (111, 41, 61):
+        capture = synthetic_capture(FaultKind.INNER_RACE, BENCH_RIG, seed=seed, **MODERATE)
+        inv = Investigation(BENCH_RIG, capture)
+        state = inv.run(oracle=rig_oracle(FaultKind.INNER_RACE, BENCH_RIG, **MODERATE))
+        if max(inv.fit, key=inv.fit.get) == "healthy":
+            break
+    else:
+        pytest.fail("no case here starts out leaning the wrong way")
 
     conclusion = state.conclusion
     assert conclusion is not None, state.unresolved_reason
