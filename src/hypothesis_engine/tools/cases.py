@@ -11,7 +11,7 @@ technician, a sensor or the replay rig; a language model never supplies one.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
@@ -19,9 +19,10 @@ from ..investigation.engine import Investigation, TestChoice
 from ..models import MachineSpec, Observation
 from .contract import SuspectSpec
 
-#: Answers a requested test id with a reading, or None when it cannot. The
-#: replay rig is one; in the field the reading arrives later, from a person.
-AnswerSource = Callable[[str], float | None]
+#: Answers a requested test id with a reading (a number a person would report, or
+#: the capture itself), or None when it cannot. The replay rig and a recorded run
+#: are two; in the field the reading arrives later, from a person or a sensor.
+AnswerSource = Callable[[str], float | Observation | None]
 
 
 class CaseNotFound(LookupError):
@@ -104,10 +105,13 @@ def open_case(
     machine: MachineSpec,
     observation: Observation,
     answer_source: AnswerSource | None = None,
+    normal: Sequence[Observation] = (),
 ) -> Case:
     """Open a case on a capture and record the first look. Not an agent tool:
-    the watcher, the replay button or the API opens cases."""
-    investigation = Investigation(machine, observation)
+    the watcher, the replay button or the API opens cases. `normal` holds
+    healthy captures of the same machine, when there are any: the case is then
+    scored on the change from them."""
+    investigation = Investigation(machine, observation, normal=normal)
     investigation.observe()
     case = Case(investigation, answer_source=answer_source)
     store.put(case)
@@ -118,19 +122,28 @@ def record_measurement(
     store: CaseStore,
     case_id: str,
     request_id: str,
-    reading: float,
+    reading: float | Observation,
     collected_by: str = "technician",
 ) -> MeasurementRequest:
-    """Hand a requested reading to the engine. The only way a reading gets in."""
+    """Hand a requested reading to the engine. The only way a reading gets in.
+
+    A number is what a person read off. A capture is handed over whole: the
+    engine reads the test's feature from it and scores it at the capture's own
+    length and noise, against the machine's own normal when the case has one.
+    """
     case = store.get(case_id)
     req = case.request(request_id)
     if req.status != "waiting":
         raise ValueError(f"{request_id} is {req.status}, not waiting for a reading")
-    if not math.isfinite(reading):
-        raise ValueError("a reading must be a finite number")
-    case.investigation.apply_outcome(req.test_id, float(reading), collected_by=collected_by)
+    if isinstance(reading, Observation):
+        value = case.investigation.apply_capture(req.test_id, reading, collected_by=collected_by)
+    else:
+        if not math.isfinite(reading):
+            raise ValueError("a reading must be a finite number")
+        value = float(reading)
+        case.investigation.apply_outcome(req.test_id, value, collected_by=collected_by)
     req.status = "answered"
-    req.reading = float(reading)
+    req.reading = value
     req.collected_by = collected_by
     store.put(case)
     return req

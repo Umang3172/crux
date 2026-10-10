@@ -6,7 +6,7 @@ Every step is deterministic and testable. A language model can narrate, re-order
 or extend this loop (see `tools/` and `agents/`), but it is never the thing that
 decides: beliefs move only here, from simulated likelihoods and measured evidence.
 
-Three rules hold everywhere below:
+These rules hold everywhere below:
 
 * Beliefs are one distribution over every hypothesis, recomputed from each
   hypothesis' prior and the log-likelihood of all the evidence so far. Nothing
@@ -16,6 +16,9 @@ Three rules hold everywhere below:
   a mild fault and a later reading as a severe one.
 * What a requested capture will read is simulated for every hypothesis, at the
   capture's own length and noise, never typed in.
+* Given healthy captures of the same machine, every measurement is scored as the
+  change from that machine's own normal (`physics.normal`), so its quirks are
+  not mistaken for a fault.
 * A suspect written during the case is simulated like any other and scored on
   everything already seen, the first capture and every reading. It gains belief
   only by explaining the evidence better.
@@ -29,8 +32,8 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 
 import numpy as np
@@ -48,21 +51,35 @@ from ..models import (
 from ..physics.compare import spectral_correlation
 from ..physics.frequencies import fault_frequencies, shaft_hz
 from ..physics.likelihood import (
+    MODEL_MISMATCH,
     SEEDS_PER_SEVERITY,
     SEVERITY_GRID,
     Line,
+    Noise,
     Prediction,
     Unexplained,
+    accounts_for,
     capture_features,
     evidence_lines,
     log_likelihood_by_severity,
     logmeanexp,
     measure_lines,
-    noise_level,
+    noise_only_heights,
+    noise_profile,
     predict,
     predict_reading,
     predicted_lines,
+    read_lines,
     unexplained_envelope_line,
+    widened,
+)
+from ..physics.normal import (
+    Restated,
+    at_todays_floor,
+    noise_scale,
+    restate_lines,
+    restate_reading,
+    tone,
 )
 from ..physics.signatures import (
     DEFAULT_HYPOTHESES,
@@ -92,6 +109,16 @@ FITS_NONE_SIGMA = 4.0
 #: at least this much on some predicted line, or it is refused as a duplicate; a
 #: test is offered only if the two leaders are expected to read this far apart.
 DISTINCT_SIGMA = 1.0
+
+#: A healthy verdict is refused once the machine's overall vibration has grown
+#: by this factor over its own normal: a healthy machine does not explain that.
+#: The same doubling the watcher needs before it alarms (docs/FORECAST.md,
+#: `MIN_RISE`), so the two never disagree about a machine that has changed.
+LEVEL_RISE = 2.0
+
+#: Envelope lines of a machine's own normal that are looked for, strongest
+#: first, so they are not mistaken for an impact no hypothesis predicts.
+NORMAL_LINES_MAX = 8
 
 #: The correlation shown beside each hypothesis is computed on one simulation at
 #: this seed offset; `deploy/server.py` draws the same simulation. It is a
@@ -270,10 +297,12 @@ class _Taken:
     """A reading already in the evidence, kept so a late suspect is scored on it too."""
 
     test: EvidenceTest
-    value: float
+    value: float  # the value it was scored as
     evidence_id: str
     n: int | None = None  # samples in the answering capture, if not what the test asks for
-    noise: float | None = None  # its noise, if measured
+    noise: Noise | None = None  # its noise, if measured
+    read: float | None = None  # the value as read, when it was restated from the machine's normal
+    wander: float = 0.0  # how far the machine's own normal moves, in the feature's units
 
 
 @dataclass
@@ -302,10 +331,21 @@ class Investigation:
         priors: dict[FaultKind, float] | None = None,
         candidates: tuple[FaultKind, ...] = DEFAULT_HYPOTHESES,
         seed: int = 7,
+        normal: Sequence[Observation] = (),
     ) -> None:
         self.machine = machine
         self.observation = observation
         self.seed = seed
+        #: Healthy captures of this same machine. With them the case is scored on
+        #: the change from the machine's own normal; without them, against the
+        #: textbook machine of `physics.signatures`.
+        self.normal = tuple(normal)
+        for capture in self.normal:
+            if capture.sample_rate_hz != observation.sample_rate_hz:
+                raise ValueError(
+                    f"a normal capture is sampled at {capture.sample_rate_hz:.0f} Hz, the case "
+                    f"at {observation.sample_rate_hz:.0f} Hz"
+                )
         self.ledger = Ledger()
         self.state = InvestigationState(
             id=f"inv_{uuid.uuid4().hex[:8]}",
@@ -334,10 +374,13 @@ class Investigation:
         }
         self._readings: list[_Taken] = []
         self._written: dict[str, OrderSuspect] = {}
-        self._noise: float | None = None
+        self._noise: Noise | None = None
         self._fit_ids: dict[str, str] = {}
         self._misfits: list[str] = []
         self._unexplained: dict[str | None, Unexplained | None] = {}
+        self._restated: Restated | None = None
+        # The first look as it was scored: lines, their heights, each prediction.
+        self._look: tuple[tuple[Line, ...], np.ndarray, dict[str, Prediction]] | None = None
         #: Why the last `choose_next_test` offered nothing, in words.
         self.no_useful_test = ""
         #: Requested readings nobody could take, by test name.
@@ -457,11 +500,11 @@ class Investigation:
         weights = np.where(finite, np.exp(logs - logs[finite].max()), 0.0)
         return weights / weights.sum()
 
-    def _capture_noise(self) -> float:
-        """The first capture's broadband noise, which every simulation is run at."""
+    def _capture_noise(self) -> Noise:
+        """The first capture's broadband noise, which every simulation is run at,
+        in the simulator's units (`_model_noise`)."""
         if self._noise is None:
-            obs = self.observation
-            self._noise = noise_level(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm))
+            self._noise = self._model_noise(self.observation)
         return self._noise
 
     def _relabel(self) -> None:
@@ -494,15 +537,193 @@ class Investigation:
     # -------------------------------------------------------- virtual experiments
     def _score_first_look(self) -> int:
         """Score the capture under every hypothesis, on the lines they predict."""
-        obs = self.observation
-        fs, fr = obs.sample_rate_hz, shaft_hz(self.rpm)
         lines = self._lines()
-        observed = measure_lines(obs.waveform, fs, fr, lines)
-        predictions = self._predictions(lines)
+        self._score(lines, self._predictions(lines))
+        return len(lines)
+
+    def _score(self, lines: tuple[Line, ...], predictions: dict[str, Prediction]) -> None:
+        """Score the first capture on `lines` against `predictions`, one per
+        hypothesis. With healthy captures of the machine on hand, what is scored
+        is its change from its own normal, and every prediction is widened by
+        how far that normal wanders."""
+        obs = self.observation
+        observed = measure_lines(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm), lines)
+        if self.normal:
+            self._restated = self._change_from_normal(lines)
+            observed = self._restated.heights
+            predictions = {n: widened(p, self._restated.wander) for n, p in predictions.items()}
         self._first_look = {
             n: log_likelihood_by_severity(observed, p) for n, p in predictions.items()
         }
-        return len(lines)
+        self._look = (lines, observed, predictions)
+
+    # ------------------------------------------------------- the machine's own normal
+    def _textbook_healthy(self, _severity: float | None = None) -> Signature:
+        return predicted_signature(FaultKind.HEALTHY, self.machine, self.rpm)
+
+    @cached_property
+    def _normal_speeds(self) -> tuple[float, ...]:
+        """The speed each normal capture ran at, read from its own 1x where it shows one."""
+        speeds = []
+        for capture in self.normal:
+            spectrum = feat.magnitude_spectrum(capture.waveform, capture.sample_rate_hz)
+            speeds.append(feat.estimate_rpm(*spectrum, capture.rpm).rpm)
+        return tuple(speeds)
+
+    def _normal_heights(
+        self, lines: tuple[Line, ...], floors_now: np.ndarray, alone_now: np.ndarray
+    ) -> list[np.ndarray]:
+        """Each healthy capture's lines, read at its own speed, at today's floor."""
+        fs = self.observation.sample_rate_hz
+        then = []
+        for capture, rpm in zip(self.normal, self._normal_speeds, strict=True):
+            speed = shaft_hz(rpm)
+            readings = read_lines(capture.waveform, fs, speed, lines)
+            alone_then = noise_only_heights(fs, len(capture.waveform), lines, speed)
+            then.append(at_todays_floor(readings, floors_now, alone_then, alone_now))
+        return then
+
+    @cached_property
+    def _noise_scale(self) -> float | None:
+        """Simulator noise per unit of measured noise, fixed by the machine's own
+        healthy 1x (`physics.normal.noise_scale`). None without healthy captures,
+        or when they show no clear 1x: the model's own tone-to-noise ratio is
+        then assumed, as it is for a machine with no normal on file."""
+        if not self.normal:
+            return None
+        obs = self.observation
+        fs, n, fr = obs.sample_rate_hz, len(obs.waveform), shaft_hz(self.rpm)
+        at_1x = (Line("raw", 1.0),)
+        today = read_lines(obs.waveform, fs, fr, at_1x)
+        alone = noise_only_heights(fs, n, at_1x, fr)
+        own = float(
+            np.mean([tone(h, alone)[0] for h in self._normal_heights(at_1x, today.floors, alone)])
+        )
+        measured = noise_profile(obs.waveform, fs, fr)
+        textbook = predict(self._textbook_healthy, [None], fs, n, measured, at_1x, fr)
+        return noise_scale(float(tone(textbook.means[0], alone)[0]), own, float(alone[0]))
+
+    def _model_noise(self, observation: Observation) -> Noise:
+        """A capture's own noise, as the simulator is run at it."""
+        measured = noise_profile(
+            observation.waveform, observation.sample_rate_hz, shaft_hz(self.rpm)
+        )
+        return measured.scaled(self._noise_scale or 1.0)
+
+    def _change_from_normal(self, lines: tuple[Line, ...]) -> Restated:
+        """The first capture's lines as the textbook healthy machine plus the
+        change this machine shows from its own healthy captures."""
+        obs = self.observation
+        fs, n, fr = obs.sample_rate_hz, len(obs.waveform), shaft_hz(self.rpm)
+        textbook = predict(self._textbook_healthy, [None], fs, n, self._capture_noise(), lines, fr)
+        today = read_lines(obs.waveform, fs, fr, lines)
+        alone = noise_only_heights(fs, n, lines, fr)
+        then = self._normal_heights(lines, today.floors, alone)
+        sampling = np.sqrt(np.maximum(textbook.scales[0] ** 2 - MODEL_MISMATCH**2, 0.0))
+        # A raw line's gain is counted in the floor at 1x, where the unit was fixed.
+        colour = np.ones(len(lines))
+        at_1x = next((i for i, line in enumerate(lines) if line == Line("raw", 1.0)), None)
+        if at_1x is not None and self._noise_scale is not None:
+            for i, line in enumerate(lines):
+                if line.band == "raw" and np.isfinite(today.floors[i]):
+                    colour[i] = today.floors[i] / today.floors[at_1x]
+        return restate_lines(today, then, textbook.means[0], alone, sampling, colour)
+
+    @cached_property
+    def level_rise(self) -> float | None:
+        """Overall vibration of the first capture over the machine's own normal
+        (RMS over the mean RMS of its healthy captures). None without them."""
+        if not self.normal:
+            return None
+        usual = float(np.mean([np.sqrt(np.mean(c.waveform**2)) for c in self.normal]))
+        return float(self.evidence.rms / usual) if usual > 0 else None
+
+    @cached_property
+    def _normal_lines(self) -> frozenset[Line]:
+        """Periodic impacts that are part of this machine's normal: the strongest
+        envelope lines of its healthy captures that clear the false-alarm line."""
+        found: set[Line] = set()
+        for capture, rpm in zip(self.normal, self._normal_speeds, strict=True):
+            seen: set[Line] = set()
+            for _ in range(NORMAL_LINES_MAX):
+                gap = unexplained_envelope_line(
+                    capture.waveform, capture.sample_rate_hz, shaft_hz(rpm), seen
+                )
+                if gap is None:
+                    break
+                seen.add(Line("envelope", gap.order))
+            found |= seen
+        return frozenset(found)
+
+    def _peak_1x(self, waveform: np.ndarray, rpm: float) -> float:
+        fs = self.observation.sample_rate_hz
+        freqs, mag = feat.magnitude_spectrum(waveform, fs)
+        return feat.peak_near(freqs, mag, shaft_hz(feat.estimate_rpm(freqs, mag, rpm).rpm))
+
+    def _reading_from_normal(
+        self, test: EvidenceTest, value: float, observation: Observation, noise: float
+    ) -> tuple[float, float]:
+        """A capture's feature in the textbook machine's terms: its change from
+        what this machine's healthy captures read, each cut to the same length."""
+        fs, n = self.observation.sample_rate_hz, len(observation.waveform)
+        usual, peaks = [], []
+        for capture, rpm in zip(self.normal, self._normal_speeds, strict=True):
+            found = capture_features(capture.waveform[:n], fs, rpm, self.machine)
+            if test.feature in found:
+                usual.append(found[test.feature])
+                peaks.append(self._peak_1x(capture.waveform[:n], rpm))
+        textbook = predict_reading(
+            self._textbook_healthy, [None], test.feature, fs, n, noise, self.machine, self.rpm
+        )
+        if not usual or textbook is None:
+            return value, 0.0
+        growth = self._peak_1x(observation.waveform, observation.rpm) / float(np.mean(peaks))
+        return restate_reading(test.feature, value, usual, float(textbook[0][0]), growth)
+
+    def _record_own_normal(self) -> None:
+        """Put what changed since the machine was healthy on the ledger."""
+        lines, restated = self._lines(), self._restated
+        self.ledger.add(
+            "healthy captures of this machine the case is compared with",
+            len(self.normal),
+            "",
+            "sensor",
+        )
+        if self.level_rise is not None:
+            self.ledger.add(
+                "overall vibration, relative to its own normal",
+                round(self.level_rise, 2),
+                "x",
+                "sensor",
+            )
+        if self._noise_scale is None:
+            self.ledger.add(
+                "no clear 1x in this machine's healthy captures: the model's own tone-to-noise "
+                "ratio is assumed",
+                None,
+                "",
+                "physics",
+            )
+        seen = np.flatnonzero(np.isfinite(restated.times_normal))
+        largest = sorted(
+            seen, key=lambda i: abs(math.log10(restated.times_normal[i])), reverse=True
+        )
+        changes = []
+        for i in largest[:3]:
+            factor = float(restated.times_normal[i])
+            self.ledger.add(
+                f"line at {lines[i].label()}, relative to its own normal",
+                round(factor, 2),
+                "x",
+                "sensor",
+            )
+            changes.append({"line": lines[i].label(), "times_normal": round(factor, 2)})
+        self.state.extra["own_normal"] = {
+            "captures": len(self.normal),
+            "unit_from_own_1x": self._noise_scale is not None,
+            "level_rise": None if self.level_rise is None else round(self.level_rise, 2),
+            "largest_changes": changes,
+        }
 
     def _record_fit(self, h: Hypothesis) -> None:
         relative = self.fit[h.name]
@@ -526,10 +747,18 @@ class Investigation:
             return dict(self.fit)
 
         obs = self.observation
-        self.ledger.add(
-            "broadband noise of the capture", round(self._capture_noise(), 3), "", "sensor"
-        )
+        noise = self._capture_noise()
+        self.ledger.add("broadband noise of the capture", round(noise.level, 3), "", "sensor")
+        if noise.low is not None:
+            self.ledger.add(
+                "noise near the shaft lines, relative to the resonance band",
+                round(noise.low[0] / noise.level, 2),
+                "x",
+                "sensor",
+            )
         n_lines = self._score_first_look()
+        if self._restated is not None:
+            self._record_own_normal()
 
         # The correlation stays as the picture of the comparison (the UI draws
         # the same simulation); the likelihood above is what moves the belief.
@@ -547,9 +776,15 @@ class Investigation:
         self._recompute()
         sims = sum(len(self._severities(h)) for h in self.state.hypotheses) * SEEDS_PER_SEVERITY
         ranked = ", ".join(f"{h.label} {_pct(h.posterior)}" for h in self.state.ranked()[:3])
+        against = (
+            f", scored on the change from this machine's own normal ({len(self.normal)} healthy "
+            f"capture{'s' if len(self.normal) != 1 else ''})"
+            if self.normal
+            else ""
+        )
         self.state.transcript.append(
             f"Virtual experiments: {sims} simulated captures across {n_lines} predicted "
-            f"lines. Belief: {ranked}."
+            f"lines{against}. Belief: {ranked}."
         )
         self._relabel()
         gap = self.unexplained_by_any()
@@ -619,10 +854,7 @@ class Investigation:
         self._log_prior[h.name] = math.log(prior)
         self._replay_readings(h)
         obs = self.observation
-        observed = measure_lines(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm), lines)
-        self._first_look = {
-            n: log_likelihood_by_severity(observed, p) for n, p in predictions.items()
-        }
+        self._score(lines, predictions)
         self._unexplained.clear()
 
         sim = synthesize(
@@ -693,13 +925,15 @@ class Investigation:
         total = np.zeros(len(self._severities(h)))
         position = self.state.hypotheses.index(h)
         for taken in self._readings:
-            model = self._reading_model(taken.test, self.state.hypotheses, taken.n, taken.noise)
+            model = self._reading_model(
+                taken.test, self.state.hypotheses, taken.n, taken.noise, taken.wander
+            )
             total = total + model.log_densities(taken.value)[position]
         self._reading_log[h.name] = total
 
     # ------------------------------------------------------ what a test would read
     def _reading_prediction(
-        self, test: EvidenceTest, h: Hypothesis, n: int | None = None, noise: float | None = None
+        self, test: EvidenceTest, h: Hypothesis, n: int | None = None, noise: Noise | None = None
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """What `h` predicts `test` reads, per severity: the value and its scale.
 
@@ -738,13 +972,14 @@ class Investigation:
         test: EvidenceTest,
         hypotheses: list[Hypothesis],
         n: int | None = None,
-        noise: float | None = None,
+        noise: Noise | None = None,
+        wander: float = 0.0,
     ) -> _ReadingModel:
         found = [self._reading_prediction(test, h, n, noise) for h in hypotheses]
         return _ReadingModel(
             test,
             tuple(None if f is None else f[0] for f in found),
-            tuple(None if f is None else f[1] for f in found),
+            tuple(None if f is None else np.sqrt(f[1] ** 2 + wander**2) for f in found),
         )
 
     def _expected_reading(self, test: EvidenceTest, h: Hypothesis) -> float | None:
@@ -887,9 +1122,18 @@ class Investigation:
                 f"the capture is sampled at {observation.sample_rate_hz:.0f} Hz, the case at "
                 f"{self.observation.sample_rate_hz:.0f} Hz"
             )
+        if self.normal:
+            # Like with like: the feature moves with a capture's length.
+            n = min(len(observation.waveform), *(len(c.waveform) for c in self.normal))
+            observation = replace(observation, waveform=observation.waveform[:n])
+        n = len(observation.waveform)
         value = self.measure_from_capture(test_id, observation)
-        noise = noise_level(observation.waveform, observation.sample_rate_hz, shaft_hz(self.rpm))
-        self._apply_reading(test, value, collected_by, len(observation.waveform), noise)
+        noise = self._model_noise(observation)
+        if not self.normal:
+            self._apply_reading(test, value, collected_by, n, noise)
+            return value
+        scored, wander = self._reading_from_normal(test, value, observation, noise)
+        self._apply_reading(test, scored, collected_by, n, noise, read=value, wander=wander)
         return value
 
     def _apply_reading(
@@ -898,12 +1142,18 @@ class Investigation:
         value: float,
         collected_by: str,
         n: int | None = None,
-        noise: float | None = None,
+        noise: Noise | None = None,
+        read: float | None = None,
+        wander: float = 0.0,
     ) -> None:
+        """Score one reading. `value` is what it is scored as; `read` is the value
+        as read when it was restated from the machine's own normal, whose
+        `wander` widens every prediction."""
         hyps = self.state.hypotheses
-        model = self._reading_model(test, hyps, n, noise)
+        model = self._reading_model(test, hyps, n, noise, wander)
         if not model.known:
             raise ValueError(f"no hypothesis predicts {test.feature}")
+        shown = value if read is None else read
         by_severity = model.log_densities(value)
         # How well each hypothesis expected this value, given what the evidence
         # so far says of its severity.
@@ -911,22 +1161,30 @@ class Investigation:
 
         ev = self.ledger.add(
             f"{test.name}: {test.feature}",
-            round(value, 3),
+            round(shown, 3),
             "",
             "human_measurement" if collected_by == "technician" else "sensor",
         )
+        if read is not None:
+            self.ledger.add(
+                f"{test.feature}, as the change from this machine's own normal on a textbook "
+                "healthy machine",
+                round(value, 3),
+                "",
+                "physics",
+            )
         within = float(expected.max()) + math.log(0.5)
         for h, mean, log_d in zip(hyps, model.means, expected, strict=True):
             if mean is not None:
                 (h.supports if log_d >= within else h.tensions).append(ev.id)
 
-        self.state.outcomes.append(TestOutcome(test_id=test.id, feature=test.feature, value=value))
-        self._readings.append(_Taken(test, value, ev.id, n, noise))
+        self.state.outcomes.append(TestOutcome(test_id=test.id, feature=test.feature, value=shown))
+        self._readings.append(_Taken(test, value, ev.id, n, noise, read, wander))
 
         nearest = model.nearest(value)
         if nearest > FITS_NONE_SIGMA:
             note = (
-                f"{test.feature} = {value:.2f} fits none of the hypotheses: the nearest "
+                f"{test.feature} = {shown:.2f} fits none of the hypotheses: the nearest "
                 f"prediction is {nearest:.1f} sigma away."
             )
             self._misfits.append(note)
@@ -937,7 +1195,7 @@ class Investigation:
         self._recompute()
         leader = self.state.leader()
         self.state.transcript.append(
-            f"Measured {test.feature} = {value:.2f}. "
+            f"Measured {test.feature} = {shown:.2f}. "
             f"Leader is now {leader.label} at {_pct(leader.posterior)}."
         )
         # Rejections are reported after the reading that caused them.
@@ -983,7 +1241,7 @@ class Investigation:
         threshold."""
         h = self.hypothesis(name) if name else self.state.leader()
         explained = predicted_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
-        return self._gap(h.name, f"{h.label} does not predict", explained)
+        return self._gap(h.name, f"{h.label} does not predict", explained | self._normal_lines)
 
     def unexplained_by_any(self) -> Unexplained | None:
         """The strongest periodic impact that no hypothesis on the list predicts."""
@@ -991,7 +1249,39 @@ class Investigation:
         explained: set[Line] = set()
         for h in self.state.hypotheses:
             explained |= predicted_lines(self._signature_builder(h)(None), fr)
-        return self._gap(None, "no hypothesis predicts", explained)
+        return self._gap(None, "no hypothesis predicts", explained | self._normal_lines)
+
+    def misfit(self, name: str | None = None) -> tuple[Line, float] | None:
+        """The line of the first capture that hypothesis `name` (default: the
+        leader) explains worst, and how many standard deviations off it reads,
+        when that is beyond `FITS_NONE_SIGMA`. None when it explains every line.
+
+        Beliefs only rank the hypotheses against each other, so the best of a
+        bad lot can take all of it. This is the check on the winner itself, at
+        the one severity the evidence favours: a line it says should be there
+        and is not, or one that has moved and it says should not have.
+
+        One case is not a misfit: a line of its own that reads above what it
+        predicts at the strongest severity simulated. That is more of the same
+        fault than the simulations go to, not a different one.
+        """
+        if self._look is None:
+            return None
+        h = self.hypothesis(name) if name else self.state.leader()
+        lines, observed, predictions = self._look
+        at = int(np.argmax(self._severity_weights(h)))
+        prediction = predictions[h.name]
+        off = (observed - prediction.means[at]) / prediction.scales[at]
+        if len(prediction.means) > 1 and at == len(prediction.means) - 1:
+            own = predicted_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
+            stronger = np.array([line in own for line in lines]) & (off > 0)
+            off = np.where(stronger, 0.0, off)
+        if not np.isfinite(off).any():
+            return None
+        worst = int(np.nanargmax(np.abs(off)))
+        if abs(off[worst]) <= FITS_NONE_SIGMA:
+            return None
+        return lines[worst], float(off[worst])
 
     def blocking_gap(self) -> tuple[Unexplained, Hypothesis | None] | None:
         """A periodic impact that stands between the case and a verdict, and the
@@ -1014,6 +1304,20 @@ class Investigation:
             gap = self.unexplained(leader.name)
             if _blocks(gap):
                 return gap, leader
+        return None
+
+    def predicts_impact(self, gap: Unexplained, besides: Hypothesis) -> Hypothesis | None:
+        """The strongest hypothesis other than `besides` that predicts impacts at
+        the rate `gap` was found at, if any does."""
+        fr = shaft_hz(self.rpm)
+        if accounts_for(gap.order, set()):
+            return None  # a shaft harmonic: every suspect has it, so none stands out
+        for h in self.state.ranked():
+            if h.name == besides.name:
+                continue
+            lines = predicted_lines(self._signature_builder(h)(None), fr)
+            if accounts_for(gap.order, {line for line in lines if line.band == "envelope"}):
+                return h
         return None
 
     def blockers(self) -> list[str]:
@@ -1042,7 +1346,31 @@ class Investigation:
                 else f"The capture has periodic impacts at {where} that {h.label} does not "
                 "predict, stronger than anything it explains."
             )
+            other = None if h is None else self.predicts_impact(gap, h)
+            if other is not None:
+                # Usually early damage: the line is there, and too faint for the
+                # mildest fault simulated to have made it.
+                reasons.append(
+                    f"{other.label.capitalize()} predicts impacts at that rate but stands at "
+                    f"{_pct(other.posterior)}: at every strength simulated it fits the capture "
+                    f"worse than {h.label} does. It may be damage fainter than the mildest "
+                    "simulated."
+                )
         reasons += self._misfits
+        worst = self.misfit(leader.name) if leader.posterior >= CONCLUDE_ABOVE else None
+        if worst is not None:
+            line, off = worst
+            reasons.append(
+                f"{leader.label.capitalize()} leads but does not explain the line at "
+                f"{line.label()}: it reads {abs(off):.1f} sigma "
+                f"{'above' if off > 0 else 'below'} what {leader.label} predicts."
+            )
+        rise = self.level_rise
+        if leader.kind is FaultKind.HEALTHY and rise is not None and rise >= LEVEL_RISE:
+            reasons.append(
+                f"The machine's overall vibration is {rise:.1f} times its own normal, which a "
+                "healthy machine does not explain, and no fault on the list explains the change."
+            )
         return reasons
 
     def conclude(self) -> Conclusion:
@@ -1141,7 +1469,8 @@ class Investigation:
                 )
         if self._readings:
             readings = ", ".join(
-                f"{r.test.feature} = {r.value:.2f} ({r.evidence_id})" for r in self._readings
+                f"{r.test.feature} = {r.value if r.read is None else r.read:.2f} ({r.evidence_id})"
+                for r in self._readings
             )
             parts.append(f"measured: {readings}")
         if not parts:
@@ -1187,8 +1516,13 @@ class Investigation:
         if not self.blockers():
             self.conclude()
             return None
-        if self.state.leader().posterior >= CONCLUDE_ABOVE or self.blocking_gap() is not None:
-            self.finish("No measurement on the menu addresses what is unexplained.")
+        blocking = self.blocking_gap()
+        if self.state.leader().posterior >= CONCLUDE_ABOVE or blocking is not None:
+            why = "No measurement on the menu addresses what is unexplained."
+            if blocking is not None and blocking[1] is not None:
+                if self.predicts_impact(*blocking) is not None:
+                    why = "Capture it again later: damage that is growing will show."
+            self.finish(why)
             return None
         choice = self.choose_next_test()
         if choice is None:

@@ -340,17 +340,52 @@ def test_a_test_that_cannot_settle_the_case_is_not_bought():
 
 
 def test_a_healthy_verdict_says_what_it_could_not_have_seen():
-    # A faint outer-race fault whose impacts do not show in this capture: it is
-    # called healthy, and the verdict names the faults it cannot exclude.
-    inv = _first_look(FaultKind.OUTER_RACE, severity=0.25, extra_noise=0.25, seed=11)
-    assert inv.state.leader().kind is FaultKind.HEALTHY
-    assert "outer_race" in [h.name for h, _ in inv.cannot_exclude()]
-    conclusion = inv.conclude()
-    assert "outer race at severity 0.25" in conclusion.reasoning
-    assert "cannot be excluded" in conclusion.reasoning
-
+    # A healthy verdict states its own limit. On a clean capture a mild
+    # imbalance would look the same and is named; a faint bearing fault would
+    # show, so it is not.
     clear = _first_look(FaultKind.HEALTHY)
+    conclusion = clear.conclude()
+    assert conclusion.root_cause is FaultKind.HEALTHY
+    assert "imbalance at severity 0.25" in conclusion.reasoning
+    assert "cannot be excluded" in conclusion.reasoning
     assert "outer_race" not in [h.name for h, _ in clear.cannot_exclude()]
+
+    # A faint outer-race fault in a noisier capture leads with healthy, and
+    # there the bearing faults are among those it could not have seen.
+    faint = _first_look(FaultKind.OUTER_RACE, severity=0.25, extra_noise=0.25, seed=11)
+    assert faint.state.leader().kind is FaultKind.HEALTHY
+    assert "outer_race" in [h.name for h, _ in faint.cannot_exclude()]
+
+
+@pytest.mark.parametrize("fault", [FaultKind.OUTER_RACE, FaultKind.INNER_RACE])
+def test_a_fault_stronger_than_any_simulated_is_still_that_fault(fault):
+    # Six times the model's full strength: its own lines stand far above the
+    # strongest simulation. That is more of the same fault, not a line the
+    # leader fails to explain.
+    inv = _first_look(fault, severity=6.0, seed=11)
+    assert inv.misfit() is None
+    assert inv.blockers() == []
+    assert inv.conclude().root_cause is fault
+
+
+def test_a_line_the_leader_predicts_and_the_capture_lacks_blocks_the_verdict():
+    # Misalignment with its 2x taken out: the 1x and 3x it also raises carry
+    # the belief, but a misaligned machine has a tall 2x and this one has not.
+    fr = shaft_hz(1798.0)
+    full = predicted_signature(FaultKind.MISALIGNMENT, BENCH_RIG, 1798.0)
+    healthy = predicted_signature(FaultKind.HEALTHY, BENCH_RIG, 1798.0)
+    tones = tuple(t for t in full.tones if abs(t.freq_hz - 2 * fr) > 1e-6) + (healthy.tones[1],)
+    x = synthesize(Signature(None, tones=tones, noise=0.10), BENCH_RIG.sample_rate_hz, 2.0, seed=4)
+    inv = Investigation(BENCH_RIG, Observation("rig-01", x, BENCH_RIG.sample_rate_hz, 1798.0))
+    inv.observe()
+    inv.run_virtual_experiments()
+    assert inv.state.leader().kind is FaultKind.MISALIGNMENT
+    assert inv.state.leader().posterior >= CONCLUDE_ABOVE
+    line, off = inv.misfit()
+    assert (line.band, line.order) == ("raw", 2.0) and off < -4.0
+    assert any("does not explain the line at 2x" in reason for reason in inv.blockers())
+    with pytest.raises(CannotConclude):
+        inv.conclude()
 
 
 # --------------------------------------------------------------- written suspects

@@ -43,6 +43,15 @@ from .synth import synthesize
 #: that range.
 LINE_TOLERANCE = 0.02
 
+#: How far a shaft-order tone may sit from its calculated frequency. Shaft
+#: harmonics are exact multiples of shaft speed and do not slip, so the only
+#: error is in the speed itself, which is read from the capture's own 1x to a
+#: fraction of a spectral bin (`signals.features.estimate_rpm`; within 0.2 % on
+#: the two-second captures in tests/test_order_tracking.py). Half a percent
+#: covers that with room to spare and keeps a bearing line that falls near a
+#: shaft order (a ball-pass rate of 3.08x beside 3x) out of the tone's reading.
+TONE_TOLERANCE = 0.005
+
 #: Allowance for the simulator being a reduced-order model, in log10 units of a
 #: line's height above its floor (0.15 is a factor of about 1.4). A modelling
 #: assumption, not a fit; see docs/DOMAIN.md.
@@ -133,15 +142,25 @@ def _window(freqs: np.ndarray, centre: float, half: float) -> np.ndarray:
 FLOOR_MIN_BINS = 160
 
 
-def line_height(freqs: np.ndarray, mag: np.ndarray, hz: float) -> float:
-    """log10 of a line's peak over the local floor around it (0 = not there)."""
-    peak_sel = _window(freqs, hz, LINE_TOLERANCE * hz)
+def _peak_and_floor(
+    freqs: np.ndarray, mag: np.ndarray, hz: float, tolerance: float = LINE_TOLERANCE
+) -> tuple[float, float] | None:
+    """A line's peak and the local floor around it, in the spectrum's own units."""
+    peak_sel = _window(freqs, hz, tolerance * hz)
     half = max(0.25 * hz, 0.5 * FLOOR_MIN_BINS * (freqs[1] - freqs[0]))
     floor_sel = _window(freqs, hz, half) & ~peak_sel & (freqs > 1.0)
     if not np.any(peak_sel) or not np.any(floor_sel):
+        return None
+    return float(mag[peak_sel].max()), float(np.median(mag[floor_sel])) + 1e-15
+
+
+def line_height(freqs: np.ndarray, mag: np.ndarray, hz: float) -> float:
+    """log10 of a line's peak over the local floor around it (0 = not there)."""
+    found = _peak_and_floor(freqs, mag, hz)
+    if found is None:
         return 0.0
-    floor = float(np.median(mag[floor_sel])) + 1e-15
-    return math.log10(max(float(mag[peak_sel].max()) / floor, 1.0))
+    peak, floor = found
+    return math.log10(max(peak / floor, 1.0))
 
 
 #: The band envelope analysis demodulates (`signals.features.envelope_spectrum`).
@@ -157,27 +176,54 @@ def envelope_visible(fs: float) -> bool:
     return min(_ENVELOPE_BAND_HZ[1], fs / 2.0 * 0.99) > _ENVELOPE_BAND_HZ[0]
 
 
-def measure_lines(
+@dataclass(frozen=True)
+class LineReadings:
+    """Each line's height in one capture, with the floor it was read against.
+
+    The floor is in the capture's own units, so two captures of one machine can
+    be compared when its noise has changed between them (`physics.normal`).
+    """
+
+    heights: np.ndarray
+    floors: np.ndarray
+
+
+def read_lines(
     waveform: np.ndarray, fs: float, shaft_hz: float, lines: Sequence[Line]
-) -> np.ndarray:
-    """The height of each line in one capture, in the order given.
+) -> LineReadings:
+    """The height of each line in one capture and its local floor, in the order given.
 
     NaN for a line this capture cannot show: above Nyquist, or in the envelope
     when the resonance band is out of reach. `log_likelihood` skips those.
     """
-    raw_f, raw_m = magnitude_spectrum(waveform, fs)
+    raw = magnitude_spectrum(waveform, fs)
     env = envelope_spectrum(waveform, fs) if envelope_visible(fs) else None
     nyquist = fs / 2.0
-    out = np.full(len(lines), np.nan)
+    heights = np.full(len(lines), np.nan)
+    floors = np.full(len(lines), np.nan)
     for i, line in enumerate(lines):
         hz = line.order * shaft_hz
         if hz <= 0 or hz >= nyquist:
             continue
-        if line.band == "raw":
-            out[i] = line_height(raw_f, raw_m, hz)
-        elif env is not None:
-            out[i] = line_height(env[0], env[1], hz)
-    return out
+        spectrum = raw if line.band == "raw" else env
+        if spectrum is None:
+            continue
+        tolerance = TONE_TOLERANCE if line.band == "raw" else LINE_TOLERANCE
+        found = _peak_and_floor(spectrum[0], spectrum[1], hz, tolerance)
+        if found is None:
+            heights[i] = 0.0
+            continue
+        peak, floor = found
+        heights[i] = math.log10(max(peak / floor, 1.0))
+        floors[i] = floor
+    return LineReadings(heights, floors)
+
+
+def measure_lines(
+    waveform: np.ndarray, fs: float, shaft_hz: float, lines: Sequence[Line]
+) -> np.ndarray:
+    """The height of each line in one capture, in the order given (see `read_lines`)."""
+    return read_lines(waveform, fs, shaft_hz, lines).heights
 
 
 def noise_level(waveform: np.ndarray, fs: float, shaft_hz: float) -> float:
@@ -204,6 +250,67 @@ def _unit_noise_median(fs: float, n: int, shaft_hz: float) -> float:
     return float(np.mean(medians))
 
 
+#: Noise that differs by less than this between the shaft lines and the
+#: resonance band is simulated as white. A factor of 1.5 moves a line's height by
+#: 0.18 in log10, about MODEL_MISMATCH, so a smaller tilt is within the model's
+#: own allowance.
+FLAT_NOISE = 1.5
+
+#: The shaft-line region whose floor `noise_profile` reads, in multiples of shaft
+#: speed: from below the half-order line to just above the sixth harmonic, where
+#: `noise_level` starts.
+_SHAFT_REGION = (0.25, 6.5)
+
+
+@dataclass(frozen=True)
+class Noise:
+    """The noise a case's simulations are run at: the capture's own.
+
+    `level` is the level in the resonance band, as a white-noise standard
+    deviation. `low` is (level near the shaft lines, up to Hz) when the two
+    differ by `FLAT_NOISE` or more; None means the noise is flat enough to
+    simulate as white.
+    """
+
+    level: float
+    low: tuple[float, float] | None = None
+
+    def scaled(self, factor: float) -> Noise:
+        low = None if self.low is None else (self.low[0] * factor, self.low[1])
+        return Noise(self.level * factor, low)
+
+    def on(self, signature: Signature) -> Signature:
+        return replace(signature, noise=self.level, noise_low=self.low)
+
+
+def _at_noise(signature: Signature, noise: float | Noise) -> Signature:
+    if isinstance(noise, Noise):
+        return noise.on(signature)
+    return replace(signature, noise=float(noise), noise_low=None)
+
+
+def noise_profile(waveform: np.ndarray, fs: float, shaft_hz: float) -> Noise:
+    """The capture's noise where the scoring reads it: near the shaft lines and
+    in the resonance band.
+
+    An accelerometer on a real machine shows little noise near the shaft lines
+    and most of it higher up, so white noise at one level puts the simulated
+    floor in the wrong place for one group of lines or the other. Lines and the
+    resonance hump cover a small share of the bins in each region, so each
+    median is mostly floor.
+    """
+    level = noise_level(waveform, fs, shaft_hz)
+    freqs, mag = magnitude_spectrum(waveform, fs)
+    up_to = _SHAFT_REGION[1] * shaft_hz
+    near = (freqs >= _SHAFT_REGION[0] * shaft_hz) & (freqs <= up_to) & (freqs > 1.0)
+    if int(near.sum()) < FLOOR_MIN_BINS or level <= 0:
+        return Noise(level)
+    low = float(np.median(mag[near])) / _unit_noise_median(fs, len(waveform), round(shaft_hz, 1))
+    if low <= 0 or max(low / level, level / low) < FLAT_NOISE:
+        return Noise(level)
+    return Noise(level, (low, up_to))
+
+
 # ------------------------------------------------------------------ predicting
 
 
@@ -228,7 +335,7 @@ def predict(
     severities: Sequence[float | None],
     fs: float,
     n: int,
-    noise: float,
+    noise: float | Noise,
     lines: tuple[Line, ...],
     shaft_hz: float,
 ) -> Prediction:
@@ -239,7 +346,7 @@ def predict(
     """
     means, scales = [], []
     for severity in severities:
-        signature = replace(signature_at(severity), noise=noise)
+        signature = _at_noise(signature_at(severity), noise)
         rows = np.array(
             [
                 _simulated(signature, fs, n, _SEED_BASE + 31 * k, lines, shaft_hz)
@@ -249,6 +356,29 @@ def predict(
         means.append(rows.mean(axis=0))
         scales.append(np.sqrt(rows.var(axis=0, ddof=1) + MODEL_MISMATCH**2))
     return Prediction(tuple(means), tuple(scales))
+
+
+def widened(prediction: Prediction, extra: np.ndarray) -> Prediction:
+    """The same prediction with `extra` spread added to every line, in quadrature."""
+    extra = np.nan_to_num(np.asarray(extra, dtype=float))
+    return Prediction(
+        prediction.means, tuple(np.sqrt(scale**2 + extra**2) for scale in prediction.scales)
+    )
+
+
+def noise_only_heights(fs: float, n: int, lines: tuple[Line, ...], shaft_hz: float) -> np.ndarray:
+    """What each line reads in a capture that holds nothing but noise.
+
+    Not zero: a line's height is the tallest of the few bins in its window over
+    the median around it, and the tallest of a few noise bins stands above the
+    median. Simulated, so it matches how the lines are read.
+    """
+    nothing = Signature(None, noise=1.0)
+    rows = [
+        _simulated(nothing, fs, n, _SEED_BASE + 31 * k, lines, shaft_hz)
+        for k in range(SEEDS_PER_SEVERITY)
+    ]
+    return np.mean(rows, axis=0)
 
 
 def logmeanexp(values: np.ndarray) -> float:
@@ -321,7 +451,7 @@ def predict_reading(
     feature: str,
     fs: float,
     n: int,
-    noise: float,
+    noise: float | Noise,
     machine: MachineSpec,
     rpm: float,
 ) -> tuple[np.ndarray, np.ndarray] | None:
@@ -336,7 +466,7 @@ def predict_reading(
     """
     means, spreads = [], []
     for severity in severities:
-        signature = replace(signature_at(severity), noise=noise)
+        signature = _at_noise(signature_at(severity), noise)
         values = [
             _simulated_features(signature, fs, n, _READING_SEED_BASE + 31 * k, machine, rpm).get(
                 feature
@@ -386,6 +516,13 @@ def _explains(order: float, explained: set[Line], max_harmonic: int = 12) -> boo
         for k in range(1, 7):
             candidates += [k * line.order, k * line.order - 1.0, k * line.order + 1.0]
     return any(abs(order - c) <= LINE_TOLERANCE * max(c, 1.0) for c in candidates if c > 0)
+
+
+def accounts_for(order: float, lines: set[Line]) -> bool:
+    """Whether a suspect that predicts `lines` accounts for periodic impacts at
+    `order` per shaft turn: the rate itself, a harmonic or a 1x sideband of one
+    of its envelope lines, or a shaft harmonic (the rule `unexplained_envelope_line` uses)."""
+    return _explains(order, lines)
 
 
 def unexplained_envelope_line(

@@ -59,6 +59,11 @@ class Signature:
     impacts: tuple[ImpactTrain, ...] = field(default_factory=tuple)
     noise: float = 0.08
     description: str = ""
+    #: (level, up to Hz): the noise level near the shaft lines and the frequency it
+    #: holds up to, when it differs from `noise`, which is then the level in the
+    #: bearing resonance band. A real machine's noise is rarely flat. None means
+    #: white noise at `noise`.
+    noise_low: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
