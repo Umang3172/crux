@@ -166,6 +166,13 @@ implementation behind each role. Show it once in the demo video (DEMO_SCRIPT.md)
   tab shows a synthetic pump life, labelled as one (`data/demo.py`), and what
   the app saves goes under `CRUX_DATA` (`/app/data`), which on Cloud Run is
   memory and is gone with the instance.
+- **Run `hypengine gemini-check` with the deploy's settings before deploying.**
+  Six places call a Gemini model (the investigator, the narrator, the ticket
+  writer, the camera look, the lens look, the lesson writer). All of them read
+  one switch (`agents/factory.py`), and the command makes each do one small
+  piece of its own job and prints the model, the time and any error. A model
+  id that does not exist shows here as a failed row, not on the day as a
+  product that quietly runs its fallbacks. `GET /health` lists the same six.
 - **Check which model the header names.** "Gemini off" means the investigator
   tab is running its offline stand-in: either `_SECRETS` was empty, or the key
   did not mount. If a Gemini call fails at run time (no quota, a model id that

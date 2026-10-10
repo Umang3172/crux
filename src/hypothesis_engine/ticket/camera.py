@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from ..agents.factory import gemini_model_id, gemini_route, not_live
 from ..forecast.runs import DATA_ROOT
 
 REGISTRY = DATA_ROOT / "cameras.json"
@@ -136,7 +137,7 @@ class GeminiInspector:
     def __init__(self) -> None:
         from google import genai  # type: ignore
 
-        self.model = os.getenv("GEMINI_VISION_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro"))
+        self.model = gemini_model_id("camera_look")
         self.name = f"gemini:{self.model}"
         self._client = genai.Client()
 
@@ -229,16 +230,16 @@ class LocalInspector:
 
 def get_inspector() -> Inspector:
     """Gemini, else a local vision model if OLLAMA_MODEL is set and answering, else nobody."""
-    if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
+    if gemini_route() is not None:
         try:
             return GeminiInspector()
-        except Exception:  # pragma: no cover - adapter is optional
-            pass
+        except Exception as exc:  # the adapter is optional; say why it is not live
+            not_live("camera_look", exc)
     if os.getenv("OLLAMA_MODEL"):
         try:
             return LocalInspector()
-        except Exception:  # pragma: no cover - server down or model missing
-            pass
+        except Exception as exc:  # server down or model missing
+            not_live("camera_look_local", exc)
     return NoInspector()
 
 

@@ -2,6 +2,7 @@
 
 uv run hypengine demo --fault outer_race
 uv run hypengine evaluate --quick
+uv run hypengine gemini-check
 uv run hypengine benchmark
 uv run hypengine frequencies --rpm 1798
 uv run hypengine serve
@@ -520,6 +521,41 @@ def evaluate(
         "[dim]Synthetic captures from the engine's own signal model: this measures the "
         "decision rule, not how well the model fits a real machine (docs/DATA.md).[/dim]"
     )
+
+
+@app.command("gemini-check")
+def gemini_check(
+    only: str = typer.Option("", help="Check only these call sites: names separated by commas."),
+) -> None:
+    """Try every place Crux calls Gemini, once, and say which ones work.
+
+    Each call site does one small piece of its own job with the model it would
+    really use. With no credentials nothing is called and the output says what
+    to set. Exits 1 if a call site that is switched on failed.
+    """
+    from .agents import factory, preflight
+
+    route = factory.gemini_route()
+    console.print(f"Gemini is reached by: [bold]{route or 'nothing, it is off'}[/bold]")
+    if route is None:
+        console.print(f"To turn it on: {preflight.HOW_TO_TURN_ON}.", soft_wrap=True)
+    with console.status("asking each call site to do its job once"):
+        results = preflight.run(tuple(name.strip() for name in only.split(",") if name.strip()))
+    colour = {"ok": "green", "failed": "red", "off": "yellow", "skipped": "yellow"}
+    table = Table(title="\nEvery place a Gemini model is called")
+    for name in ("call site", "model", "result", "seconds", "what happened"):
+        table.add_column(name, justify="right" if name == "seconds" else "left")
+    for r in results:
+        table.add_row(
+            r.role.replace("_", " "),
+            r.model,
+            f"[{colour[r.status]}]{r.status}[/{colour[r.status]}]",
+            f"{r.seconds:.1f}" if r.seconds else "",
+            r.detail,
+        )
+    console.print(table)
+    if any(r.status == "failed" for r in results):
+        raise typer.Exit(1)
 
 
 @app.command()

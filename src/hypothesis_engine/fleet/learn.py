@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 
+from ..agents.factory import gemini_model_id, gemini_route, not_live
 from .memory import Lesson
 
 PROMPT = """A maintenance case has just been closed. Write ONE reusable lesson
@@ -48,12 +49,12 @@ def _template(case: dict, found: str, right: bool) -> dict[str, str]:
 def _worded(case: dict) -> dict[str, str] | None:
     prompt = PROMPT.format(case=json.dumps(case))
     try:
-        if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
+        if gemini_route() is not None:
             from google import genai  # type: ignore
             from google.genai import types  # type: ignore
 
             r = genai.Client().models.generate_content(
-                model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro"),
+                model=gemini_model_id("lesson_writer"),
                 contents=[prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json", response_schema=_SCHEMA
@@ -65,7 +66,8 @@ def _worded(case: dict) -> dict[str, str] | None:
 
             if ollama.available():
                 return json.loads(ollama.chat(prompt, schema=_SCHEMA))
-    except Exception:  # a failed model must not lose the lesson
+    except Exception as exc:  # a failed model must not lose the lesson; say why it failed
+        not_live("lesson_writer", exc)
         return None
     return None
 

@@ -9,6 +9,10 @@ Order of preference, per role:
 Never raises because a credential is missing, and never hides why an adapter
 is not live: `describe()` says what is actually running and, when a live
 adapter failed to start, why. That is the first thing to put in a demo video.
+
+Every place that calls Gemini asks here whether it is on (`gemini_route`) and
+which model to use (`gemini_model_id`), and reports here when it could not
+(`not_live`). One login therefore turns all of them on, and none fails quietly.
 """
 
 from __future__ import annotations
@@ -30,8 +34,44 @@ _FAILURES: dict[str, str] = {}
 _TRUE = {"1", "true", "yes"}
 
 
-def gemini_model_id() -> str:
+#: The model Lens uses to box a machine and read its nameplate: the robotics
+#: model, which returns points and boxes. Set `GEMINI_LENS_MODEL` to move.
+DEFAULT_LENS_MODEL = "gemini-robotics-er-2-preview"
+
+#: Call sites with a model setting of their own, for a model that suits the job.
+#: The camera look falls back to `GEMINI_MODEL`; Lens to the robotics model.
+_ROLE_SETTING = {"camera_look": "GEMINI_VISION_MODEL", "lens_look": "GEMINI_LENS_MODEL"}
+
+#: Every place a model is called besides the investigator, the narrator and the
+#: gate, by the name `describe()` and the preflight show it under.
+OTHER_ROLES = ("report_writer", "ticket_writer", "camera_look", "lens_look", "lesson_writer")
+
+
+def gemini_model_id(role: str | None = None) -> str:
+    """The Gemini model for a call site: its own setting if it has one and it is
+    set, else `GEMINI_MODEL`, else the default."""
+    own = os.getenv(_ROLE_SETTING.get(role or "", ""))
+    if own:
+        return own
+    if role == "lens_look":
+        return DEFAULT_LENS_MODEL
     return os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+
+
+def not_live(role: str, exc: BaseException) -> None:
+    """Record why a call site fell back, for `describe()`. Falling back is fine;
+    doing it without saying so is how a product ships with its model off."""
+    _FAILURES[role] = f"{type(exc).__name__}: {exc}"[:300]
+
+
+def provider(role: str) -> str:
+    """What a call site would run on as things are configured: Gemini, a local
+    model, or neither. Whether it answers is only known once it is used."""
+    if gemini_route() is not None:
+        return f"gemini:{gemini_model_id(role)}"
+    if os.getenv("OLLAMA_MODEL"):
+        return f"ollama:{os.environ['OLLAMA_MODEL']}"
+    return "offline"
 
 
 def gemini_route() -> str | None:
@@ -108,6 +148,7 @@ def describe() -> dict[str, str]:
         "narrator": get_narrator().name,
         "gate": get_gate().name,
     }
+    out |= {role: provider(role) for role in OTHER_ROLES}
     for role, why in _FAILURES.items():
         out[f"{role}_not_live"] = why
     return out

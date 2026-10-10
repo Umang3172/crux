@@ -21,6 +21,7 @@ import json
 import os
 from dataclasses import dataclass, replace
 
+from ..agents.factory import gemini_model_id, gemini_route, not_live
 from ..ticket import camera
 from .motion import Box
 
@@ -101,7 +102,7 @@ def _gemini(prompt: str, schema: dict, still: bytes) -> tuple[dict, str]:  # pra
     from google import genai  # type: ignore
     from google.genai import types  # type: ignore
 
-    model = os.getenv("GEMINI_LENS_MODEL", "gemini-robotics-er-2-preview")
+    model = gemini_model_id("lens_look")
     response = genai.Client().models.generate_content(
         model=model,
         contents=[types.Part.from_bytes(data=still, mime_type="image/jpeg"), prompt],
@@ -144,10 +145,11 @@ def _read(ask, still: bytes) -> Identity:  # noqa: ANN001 - one of the two asker
 def identify(still: bytes) -> Identity:
     """Gemini, else a local model, else nobody (the person draws the box)."""
     tried = []
-    if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
+    if gemini_route() is not None:
         try:
             return _read(_gemini, still)
-        except Exception as e:  # pragma: no cover - adapter is optional
+        except Exception as e:  # the adapter is optional; say why it is not live
+            not_live("lens_look", e)
             tried.append(f"Gemini failed ({type(e).__name__})")
     if os.getenv("OLLAMA_MODEL"):
         from ..agents import ollama

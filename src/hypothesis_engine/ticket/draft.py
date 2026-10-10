@@ -21,6 +21,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
+from ..agents.factory import gemini_model_id, gemini_route, not_live
 from .camera import CameraLook
 
 SAFETY = (
@@ -190,7 +191,7 @@ class GeminiWriter:
     def __init__(self) -> None:
         from google import genai  # type: ignore
 
-        self.model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro")
+        self.model = gemini_model_id("ticket_writer")
         self.name = f"gemini:{self.model}"
         self._client = genai.Client()
 
@@ -248,16 +249,16 @@ class LocalWriter:
 
 def get_writer() -> Writer:
     """Gemini, else a local model if OLLAMA_MODEL is set and answering, else templates."""
-    if os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
+    if gemini_route() is not None:
         try:
             return GeminiWriter()
-        except Exception:  # pragma: no cover - adapter is optional
-            pass
+        except Exception as exc:  # the adapter is optional; say why it is not live
+            not_live("ticket_writer", exc)
     if os.getenv("OLLAMA_MODEL"):
         try:
             return LocalWriter()
-        except Exception:  # pragma: no cover - server down or model missing
-            pass
+        except Exception as exc:  # server down or model missing
+            not_live("ticket_writer_local", exc)
     return TemplateWriter()
 
 
