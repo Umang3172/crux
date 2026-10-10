@@ -15,6 +15,7 @@ import { CaseReport, Part, ReportLine, caseReport } from "./api";
 import "./report.css";
 
 const HEADINGS: Partial<Record<Part, string>> = {
+  hazard: "Hazard reported",
   why: "Why",
   limit: "What this could not have seen",
   action: "What to do",
@@ -111,8 +112,9 @@ export function CaseReportPanel({ id, parts, plain }: Props) {
   const shown = report.lines.filter((l) => !parts || parts.includes(l.part));
   const engine = shown.filter((l) => l.by === "engine");
   const written = shown.filter((l) => l.by !== "engine");
-  const before = engine.filter((l) => l.part === "verdict" || l.part === "why");
-  const after = engine.filter((l) => l.part !== "verdict" && l.part !== "why");
+  const first = ["hazard", "verdict", "why"];
+  const before = engine.filter((l) => first.includes(l.part));
+  const after = engine.filter((l) => !first.includes(l.part));
   const reword = plain ?? ((s: string) => s);
 
   const showCheck = async () => {

@@ -22,6 +22,17 @@
   font-weight: 600;
 }
 
+.r-line.hazard {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--fault);
+  color: #fff;
+}
+
+.r-line.hazard .r-head {
+  color: #fff;
+}
+
 .r-model {
   display: flex;
   flex-direction: column;

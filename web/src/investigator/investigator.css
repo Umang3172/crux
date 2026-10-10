@@ -290,3 +290,22 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A technician's note put on the case before the run. */
+.i-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.i-note textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}

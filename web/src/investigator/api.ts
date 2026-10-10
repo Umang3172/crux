@@ -40,6 +40,10 @@ export type AgentCase = {
   unresolved_reason: string | null;
   /** What the investigator gave as its reason for closing without one. */
   investigator_reason: string | null;
+  /** Notes from people, which the investigator reads as data. */
+  notes: { id: string; text: string; by: string; hazards: string[] }[];
+  /** Set when a note describes a hazard. */
+  hazard: string | null;
   suspects: Suspect[];
 };
 
@@ -66,7 +70,14 @@ export type About = {
   scenarios: { id: string; on_the_list: boolean }[];
 };
 
-export type RunParams = { fault: string; severity: number; extra_noise: number; seed: number };
+export type RunParams = {
+  fault: string;
+  severity: number;
+  extra_noise: number;
+  seed: number;
+  /** A technician's note put on the case before the investigator starts. */
+  note?: string;
+};
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, init);

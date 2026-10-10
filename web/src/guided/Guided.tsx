@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Capture, EvidenceTest, Investigation, Spectra, capture, catalogue, spectra } from "../api";
 import { Beliefs } from "../components/Beliefs";
 import { Ledger } from "../components/Ledger";
+import { NotesPanel } from "../notes/Notes";
 import { RepairPanel } from "../repair/Repair";
 import { CaseReportPanel } from "../report/Report";
 import { Phase, Step, investigate } from "../run";
@@ -318,6 +319,8 @@ export function Guided() {
                 vibration={vibration}
                 revealed={revealed}
               />
+
+              <NotesPanel id={inv.id} />
 
               <div className="g-nav">
                 <button

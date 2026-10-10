@@ -55,6 +55,9 @@ export type Conclusion = {
 
 export type Outcome = { test_id: string; feature: string; value: number };
 
+/** What a person typed about the machine. Shown, never scored (`investigation/notes.py`). */
+export type Note = { id: string; text: string; by: string; hazards: string[]; at: string };
+
 /** Why the engine asked for a measurement, in its own numbers (`engine.request`). */
 export type RequestNumbers = {
   test_id: string;
@@ -83,6 +86,10 @@ export type Investigation = {
   /** The numbers behind the latest requested measurement, if one was requested. */
   request: RequestNumbers | null;
   conclusion: Conclusion | null;
+  /** Notes from people. Not evidence: apart from the ledger. */
+  notes: Note[];
+  /** Set by the server when a note describes a hazard: a flag for a person. */
+  hazard: string | null;
 };
 
 /** One row of `GET /tests`: a measurement the agent is allowed to ask for. */
@@ -151,6 +158,10 @@ export const startInvestigation = (p: RunParams) => post<Investigation>("/invest
 /** Hand back a measurement the agent asked for; the engine moves the belief. */
 export const submitEvidence = (id: string, testId: string, value: number) =>
   post<Investigation>(`/investigations/${id}/evidence`, { test_id: testId, value });
+
+/** Puts a person's note on the case. Nothing in the case moves; a hazard is flagged. */
+export const addNote = (id: string, text: string) =>
+  post<Investigation>(`/investigations/${id}/notes`, { text });
 
 /** Runs a whole case answered by the rig fixture. The judge's one-click path. */
 export const replay = (p: RunParams) => post<Investigation>("/replay", p);
