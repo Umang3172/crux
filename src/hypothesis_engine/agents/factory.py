@@ -3,7 +3,7 @@
 Order of preference, per role:
 
     Investigator : Gemini (Google Cloud login, or an API key) -> scripted offline policy
-    Narrator     : Gemini                                      -> template
+    Narrator     : Gemini -> local model (OLLAMA_MODEL)        -> template
     Gate         : Jev (TYPESAFE_API_KEY)                      -> rules
 
 Never raises because a credential is missing, and never hides why an adapter
@@ -74,6 +74,13 @@ def get_narrator() -> Narrator:
             return GeminiNarrator()
         except Exception as exc:  # the adapter is optional; record why it is not live
             _FAILURES["narrator"] = f"{type(exc).__name__}: {exc}"
+    if os.getenv("OLLAMA_MODEL"):
+        try:
+            from .ollama import OllamaNarrator
+
+            return OllamaNarrator()
+        except Exception as exc:  # server down or model missing; record why it is not live
+            _FAILURES["local_narrator"] = f"{type(exc).__name__}: {exc}"
     return TemplateNarrator()
 
 

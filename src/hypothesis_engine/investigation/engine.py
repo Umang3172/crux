@@ -322,6 +322,7 @@ class Investigation:
             for k in candidates
         ]
         self.evidence = feat.extract(observation, machine)
+        self.state.rpm = self.rpm
 
         # Beliefs are recomputed from these: log prior + log-likelihood of the
         # first capture + log-likelihood of every reading, per hypothesis name.
@@ -346,11 +347,10 @@ class Investigation:
     @property
     def rpm(self) -> float:
         """The speed every predicted frequency is computed at: the one measured
-        from the signal when the feature extractor provides it, else the reported
-        speed. Bearing lines are 3.6x to 5.4x shaft speed, so a few percent of
-        speed error moves them out of their search band."""
-        measured = getattr(self.evidence, "rpm", None)
-        return float(measured) if measured else self.observation.rpm
+        from the signal when it shows a clear 1x, else the reported speed. Bearing
+        lines are 3.6x to 5.4x shaft speed, so a few percent of speed error moves
+        them out of their search band."""
+        return self.evidence.rpm or self.observation.rpm
 
     def hypothesis(self, name: str) -> Hypothesis:
         for h in self.state.hypotheses:
@@ -389,25 +389,44 @@ class Investigation:
 
     # ------------------------------------------------------------------ observe
     def observe(self) -> None:
-        ff = fault_frequencies(self.machine.bearing, self.observation.rpm)
+        ff = fault_frequencies(self.machine.bearing, self.rpm)
         e = self.evidence
-        self.ledger.add("shaft speed", round(self.observation.rpm, 1), " rpm", "sensor")
+        self.ledger.add("shaft speed, reported", round(self.observation.rpm, 1), " rpm", "sensor")
+        if e.speed is not None and e.speed.from_signal:
+            self.ledger.add(
+                "shaft speed, measured from the 1x peak", round(e.speed.rpm, 1), " rpm", "physics"
+            )
+        elif e.speed is not None:
+            self.ledger.add(f"reported speed kept: {e.speed.note}", None, "", "physics")
         self.ledger.add("shaft frequency (1x)", round(ff.shaft, 2), " Hz", "physics")
         self.ledger.add("predicted BPFO", round(ff.bpfo, 2), " Hz", "physics")
         self.ledger.add("predicted BPFI", round(ff.bpfi, 2), " Hz", "physics")
         self.ledger.add("2x relative to 1x", round(e.ratio_2x_1x(), 3), "", "sensor")
         self.ledger.add("half-order peak, relative to 1x", round(e.amp_half_x, 3), "", "sensor")
-        self.ledger.add("envelope peak at BPFO", round(e.env_bpfo, 2), "x median", "sensor")
-        self.ledger.add("envelope peak at BPFI", round(e.env_bpfi, 2), "x median", "sensor")
+        if e.env_bpfo is not None and e.env_bpfi is not None:
+            self.ledger.add("envelope peak at BPFO", round(e.env_bpfo, 2), "x median", "sensor")
+            self.ledger.add("envelope peak at BPFI", round(e.env_bpfi, 2), "x median", "sensor")
+        else:
+            self.ledger.add(
+                f"envelope not available: a {self.observation.sample_rate_hz:.0f} Hz capture "
+                "cannot see the bearing resonance band",
+                None,
+                "",
+                "physics",
+            )
         self.ledger.add("crest factor", round(e.crest_factor, 2), "", "sensor")
         if self.observation.temperature_c is not None:
             self.ledger.add(
                 "housing temperature", round(self.observation.temperature_c, 1), " C", "sensor"
             )
+        envelope = (
+            f"envelope at BPFO = {e.env_bpfo:.1f}x median"
+            if e.env_bpfo is not None
+            else "no envelope at this sample rate"
+        )
         self.state.transcript.append(
-            f"Anomaly on {self.machine.name} at {self.observation.rpm:.0f} rpm. "
-            f"2x/1x = {e.ratio_2x_1x():.2f}, envelope at BPFO = {e.env_bpfo:.1f}x median, "
-            f"crest factor {e.crest_factor:.1f}."
+            f"Anomaly on {self.machine.name} at {self.rpm:.0f} rpm. "
+            f"2x/1x = {e.ratio_2x_1x():.2f}, {envelope}, crest factor {e.crest_factor:.1f}."
         )
 
     # ------------------------------------------------------------ beliefs
@@ -934,8 +953,8 @@ class Investigation:
         )
         if test.feature not in found:
             raise ValueError(
-                f"{test.feature} cannot be read from a capture sampled at "
-                f"{observation.sample_rate_hz:.0f} Hz"
+                f"{test.feature} needs an envelope, and a {observation.sample_rate_hz:.0f} Hz "
+                "capture cannot see the resonance band"
             )
         return found[test.feature]
 

@@ -87,6 +87,17 @@ export type Spectra = {
   simulated: number[];
 };
 
+/** The sensor reading behind a case, for gauges and the live trace. See `deploy/server.py`. */
+export type Capture = {
+  rpm: number;
+  temperature_c: number | null;
+  rms: number;
+  baseline_rms: number;
+  sample_rate_hz: number;
+  waveform: number[];
+  source: string;
+};
+
 export type RunParams = {
   fault: string;
   severity: number;
@@ -119,6 +130,9 @@ export const submitEvidence = (id: string, testId: string, value: number) =>
 
 /** Runs a whole case answered by the rig fixture. The judge's one-click path. */
 export const replay = (p: RunParams) => post<Investigation>("/replay", p);
+
+/** The reading a case starts from. Served by the container entrypoint, like `/spectrum`. */
+export const capture = (p: RunParams) => post<Capture>("/capture", p);
 
 /**
  * Optional: the container entrypoint serves this, `hypengine serve` does not.

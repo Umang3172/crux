@@ -19,12 +19,27 @@ from ..physics.frequencies import fault_frequencies, shaft_hz
 from ..physics.signatures import ImpactTrain, Signature, predicted_signature
 from ..physics.synth import synthesize
 
+#: The synthetic stand-in the demo and the tests run on, at the CWRU rate so the
+#: bearing resonance band is visible. It is not the hardware: see BENCH_RIG_ESP32.
 BENCH_RIG = MachineSpec(
     machine_id="rig-01",
     name="MechNova bench rig",
     bearing=SKF_6205_2RS_JEM,
     nominal_rpm=1798.0,
     sample_rate_hz=12_000.0,
+    blade_count=3,
+    notes="Synthetic captures at 12 kHz; the physical rig is BENCH_RIG_ESP32",
+)
+
+#: The physical rig as the firmware actually samples it (firmware/esp32_rig:
+#: 2 kHz, MPU6050 low-pass at 184 Hz). Shaft orders are visible; the 1.5–5 kHz
+#: bearing resonance band is not, so envelope evidence is reported as unavailable.
+BENCH_RIG_ESP32 = MachineSpec(
+    machine_id="rig-01",
+    name="MechNova bench rig (ESP32 + MPU6050)",
+    bearing=SKF_6205_2RS_JEM,
+    nominal_rpm=1798.0,
+    sample_rate_hz=2_000.0,
     blade_count=3,
     notes="ESP32 + MPU6050 on a small motor; see docs/HARDWARE.md",
 )

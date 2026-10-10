@@ -24,7 +24,7 @@ from ..models import FaultKind, InvestigationState
 from ..tools import InMemoryCaseStore, open_case
 
 app = FastAPI(
-    title="Hypothesis Engine",
+    title="Crux",
     version="0.1.0",
     summary="An AI investigator for machine faults, built by MechNova.",
 )
@@ -252,3 +252,20 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
         "thoughts": run.thoughts,
         "case": run.case.model_dump(mode="json") if run.case else None,
     }
+
+
+# Predictive maintenance: replays of recorded bearing lives. Its own module, and
+# it reads no investigation, so nothing it serves can move a belief.
+from .maintenance import router as _maintenance  # noqa: E402
+
+app.include_router(_maintenance)
+
+# Learning across sites: lessons, signed updates and what a technician found.
+from .fleet import router as _fleet  # noqa: E402
+
+app.include_router(_fleet)
+
+# Crux Lens: a phone video of a machine, read by a vision model and by the physics.
+from .lens import router as _lens  # noqa: E402
+
+app.include_router(_lens)

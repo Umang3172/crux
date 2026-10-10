@@ -8,26 +8,36 @@
  */
 
 :root {
-  --bg: #0a0d10;
-  --panel: #10151a;
-  --panel-2: #141b21;
-  --line: #1f2831;
-  --line-soft: #19212a;
+  /* A cool plant room: pale frost and paper, ink text, colour only with meaning. */
+  --bg: #e8edf0;
+  --panel: #f7f9fa;
+  --panel-2: #eef2f4;
+  --line: #d3dce1;
+  --line-soft: #e1e7eb;
 
-  --ink: #e3e9ee;
-  --ink-dim: #9aa7b3;
-  --ink-faint: #64717d;
+  --ink: #14222c;
+  --ink-dim: #4a5c68;
+  --ink-faint: #7f909c;
 
-  --ember: #ff7a45; /* the leading hypothesis, and nothing else */
-  --sensor: #57a9ff;
-  --physics: #a78bfa;
-  --sim: #35c89a;
-  --human: #f2b134; /* the moment a person is asked for something */
-  --reject: #3b4752;
+  --ember: #d7383b; /* the leading hypothesis, and the part Crux blames */
+  --fault: #d7383b;
+  --fault-soft: #fbe6e6;
+  --sensor: #14222c;
+  --physics: #6b5bd6;
+  --sim: #1597a5;
+  --coolant: #1597a5;
+  --coolant-ink: #0d7480;
+  --coolant-soft: #dcf1f2;
+  --warm: #e0954a;
+  --human: #d98e04; /* the moment a person is asked for something */
+  --ask: #f0a51c;
+  --ask-ink: #9a6400;
+  --ask-soft: #fdf0d5;
+  --reject: #c3cdd3;
 
-  --radius: 10px;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  --radius: 14px;
+  --sans: "Archivo", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "Archivo", ui-sans-serif, -apple-system, system-ui, sans-serif;
 }
 
 * {
@@ -48,6 +58,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
 }
 
 button {
@@ -78,7 +89,7 @@ p {
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 14px;
   flex-wrap: wrap;
   padding-bottom: 16px;
@@ -86,9 +97,10 @@ p {
 }
 
 .wordmark {
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
+  font-size: 22px;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.02em;
 }
 
 .tagline {
@@ -104,9 +116,8 @@ p {
   flex-wrap: wrap;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-faint);
+  font-size: 13px;
+  color: var(--ink-dim);
 }
 
 .dot {
@@ -114,12 +125,12 @@ p {
   height: 7px;
   border-radius: 50%;
   background: var(--sim);
-  box-shadow: 0 0 0 3px rgb(53 200 154 / 12%);
+  box-shadow: 0 0 0 3px rgb(21 151 165 / 18%);
 }
 
 .dot.down {
   background: var(--ember);
-  box-shadow: 0 0 0 3px rgb(255 122 69 / 12%);
+  box-shadow: 0 0 0 3px rgb(215 56 59 / 16%);
 }
 
 /* ---------------------------------------------------------------- controls */
@@ -141,8 +152,6 @@ p {
 .label {
   font-family: var(--mono);
   font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 
@@ -177,9 +186,10 @@ p {
 }
 
 .run {
-  border: 1px solid #a8410f;
-  background: linear-gradient(180deg, #ff8452, #ea5f2b);
-  color: #170a04;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
   font-weight: 650;
   padding: 11px 22px;
   border-radius: var(--radius);
@@ -250,8 +260,6 @@ p {
 .panel h2 {
   font-family: var(--mono);
   font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--ink-faint);
   font-weight: 500;
 }
@@ -286,13 +294,12 @@ p {
   padding: 5px 13px;
   font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 0.04em;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
 .steps button[aria-current="true"] {
   color: var(--ink);
-  border-color: #3a4a58;
+  border-color: var(--ink-faint);
   background: var(--panel-2);
 }
 
@@ -359,7 +366,7 @@ p {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 4px;
-  background: #35566e;
+  background: var(--ink-dim);
   transition: width 0.75s cubic-bezier(0.22, 0.75, 0.3, 1), background 0.5s;
 }
 
@@ -445,8 +452,6 @@ p {
 .ledger-src {
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid currentcolor;
@@ -479,15 +484,15 @@ p {
 /* ---------------------------------------------------------------- request */
 
 .request {
-  border: 1px solid #5a4415;
-  background: linear-gradient(180deg, rgb(242 177 52 / 9%), rgb(242 177 52 / 3%));
+  border: 0;
+  background: var(--ask-soft);
   border-radius: 14px;
   padding: 18px;
   animation: appear 0.5s ease both;
 }
 
 .request h2 {
-  color: var(--human);
+  color: var(--ask-ink);
 }
 
 .request-name {
@@ -500,7 +505,7 @@ p {
   color: var(--ink-dim);
   font-size: 13px;
   margin-top: 8px;
-  border-left: 2px solid #5a4415;
+  border-left: 2px solid var(--ask);
   padding-left: 11px;
 }
 
@@ -522,8 +527,6 @@ p {
 .cost .k {
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 
@@ -534,7 +537,7 @@ p {
 }
 
 .cost.gain .v {
-  color: var(--human);
+  color: var(--ask-ink);
 }
 
 .procedure {
@@ -593,8 +596,8 @@ p {
 /* ---------------------------------------------------------------- conclusion */
 
 .conclusion {
-  border: 1px solid #6a3315;
-  background: linear-gradient(180deg, rgb(255 122 69 / 10%), rgb(255 122 69 / 2%));
+  border: 0;
+  background: var(--fault-soft);
   border-radius: 14px;
   padding: 20px;
   animation: appear 0.5s ease both;
@@ -640,8 +643,6 @@ p {
 .kv .k {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 

@@ -24,7 +24,7 @@ from .investigation.engine import Investigation, verify_repair
 from .models import FaultKind, Observation
 from .physics.frequencies import bearing_multipliers, fault_frequencies
 
-app = typer.Typer(add_completion=False, help="Hypothesis Engine — MechNova")
+app = typer.Typer(add_completion=False, help="Crux — MechNova")
 console = Console()
 
 
@@ -62,7 +62,7 @@ def demo(
             f"[bold]{BENCH_RIG.name}[/bold]  ·  {rpm:.0f} rpm\n"
             f"models: {describe_models()}\n"
             f"[dim]ground truth (hidden from the agent): {kind}[/dim]",
-            title="Hypothesis Engine",
+            title="Crux",
         )
     )
 
