@@ -53,7 +53,7 @@ never reaches the investigation.
 
 | Tab | What it shows |
 |---|---|
-| **Guided** | One case on a cooling pump in plain words: the reading, every suspect tested on a virtual copy, the one check, the answer |
+| **Guided** | One case on a cooling pump in plain words: the reading, every suspect tested on a virtual copy, the one check, the answer, and the check after the repair |
 | **Investigator** | A language model working a case through the tools, step by step, including a fault that is not on the list |
 | **Engineer view** | The same engine with every number: beliefs, spectra, the evidence ledger |
 | **Predictive maintenance** | A bearing's life replayed: health, the alarm, time left as a range, the investigation at any moment, a repair ticket a person approves |

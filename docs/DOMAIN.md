@@ -228,6 +228,12 @@ frequency of the 6205 (the nearest is 2x BPFO at 7.17x) and on no shaft
 harmonic. Both ring the same resonance, at the same strength, as the
 catalogue's bearing faults.
 
+The rig after a repair (`POST /investigations/{id}/repair`) is the same rig
+with the fault at whatever share the caller says the repair left, or with a
+fault the repair itself left behind at severity 0.75 (`LEFT_BEHIND_SEVERITY`):
+a demonstration value, clear in one capture and short of the catalogue's full
+strength. The rig holds one fault at a time.
+
 ## The result in words
 
 `agents/report.py` holds a model's explanation of a verdict to the evidence it

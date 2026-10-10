@@ -402,6 +402,53 @@ class Investigation:
                 return h
         raise KeyError(f"no hypothesis named {name!r}")
 
+    @property
+    def written_suspects(self) -> tuple[OrderSuspect, ...]:
+        """The suspects written during the case that the physics took on."""
+        return tuple(self._written.values())
+
+    def cause_lines(self, name: str | None = None) -> tuple[Line, ...]:
+        """The lines hypothesis `name` (default: the leader) says should be there."""
+        h = self.hypothesis(name) if name else self.state.leader()
+        lines = predicted_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
+        return tuple(sorted(lines, key=lambda line: (line.band, line.order)))
+
+    def read(self, lines: Sequence[Line]) -> np.ndarray:
+        """Each line's height in this case's capture: log10 of its peak over the
+        floor around it. NaN where the capture cannot show the line."""
+        obs = self.observation
+        return measure_lines(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm), lines)
+
+    def read_normal(self, lines: Sequence[Line]) -> np.ndarray | None:
+        """The same lines in the machine's healthy captures, each read at its own
+        speed and averaged. None when the case has none."""
+        if not self.normal:
+            return None
+        heights = [
+            measure_lines(capture.waveform, capture.sample_rate_hz, shaft_hz(rpm), lines)
+            for capture, rpm in zip(self.normal, self._normal_speeds, strict=True)
+        ]
+        return np.mean(heights, axis=0)
+
+    def healthy_heights(self, lines: Sequence[Line]) -> np.ndarray | None:
+        """What a healthy machine is simulated to show on these lines, at this
+        capture's length and noise: the textbook machine, not this one. None when
+        healthy is not on the list."""
+        healthy = next((h for h in self.state.hypotheses if h.kind is FaultKind.HEALTHY), None)
+        if healthy is None:
+            return None
+        obs = self.observation
+        prediction = predict(
+            self._signature_builder(healthy),
+            [None],
+            obs.sample_rate_hz,
+            len(obs.waveform),
+            self._capture_noise(),
+            tuple(lines),
+            shaft_hz(self.rpm),
+        )
+        return prediction.means[0]
+
     def _signature_builder(self, h: Hypothesis) -> Callable[[float | None], Signature]:
         rpm = self.rpm
 
@@ -1573,31 +1620,3 @@ class Investigation:
 
         self.state.ledger = self.ledger.items
         return self.state
-
-
-def verify_repair(
-    before: Observation,
-    after: Observation,
-    machine: MachineSpec,
-    fault: FaultKind,
-) -> dict[str, float | bool | str]:
-    """Did the repair do what the physics said it would?"""
-    b = feat.extract(before, machine)
-    a = feat.extract(after, machine)
-    expected = {
-        FaultKind.IMBALANCE: 0.60,
-        FaultKind.MISALIGNMENT: 0.50,
-        FaultKind.LOOSENESS: 0.45,
-        FaultKind.OUTER_RACE: 0.65,
-        FaultKind.INNER_RACE: 0.65,
-        FaultKind.HEALTHY: 0.0,
-    }[fault]
-    actual = 1.0 - (a.rms / (b.rms + 1e-12))
-    return {
-        "rms_before": round(b.rms, 4),
-        "rms_after": round(a.rms, 4),
-        "expected_reduction": expected,
-        "actual_reduction": round(float(actual), 3),
-        "verified": bool(actual >= expected * 0.6),
-        "note": "Verified against the reduction the physics predicted for this fault.",
-    }

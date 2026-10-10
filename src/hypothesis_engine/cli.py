@@ -22,7 +22,8 @@ from .agents.factory import describe as describe_models
 from .data import cwru
 from .data.rig import BENCH_RIG, rig_oracle, scenario, synthetic_capture
 from .investigation.catalog import BY_ID
-from .investigation.engine import Investigation, verify_repair
+from .investigation.engine import Investigation
+from .investigation.repair import check_repair
 from .models import FaultKind, Observation
 from .physics.frequencies import bearing_multipliers, fault_frequencies
 
@@ -52,7 +53,9 @@ def demo(
         "inner_race --severity 0.5 --noise 0.45) the physics cannot settle the case alone and "
         "asks for a measurement; a fainter one (--severity 0.35) ends unresolved.",
     ),
-    verify: bool = typer.Option(True, help="Also show post-repair verification"),
+    verify: bool = typer.Option(
+        True, help="Also capture the rig with the fault removed and check the repair"
+    ),
 ) -> None:
     """Run one full investigation and print the transcript and ledger."""
     try:
@@ -118,13 +121,22 @@ def demo(
             f"\n[yellow]no verdict[/yellow] rather than a guess (the induced fault was {kind})"
         )
 
-    if verify and c and c.root_cause is not None:
-        after = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, rpm=rpm, seed=4242)
-        result = verify_repair(obs, after, BENCH_RIG, c.root_cause)
+    if verify and c and c.root_cause is not FaultKind.HEALTHY:
+        # The rig after a good repair: the same machine, same noise, no fault.
+        after = synthetic_capture(
+            FaultKind.HEALTHY, BENCH_RIG, rpm=rpm, seed=4242, extra_noise=noise
+        )
+        check = check_repair(inv, after)
+        lines = "\n".join(
+            f"  {change.line}: {change.before:g}x its floor before, {change.after:g}x after"
+            for change in check.lines
+        )
         console.print(
             Panel.fit(
-                "\n".join(f"{k}: {v}" for k, v in result.items()),
-                title="Repair verification",
+                f"[bold]{check.outcome.replace('_', ' ')}[/bold]\n\n{check.statement}"
+                + (f"\n{check.limit}" if check.limit else "")
+                + (f"\n\n{lines}" if lines else ""),
+                title="After the repair (the rig with the fault removed)",
             )
         )
 

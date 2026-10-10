@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from hypothesis_engine.data.rig import BENCH_RIG, rig_oracle, synthetic_capture
-from hypothesis_engine.investigation.engine import Investigation, verify_repair
+from hypothesis_engine.investigation.engine import Investigation
 from hypothesis_engine.models import FaultKind
 
 FAULTS = [
@@ -62,11 +62,3 @@ def test_every_conclusion_cites_evidence():
     assert state.conclusion is not None
     assert len(state.conclusion.evidence_ids) >= 5
     assert {e.id for e in state.ledger} >= set(state.conclusion.evidence_ids)
-
-
-def test_repair_verification_compares_against_the_prediction():
-    before = synthetic_capture(FaultKind.IMBALANCE, BENCH_RIG)
-    after = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, seed=999)
-    result = verify_repair(before, after, BENCH_RIG, FaultKind.IMBALANCE)
-    assert result["verified"] is True
-    assert result["actual_reduction"] > 0

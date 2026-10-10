@@ -34,6 +34,7 @@ from ..data.rig import (
 from ..data.stream import CAPTURE_S, MAX_BATCH_SAMPLES, NotEnoughSignal, Stream, Streams
 from ..investigation.catalog import BY_ID, CATALOG
 from ..investigation.engine import Investigation
+from ..investigation.repair import NothingToVerify, RepairCheck, check_repair
 from ..models import FaultKind, InvestigationState
 from ..tools import CaseNotFound, InMemoryCaseStore, open_case
 
@@ -126,6 +127,17 @@ class StartRequest(BaseModel):
     )
 
 
+def _rig_state(req: StartRequest) -> dict[str, Any]:
+    """What the synthetic rig was given, kept with the case so the rig can be
+    captured again after a repair. Demo only; the engine never reads it."""
+    return {
+        "fault": str(req.fault.value if isinstance(req.fault, FaultKind) else req.fault),
+        "severity": req.severity,
+        "extra_noise": req.extra_noise,
+        "rpm": req.rpm,
+    }
+
+
 def _rig_answers(req: StartRequest):
     """The rig's answers for a replay: new captures of the machine the case was opened on."""
     return rig_oracle(
@@ -187,6 +199,7 @@ def start(req: StartRequest) -> dict[str, Any]:
     inv.run_virtual_experiments()
     inv.advance()
     inv.state.extra["ground_truth"] = req.fault.value  # demo only; never shown to the agent
+    inv.state.extra["rig"] = _rig_state(req)
     inv.state.ledger = inv.ledger.items
     _INVESTIGATIONS[inv.state.id] = inv
     return serialise(inv.state)
@@ -234,6 +247,7 @@ def replay(req: StartRequest) -> dict[str, Any]:
     inv = Investigation(BENCH_RIG, obs)
     state = inv.run(oracle=_rig_answers(req))
     state.extra["ground_truth"] = req.fault.value
+    state.extra["rig"] = _rig_state(req)
     _INVESTIGATIONS[state.id] = inv
     return serialise(state)
 
@@ -372,6 +386,7 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
         extra_noise=req.extra_noise,
     )
     case = open_case(_AGENT_CASES, BENCH_RIG, obs, answer_source=_rig_answers(req))
+    case.investigation.state.extra["rig"] = _rig_state(req)
     run = await investigate_async(_AGENT_CASES, case.id)
     return {
         "model": run.model,
@@ -432,7 +447,8 @@ def agent_about() -> dict[str, Any]:
 _REPORTS: dict[tuple[str, str], dict[str, Any]] = {}
 
 
-def _closed_or_open_case(case_id: str) -> InvestigationState:
+def _case(case_id: str) -> Investigation:
+    """A case by id, whichever door it was opened by."""
     inv = _INVESTIGATIONS.get(case_id)
     if inv is None:
         try:
@@ -440,7 +456,11 @@ def _closed_or_open_case(case_id: str) -> InvestigationState:
         except CaseNotFound:
             raise HTTPException(404, "no such investigation") from None
     inv.state.ledger = inv.ledger.items
-    return inv.state
+    return inv
+
+
+def _closed_or_open_case(case_id: str) -> InvestigationState:
+    return _case(case_id).state
 
 
 @app.get("/investigations/{investigation_id}/report")
@@ -468,6 +488,104 @@ def report(investigation_id: str, writer: str = "") -> dict[str, Any]:
     if state.outcome != "open":
         _REPORTS[key] = out
     return out
+
+
+# ------------------------------------------------------------------ after the repair
+
+#: How strong a fault the repair itself left behind is, on the synthetic rig. A
+#: demonstration value: clear in one capture, short of the catalogue's full strength.
+LEFT_BEHIND_SEVERITY = 0.75
+
+
+class RepairRequest(BaseModel):
+    """What the repair did, on the synthetic rig. With a sensor, the capture
+    after the repair comes from it instead (`/ingest/{machine}/repair/{case}`)."""
+
+    removed: float = Field(
+        default=1.0, ge=0.0, le=1.0, description="How much of the fault it removed: 1 is all."
+    )
+    left_behind: FaultKind | None = Field(
+        default=None,
+        description="A fault the repair itself left, such as misalignment after reassembly.",
+    )
+    seed: int = 4242
+
+
+def _repair_view(check: RepairCheck, rig: dict[str, Any] | None = None) -> dict[str, Any]:
+    follow = check.follow
+    follow.state.ledger = follow.ledger.items
+    # The capture after the repair is a case of its own: its ledger and report
+    # can be read like any other's.
+    _INVESTIGATIONS[follow.state.id] = follow
+    return {
+        "outcome": check.outcome,
+        "cause": check.cause,
+        "found": check.found,
+        "belief": None if check.belief is None else round(check.belief, 4),
+        "statement": check.statement,
+        "limit": check.limit,
+        "limit_names_cause": check.limit_names_cause,
+        "lines": [asdict(change) for change in check.lines],
+        "usual_from": check.usual_from,
+        "after": serialise(follow.state),
+        "rig": rig,  # demo only: what the rig was given for the capture after the repair
+    }
+
+
+@app.post("/investigations/{investigation_id}/repair")
+def repair(investigation_id: str, req: RepairRequest) -> dict[str, Any]:
+    """Capture the synthetic rig again after the repair a verdict called for, and
+    investigate that capture: is the cause gone, still there, or replaced by
+    another? No expected improvement is typed anywhere: the answer is the
+    engine's verdict on the machine as it now runs."""
+    inv = _case(investigation_id)
+    rig = inv.state.extra.get("rig")
+    if rig is None:
+        raise HTTPException(
+            409, "this case was not opened on the synthetic rig; post the capture from the sensor"
+        )
+    left = rig["severity"] * (1.0 - req.removed)
+    if req.left_behind is not None and left > 0:
+        raise HTTPException(422, "the rig holds one fault at a time: left_behind needs removed=1")
+    if req.left_behind is not None:
+        given = {"fault": req.left_behind.value, "severity": LEFT_BEHIND_SEVERITY}
+    elif left > 0:
+        given = {"fault": rig["fault"], "severity": round(left, 4)}
+    else:
+        given = {"fault": FaultKind.HEALTHY.value, "severity": 1.0}
+    after = synthetic_capture(
+        given["fault"],
+        BENCH_RIG,
+        rpm=rig["rpm"],
+        severity=given["severity"],
+        seed=req.seed,
+        extra_noise=rig["extra_noise"],
+    )
+    try:
+        check = check_repair(inv, after)
+    except NothingToVerify as exc:
+        raise HTTPException(409, str(exc)) from None
+    return _repair_view(check, given)
+
+
+@app.post("/ingest/{machine_id}/repair/{investigation_id}")
+def ingest_repair(machine_id: str, investigation_id: str, who: IngestToken) -> dict[str, Any]:
+    """The same check on a real machine: the latest signal from its sensor is the
+    capture after the repair, scored against the normal the first case had."""
+    _ingest_allowed(who.token)
+    stream = _live(machine_id)
+    inv = _case(investigation_id)
+    if inv.machine.machine_id != stream.machine.machine_id:
+        raise HTTPException(409, f"that case is on {inv.machine.machine_id}, not {machine_id}")
+    try:
+        after = _LIVE.capture(machine_id)
+    except NotEnoughSignal as exc:
+        raise HTTPException(409, str(exc)) from None
+    try:
+        check = check_repair(inv, after)
+    except NothingToVerify as exc:
+        raise HTTPException(409, str(exc)) from None
+    return _repair_view(check)
 
 
 # Predictive maintenance: replays of recorded bearing lives. Its own module, and

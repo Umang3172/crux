@@ -71,6 +71,12 @@ investigator runs the same loop over the same tools, so CI runs with no keys and
 a laptop with no network still demos. Jev gives typed verdicts while somebody
 takes a measurement, with a rule-based fallback.
 
+After a verdict and a repair, `investigation/repair.py` investigates a new
+capture as a case of its own, with the same suspects at even odds and the same
+normal, and reports what the machine is now: the repair verified, the fault
+still there, another fault in its place, or not settled (ADR-0024). No expected
+improvement is typed anywhere.
+
 A closed case is written up by `agents/report.py` (ADR-0021). The verdict, the
 reason, the action and what would change it are the engine's own lines. A model
 may add an explanation of a verdict, and each of its sentences is kept only if

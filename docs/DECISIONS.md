@@ -639,3 +639,39 @@ hypothesis is modulated at shaft speed, which every suspect already has. A real
 cage fault has not been tried; the expectation, untested, is an unresolved case
 with the rolling-element suspect tested and low.
 
+## ADR-0024 · A repair is checked by investigating the machine again, not against a typed improvement
+
+**Context.** Repair verification was one function, reachable only from the
+command-line demo. It compared the drop in overall vibration with a table of
+expected reductions per fault (0.60 for imbalance, 0.65 for a bearing race and
+so on) that had no source, and called the repair verified at 60% of that. It
+could not say that a fault was still there, nor that the repair had left
+another one.
+
+**Decision.** `investigation/repair.py` takes the closed case and a capture
+made after the repair, and investigates that capture as a case of its own: the
+same suspects, including any written during the first case, every one back at
+even odds, scored against the machine's own normal when the first case had its
+healthy captures. The answer is the engine's verdict on the machine as it now
+runs. Five answers: verified (it fits the machine running normally), still
+there, something else (with that fault's own action), cause gone (the repaired
+cause is below the rejection threshold but the capture settles nothing more),
+and cannot tell. Beside it are the lines the repaired cause predicts, as each
+read before and after and in a healthy machine, for the reader; the answer does
+not come from them. The typed table is deleted.
+
+`POST /investigations/{id}/repair` runs it on the synthetic rig, where the
+caller says how much of the fault the repair removed or which fault it left;
+the engine is not told. `POST /ingest/{machine}/repair/{id}` runs it on a live
+machine's latest signal. The Guided answer offers the three repairs.
+
+**Consequence.** On the 12 kHz rig a full repair is verified for all five
+faults, half a repair is not, and the sentence names the fault's own line still
+standing (for a bearing race the line at its rate, not the taller 1x every
+machine has). A verified repair carries the healthy verdict's own limit: after
+balancing, a mild imbalance cannot be excluded from one two-second capture, and
+the check says so. The 2 kHz hardware rig cannot see where bearing damage
+shows, so it never concludes "healthy"; there the most it can say is that the
+repaired cause is gone, which is the fourth answer. Captures after a repair
+come from the same synthetic rig as the first; not run on a real repair.
+
