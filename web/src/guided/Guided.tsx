@@ -22,6 +22,7 @@ import {
   CHECK_TEXT,
   FAULT_IDS,
   FEATURE_TEXT,
+  NOISE_LEVELS,
   SCENARIOS,
   SEVERITY_LEVELS,
   faultText,
@@ -61,6 +62,7 @@ type Case = {
 export function Guided() {
   const [scenario, setScenario] = useState("mystery");
   const [severity, setSeverity] = useState(0.6);
+  const [noise, setNoise] = useState(NOISE_LEVELS[0].value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<EvidenceTest[]>([]);
@@ -78,7 +80,12 @@ export function Guided() {
   const start = useCallback(async () => {
     const fault =
       scenario === "mystery" ? FAULT_IDS[Math.floor(Math.random() * FAULT_IDS.length)] : scenario;
-    const params = { fault, severity, seed: 1 + Math.floor(Math.random() * 9999) };
+    const params = {
+      fault,
+      severity,
+      seed: 1 + Math.floor(Math.random() * 9999),
+      extra_noise: noise,
+    };
     setLoading(true);
     setError(null);
     setCurrent(null);
@@ -104,7 +111,7 @@ export function Guided() {
     } finally {
       setLoading(false);
     }
-  }, [scenario, severity]);
+  }, [scenario, severity, noise]);
 
   const step = current?.steps[cursor] ?? null;
   const inv = step?.inv ?? null;
@@ -255,6 +262,21 @@ export function Guided() {
                     className={severity === l.value ? "on" : ""}
                     onClick={() => setSeverity(l.value)}
                     disabled={loading || scenario === "healthy"}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+              <h2>Where is it running?</h2>
+              <div className="g-segment" role="radiogroup" aria-label="Sensor noise">
+                {NOISE_LEVELS.map((l) => (
+                  <button
+                    key={l.label}
+                    role="radio"
+                    aria-checked={noise === l.value}
+                    className={noise === l.value ? "on" : ""}
+                    onClick={() => setNoise(l.value)}
+                    disabled={loading}
                   >
                     {l.label}
                   </button>
@@ -416,7 +438,7 @@ function StepText({
           vibration with the real reading.
         </p>
         <p>
-          Closest matches: {best.map((h) => `${faultText(h.kind).name} (${pct(Math.max(0, h.correlation ?? 0))} match)`).join(" and ")}.
+          Most likely after the comparison: {best.map((h) => `${faultText(h.kind).name} (${pct(h.posterior)})`).join(" and ")}.
           {out.length > 0 && ` Ruled out: ${list(names(out))}.`}
         </p>
         <p className="g-lead">
@@ -430,6 +452,12 @@ function StepText({
     const testId = inv.requested_tests[step.requestIndex];
     const test = tests.find((t) => t.id === testId);
     const pair = live(inv).slice(0, 2).map((h) => h.kind);
+    // The engine's own numbers for this request: what each of the two suspects
+    // it is separating would read.
+    const asked = inv.request?.test_id === testId ? inv.request : null;
+    const expected = (asked?.separates ?? [])
+      .filter((k) => k in (asked?.expected_readings ?? {}))
+      .map((k) => [k, asked!.expected_readings[k]] as [string, number]);
     return (
       <div className="g-text">
         <h2>Crux needs one quick check</h2>
@@ -446,6 +474,14 @@ function StepText({
             </small>
           )}
         </div>
+        {expected.length === 2 && (
+          <p>
+            If it is {faultText(expected[0][0]).name.toLowerCase()} the check should read about{" "}
+            <b>{expected[0][1].toFixed(2)}</b>; if it is{" "}
+            {faultText(expected[1][0]).name.toLowerCase()}, about <b>{expected[1][1].toFixed(2)}</b>.
+            {asked && ` Crux puts the chance that this settles the case at ${pct(asked.chance_of_settling)}.`}
+          </p>
+        )}
         <p className="g-muted">
           Of every check Crux could ask for, this one tells it the most per minute of your time.
         </p>
@@ -480,6 +516,31 @@ function StepText({
   const sure = (inv.conclusion?.confidence ?? top.posterior) >= 0.8;
   const mystery = current.scenario === "mystery";
   const right = top.kind === current.fault;
+  if (!inv.conclusion) {
+    // Unresolved is an answer: the engine names no cause below its bar, and says
+    // why. No repair is advised on a best guess.
+    return (
+      <div className="g-text">
+        <h2>Crux won't name a cause yet</h2>
+        <div className="g-verdict">
+          <span>Leading suspect</span>
+          <b>{text.name}</b>
+          <small>{pct(top.posterior)} likely, below the 80% Crux needs</small>
+        </div>
+        {inv.unresolved_reason && <p>{plainSentence(inv.unresolved_reason)}</p>}
+        <p>
+          <b>What to do:</b> do not open the pump on a guess. Take the check Crux listed, or have it
+          inspected, and run the case again with the result.
+        </p>
+        {mystery && (
+          <div className="g-reveal">
+            The hidden fault was <b>{faultText(current.fault).name}</b>. Crux did not name a cause
+            {right ? "; its leading suspect was the right one." : "."}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="g-text">
       <h2>{sure ? "The answer" : "Crux isn't sure yet"}</h2>

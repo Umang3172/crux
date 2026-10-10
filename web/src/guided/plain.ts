@@ -127,6 +127,13 @@ export const SEVERITY_LEVELS: { label: string; value: number }[] = [
   { label: "Severe", value: 1.0 },
 ];
 
+/** Sensor noise on the capture (`extra_noise` in the API). The noisy one is where
+ * the first reading stops being enough and Crux has to ask for a check. */
+export const NOISE_LEVELS: { label: string; value: number }[] = [
+  { label: "Quiet plant room", value: 0.05 },
+  { label: "Noisy plant floor", value: 0.45 },
+];
+
 export const FAULT_IDS = [
   "healthy",
   "imbalance",

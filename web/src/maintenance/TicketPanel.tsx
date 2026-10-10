@@ -23,6 +23,9 @@ function pct(x: number): string {
   return x < 0.01 ? "under 1%" : x > 0.99 ? "over 99%" : `${Math.round(x * 100)}%`;
 }
 
+/** A belief as the engine words it: nothing measured is ever 100%. */
+const belief = (x: number) => (x >= 0.995 ? "over 99%" : `${Math.round(x * 100)}%`);
+
 export function TicketPanel({
   machine,
   part,
@@ -48,6 +51,11 @@ export function TicketPanel({
   const [major, setMajor] = useState(false);
   const [learned, setLearned] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
+
+  // What Crux found belongs to one moment of the life: move the clock and it goes.
+  useEffect(() => {
+    setFinding(null);
+  }, [now]);
 
   // A ticket belongs to one part at one moment; a new part starts clean.
   useEffect(() => {
@@ -95,7 +103,77 @@ export function TicketPanel({
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
-  if (!alarmed) return null;
+  const findingBlock = finding && (
+        <div className={`m-finding${finding.confident ? " sure" : ""}`}>
+          <p className="m-finding-head">
+            {finding.confident ? "Crux's answer" : "Not settled yet"}:{" "}
+            <strong>{finding.leader.label}</strong> ({belief(finding.leader.belief)} belief)
+          </p>
+          <ul className="m-ranked">
+            {finding.ranked.map((r) => (
+              <li key={r.kind}>
+                <span>{r.label}</span>
+                <span className="m-bar">
+                  <span style={{ width: `${Math.round(r.belief * 100)}%` }} />
+                </span>
+                <span>{belief(r.belief)}</span>
+              </li>
+            ))}
+          </ul>
+          {finding.asked.length > 0 && (
+            <p className="m-fine">
+              Checks Crux asked for: {finding.asked.join(", ")}. Answered from the recording that
+              followed, as a technician's capture would be.
+            </p>
+          )}
+          {!finding.confident && finding.reason && <p className="m-fine">{finding.reason}</p>}
+          {finding.own_normal && finding.own_normal.largest_changes.length > 0 && (
+            <p className="m-fine">
+              Largest changes since this bearing ran normally:{" "}
+              {finding.own_normal.largest_changes
+                .map((c) => `${c.line} is ${c.times_normal} times its normal height`)
+                .join("; ")}
+              {finding.own_normal.level_rise !== null &&
+                `. Overall vibration is ${finding.own_normal.level_rise} times normal`}
+              .
+            </p>
+          )}
+          {finding.against_textbook &&
+            finding.against_textbook.leader.kind !== finding.leader.kind && (
+              <p className="m-fine">
+                Scored against a textbook machine, not this bearing's own early recordings, the
+                leading suspect would have been {finding.against_textbook.leader.label} (
+                {belief(finding.against_textbook.leader.belief)})
+                {finding.against_textbook.outcome === "unresolved"
+                  ? ", which Crux would not have concluded on"
+                  : ""}
+                . A machine's own normal is not a fault.
+              </p>
+            )}
+          <p className="m-fine">Reading: {finding.reading}.</p>
+        </div>
+  );
+
+  if (!alarmed) {
+    // No alarm yet, so there is nothing to plan. Crux can still be asked what it
+    // sees: the watcher waits for the level to double, the investigation does not.
+    return (
+      <section className="m-plan">
+        <h3>No alarm yet</h3>
+        <p className="m-fine">
+          The watcher alarms when the vibration level has doubled. You can ask Crux what this
+          moment looks like without waiting for that.
+        </p>
+        {error && <p className="m-error">{error}</p>}
+        <div className="m-actions">
+          <button className="m-ticket-btn quiet" onClick={look} disabled={looking || playing}>
+            {looking ? "Investigating…" : "Investigate this moment"}
+          </button>
+        </div>
+        {findingBlock}
+      </section>
+    );
+  }
   const evidence = new Map(ticket?.evidence.map((e) => [e.id, e]) ?? []);
 
   return (
@@ -122,33 +200,7 @@ export function TicketPanel({
           {looking ? "Investigating…" : "Investigate what is wrong"}
         </button>
       </div>
-      {finding && (
-        <div className={`m-finding${finding.confident ? " sure" : ""}`}>
-          <p className="m-finding-head">
-            {finding.confident ? "Crux's answer" : "Not settled yet"}:{" "}
-            <strong>{finding.leader.label}</strong> ({Math.round(finding.leader.belief * 100)}%
-            belief)
-          </p>
-          <ul className="m-ranked">
-            {finding.ranked.map((r) => (
-              <li key={r.kind}>
-                <span>{r.label}</span>
-                <span className="m-bar">
-                  <span style={{ width: `${Math.round(r.belief * 100)}%` }} />
-                </span>
-                <span>{Math.round(r.belief * 100)}%</span>
-              </li>
-            ))}
-          </ul>
-          {finding.asked.length > 0 && (
-            <p className="m-fine">
-              Checks Crux asked for: {finding.asked.join(", ")}. Answered from the recording that
-              followed, as a technician's capture would be.
-            </p>
-          )}
-          <p className="m-fine">Reading: {finding.reading}.</p>
-        </div>
-      )}
+      {findingBlock}
       <button className="m-ticket-btn" onClick={write} disabled={busy}>
         {busy ? "Writing…" : ticket ? "Write a new ticket for this moment" : "Draft repair ticket"}
       </button>

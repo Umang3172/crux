@@ -242,6 +242,15 @@ export default function App({ embedded = false }: { embedded?: boolean }) {
             <ConclusionCard conclusion={inv.conclusion} />
           )}
 
+          {inv && !inv.conclusion && inv.outcome === "unresolved" && step?.phase === "conclusion" && (
+            <section className="conclusion">
+              <header>
+                <h2>Unresolved</h2>
+              </header>
+              <p className="reason">{inv.unresolved_reason}</p>
+            </section>
+          )}
+
           <Spectrum params={params} suspects={suspects} />
 
           {inv && step && (

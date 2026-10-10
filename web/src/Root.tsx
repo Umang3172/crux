@@ -1,9 +1,10 @@
 /**
- * The page: one header, two ways in.
+ * The page: one header, and a tab for each way in.
  *
  * "Guided" walks anyone through a case on the cooling pump in plain words.
+ * "Investigator" shows a language model working a case through the tools.
  * "Engineer view" is the full engine trace: beliefs, spectra and the ledger.
- * Both run the same engine through the same endpoints.
+ * All three run the same engine through the same endpoints.
  */
 
 import { useEffect, useState } from "react";
@@ -13,14 +14,17 @@ import { Guided } from "./guided/Guided";
 import "./guided/guided.css";
 import { DIAGRAMS } from "./how/diagrams";
 import { HowItWorks } from "./how/HowItWorks";
+import { Investigator } from "./investigator/Investigator";
 import { Lens } from "./lens/Lens";
 import { Maintenance } from "./maintenance/Maintenance";
 
-type View = "guided" | "engineer" | "maintenance" | "lens";
+type View = "guided" | "investigator" | "engineer" | "maintenance" | "lens";
+
+const VIEWS: View[] = ["guided", "investigator", "engineer", "maintenance", "lens"];
 
 function initialView(): View {
-  const hash = window.location.hash.slice(1);
-  return hash === "engineer" || hash === "maintenance" || hash === "lens" ? hash : "guided";
+  const hash = window.location.hash.slice(1) as View;
+  return VIEWS.includes(hash) ? hash : "guided";
 }
 
 export function Root() {
@@ -50,6 +54,9 @@ export function Root() {
         <nav className="g-views" aria-label="View">
           <button aria-pressed={view === "guided"} onClick={() => choose("guided")}>
             Guided
+          </button>
+          <button aria-pressed={view === "investigator"} onClick={() => choose("investigator")}>
+            Investigator
           </button>
           <button aria-pressed={view === "engineer"} onClick={() => choose("engineer")}>
             Engineer view
@@ -82,6 +89,8 @@ export function Root() {
       <HowItWorks id={view} diagram={DIAGRAMS[view]} />
       {view === "guided" ? (
         <Guided />
+      ) : view === "investigator" ? (
+        <Investigator />
       ) : view === "maintenance" ? (
         <Maintenance />
       ) : view === "lens" ? (

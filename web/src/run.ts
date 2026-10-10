@@ -166,14 +166,16 @@ export async function investigate(params: RunParams): Promise<Step[]> {
     const states: Investigation[] = [await startInvestigation(params)];
     for (const outcome of settled.outcomes) {
       const current = states[states.length - 1];
-      if (current.conclusion) break;
+      // Closed with a verdict or as unresolved: either way it takes no more evidence.
+      if (current.conclusion || current.outcome !== "open") break;
       states.push(await submitEvidence(current.id, outcome.test_id, outcome.value));
     }
     const steps = toSteps(states);
     const last = states[states.length - 1];
     if (last.conclusion) return steps;
     // The stepped run stopped short of a verdict (no measurement was needed, or
-    // a round was refused). Close on the replay, which always concludes.
+    // a round was refused). Close on the replay, which ends with a verdict or,
+    // when the evidence does not support one, as unresolved with its reason.
     return [...steps, step("conclusion", settled, settled.ledger.length, { key: "conclusion" })];
   } catch {
     return toSteps([settled]).concat(

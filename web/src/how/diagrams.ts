@@ -314,14 +314,14 @@ export const ENGINEER: Diagram = {
 
 export const MAINTENANCE: Diagram = {
   title: "From health to repair to learning",
-  lede: "Real run-to-failure bearings, replayed: when to fix, what to send, and how every repair teaches the next.",
+  lede: "A bearing's life, replayed: when to fix, what to send, and how every repair teaches the next.",
   width: 1090, // room for the loop from "What did you find?" back up to the lessons
   height: 336,
   nodes: [
     {
       id: "history",
       label: "Vibration history",
-      sub: "NASA IMS, XJTU-SY run-to-failure",
+      sub: "a recorded run, or a synthetic life",
       x: COL[0],
       y: ROW[1],
       kind: "input",
@@ -631,8 +631,130 @@ export const LENS: Diagram = {
   ],
 };
 
+export const INVESTIGATOR: Diagram = {
+  title: "What the model may and may not do",
+  lede: "A language model works the case through tools. The physics decides.",
+  width: 1030,
+  height: 336,
+  nodes: [
+    {
+      id: "reading",
+      label: "Pump reading",
+      sub: "vibration and speed",
+      x: COL[0],
+      y: ROW[0],
+      kind: "input",
+    },
+    {
+      id: "tools",
+      label: "Eleven tools",
+      sub: "none takes a probability",
+      x: COL[0],
+      y: ROW[2],
+      kind: "store",
+    },
+    {
+      id: "model",
+      label: "The model",
+      sub: "Gemini, or an offline stand-in",
+      x: COL[1],
+      y: ROW[2],
+      kind: "ai",
+    },
+    {
+      id: "physics",
+      label: "The physics",
+      sub: "simulates, scores, picks the check",
+      x: COL[2],
+      y: ROW[1],
+      kind: "physics",
+    },
+    {
+      id: "tech",
+      label: "Technician",
+      sub: "takes the one check",
+      x: COL[3],
+      y: ROW[0],
+      kind: "person",
+    },
+    {
+      id: "suspect",
+      label: "A written suspect",
+      sub: "frequencies, never a probability",
+      x: COL[3],
+      y: ROW[2],
+      kind: "ai",
+    },
+    {
+      id: "tested",
+      label: "Tested like any other",
+      sub: "simulated on all the evidence",
+      x: COL[4],
+      y: ROW[2],
+      kind: "physics",
+    },
+    {
+      id: "answer",
+      label: "Verdict or unresolved",
+      sub: "decided by the physics",
+      x: COL[4],
+      y: ROW[0],
+      kind: "output",
+    },
+  ],
+  edges: [
+    { from: "reading", to: "physics" },
+    { from: "tools", to: "model" },
+    { from: "model", to: "physics", label: "asks" },
+    { from: "physics", to: "tech", label: "one check" },
+    { from: "model", to: "suspect", label: "writes", dashed: true },
+    { from: "suspect", to: "tested" },
+    { from: "tested", to: "answer", sides: ["top", "bottom"] },
+    { from: "tech", to: "answer" },
+  ],
+  steps: [
+    {
+      title: "Tools, not a vote",
+      text: "The model is handed eleven tools. They read the case, ask the physics for the next check, and write a suspect. None accepts a probability, so the model has no way to set a belief.",
+      nodes: ["tools", "model"],
+      edges: ["tools>model"],
+    },
+    {
+      title: "Every question goes to the physics",
+      text: "The model chooses what to ask next. The physics simulates every suspect against the reading and answers with numbers the model may quote and may not change.",
+      nodes: ["reading", "model", "physics"],
+      edges: ["reading>physics", "model>physics"],
+    },
+    {
+      title: "One check, chosen by the physics",
+      text: "When the reading cannot decide, the physics names the single measurement worth the most per minute. The model can only request that one.",
+      nodes: ["physics", "tech"],
+      edges: ["physics>tech"],
+    },
+    {
+      title: "When the list is missing a cause",
+      text: "A strong impact no suspect predicts cannot be settled by any measurement. The model compares it with the bearing's own frequencies and writes a new suspect as the vibration it would make.",
+      nodes: ["model", "suspect"],
+      edges: ["model>suspect"],
+    },
+    {
+      title: "Tested, not trusted",
+      text: "The physics simulates the written suspect and scores it on all the evidence, like any other. It refuses one that no capture could tell apart from a suspect already on the list.",
+      nodes: ["suspect", "tested"],
+      edges: ["suspect>tested"],
+    },
+    {
+      title: "Plain code ends the run",
+      text: "A verdict needs 80% and nothing left unexplained; otherwise the case ends unresolved, with the reason. The loop is closed by code after a fixed number of rounds, never by the model.",
+      nodes: ["tested", "tech", "answer"],
+      edges: ["tested>answer", "tech>answer"],
+    },
+  ],
+};
+
 export const DIAGRAMS = {
   guided: GUIDED,
+  investigator: INVESTIGATOR,
   engineer: ENGINEER,
   maintenance: MAINTENANCE,
   lens: LENS,

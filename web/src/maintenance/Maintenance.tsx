@@ -326,6 +326,7 @@ type Zoom = "final" | "whole";
 export function Maintenance() {
   const [list, setList] = useState<MachineSummary[] | null>(null);
   const [note, setNote] = useState("");
+  const [synthetic, setSynthetic] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState<MachineReplay | null>(null);
   const [selected, setSelected] = useState("");
@@ -340,6 +341,7 @@ export function Maintenance() {
       .then((r) => {
         setList(r.machines);
         setNote(r.note);
+        setSynthetic(Boolean(r.synthetic));
         if (r.machines.length) open(r.machines[0].machine);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -425,8 +427,11 @@ export function Maintenance() {
         <h1>Which machine needs you, and by when.</h1>
         <p className="m-lede">
           Every part gets a health percent, like a phone battery: 100% is as good as new, 0% is the
-          danger line. Below is a real bearing test, recorded until parts broke. Play it and see
-          what Crux would have told the team at each moment.
+          danger line.{" "}
+          {synthetic
+            ? "Below is a synthetic pump life, made by a physics model because no recorded run is on this server."
+            : "Below is a real bearing test, recorded until parts broke."}{" "}
+          Play it and see what Crux would have told the team at each moment.
         </p>
       </section>
 
@@ -628,7 +633,9 @@ function shortName(name: string): string {
   const b = name.match(/run (\d+-\d+)/);
   if (b) return `Run ${b[1]}`;
   const t = name.match(/test (\d+)/);
-  return t ? `Test ${t[1]}` : name;
+  if (t) return `Test ${t[1]}`;
+  const p = name.match(/pump (\d+)/i);
+  return p ? `Pump ${p[1]}` : name;
 }
 
 /** How far before the first alarm the "final stretch" view starts. */

@@ -54,6 +54,7 @@ class SpectrumRequest(BaseModel):
     rpm: float | None = None
     severity: float = 1.0
     seed: int = 1234
+    extra_noise: float = Field(default=0.05, ge=0.0, description="As in `/replay`.")
 
 
 def _peak_hold(freqs: np.ndarray, mag: np.ndarray, f_max: float) -> tuple[list[float], list[float]]:
@@ -82,7 +83,12 @@ if "/spectrum" not in {getattr(route, "path", None) for route in app.routes}:
     def spectrum(req: SpectrumRequest) -> dict[str, Any]:
         """The virtual experiment, drawn: the real capture against one hypothesis."""
         observation = synthetic_capture(
-            req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed
+            req.fault,
+            BENCH_RIG,
+            rpm=req.rpm,
+            severity=req.severity,
+            seed=req.seed,
+            extra_noise=req.extra_noise,
         )
         fs = observation.sample_rate_hz
         signature = predicted_signature(req.hypothesis, BENCH_RIG, observation.rpm)
@@ -115,6 +121,7 @@ class CaptureRequest(BaseModel):
     rpm: float | None = None
     severity: float = 1.0
     seed: int = 1234
+    extra_noise: float = Field(default=0.05, ge=0.0, description="As in `/replay`.")
 
 
 #: Points in the waveform preview. Enough to draw a trace that looks like vibration
@@ -138,7 +145,12 @@ if "/capture" not in {getattr(route, "path", None) for route in app.routes}:
         the waveform. Presentation only; nothing here moves a belief.
         """
         observation = synthetic_capture(
-            req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed
+            req.fault,
+            BENCH_RIG,
+            rpm=req.rpm,
+            severity=req.severity,
+            seed=req.seed,
+            extra_noise=req.extra_noise,
         )
         baseline = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, rpm=req.rpm, seed=BASELINE_SEED)
         x = np.asarray(observation.waveform, dtype=float)

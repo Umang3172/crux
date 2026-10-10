@@ -1,0 +1,292 @@
+/*
+ * The investigator tab. Same paper tones and type as the other tabs. Two voices
+ * carry the colour, matching the how-it-works legend: a dashed warm edge for a
+ * language model (unconfirmed until tested), a solid violet edge for physics.
+ */
+
+.i-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 32px;
+}
+
+.i-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.i-side,
+.i-run {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.i-card,
+.i-run {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.i-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.i-card h2,
+.i-run h2 {
+  font-size: 18px;
+  font-weight: 700;
+  font-stretch: 112.5%;
+  margin: 0;
+}
+
+.i-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.i-tools {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.i-tools li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.i-tools code,
+.i-who code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.i-tools em {
+  font-style: normal;
+  color: var(--ink-faint);
+}
+
+.i-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px 0;
+}
+
+.i-run-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.i-model {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-dim);
+  max-width: 70ch;
+}
+
+.i-model.live {
+  color: var(--coolant-ink);
+  font-weight: 600;
+}
+
+.i-legend {
+  display: flex;
+  gap: 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.i-key::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 7px;
+  vertical-align: middle;
+  border-top: 3px solid var(--physics);
+}
+
+.i-key.model::before {
+  border-top: 3px dashed var(--warm);
+}
+
+.i-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.i-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.i-step.says {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.i-voice {
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.i-voice p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.i-voice.model {
+  border: 1.5px dashed var(--warm);
+}
+
+.i-voice.physics {
+  border: 1.5px solid var(--physics);
+  background: color-mix(in srgb, var(--physics) 7%, transparent);
+}
+
+.i-step.says .i-voice.model {
+  background: color-mix(in srgb, var(--warm) 12%, transparent);
+  max-width: 78ch;
+}
+
+/* Re-reading the case is bookkeeping: shown, but quietly. */
+.i-step.read .i-voice {
+  padding: 6px 12px;
+}
+
+.i-step.read .i-voice p {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.i-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.i-who code {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.i-thoughts {
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.i-thoughts summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.i-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.i-outcome p {
+  margin: 0;
+  max-width: 78ch;
+}
+
+.g-verdict.i-open {
+  background: var(--ask-soft);
+}
+
+.g-verdict.i-open span {
+  color: var(--ask-ink);
+}
+
+.i-ranked {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.i-ranked li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) 48px;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.i-ranked li.out {
+  color: var(--ink-faint);
+}
+
+.i-ranked em {
+  font-style: normal;
+  color: var(--warm);
+  font-size: 12.5px;
+}
+
+.i-ranked li > span:last-child {
+  text-align: right;
+}
+
+.i-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.i-bar span {
+  display: block;
+  height: 100%;
+  background: var(--physics);
+}
+
+@media (max-width: 860px) {
+  .i-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .i-step {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

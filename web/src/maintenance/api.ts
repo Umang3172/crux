@@ -56,8 +56,10 @@ async function get<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** `synthetic` is true when no recorded run is on the server and a physics model
+ * of a pump life stands in; `note` then says so. */
 export const machines = () =>
-  get<{ machines: MachineSummary[]; note: string }>("/maintenance/machines");
+  get<{ machines: MachineSummary[]; note: string; synthetic?: boolean }>("/maintenance/machines");
 
 export const machine = (id: string) => get<MachineReplay>(`/maintenance/machines/${encodeURI(id)}`);
 
@@ -136,7 +138,22 @@ export const stillUrl = (id: string) => `${BASE}/maintenance/tickets/${id}/still
 // ------------------------------------------------------------------ investigation
 
 export type Finding = {
+  /** True only for a verdict; the engine names nothing below its bar. */
   confident: boolean;
+  outcome: "open" | "concluded" | "unresolved";
+  /** Why the case ended without a verdict, in the engine's words. */
+  reason: string | null;
+  /** Set when the recording was compared with the bearing's own early recordings. */
+  own_normal: {
+    captures: number;
+    level_rise: number | null;
+    largest_changes: { line: string; times_normal: number }[];
+  } | null;
+  /** The same moment scored against a textbook machine, for comparison only. */
+  against_textbook: {
+    outcome: "open" | "concluded" | "unresolved";
+    leader: { kind: string; label: string; belief: number };
+  } | null;
   leader: { kind: string; label: string; belief: number };
   ranked: { kind: string; label: string; belief: number }[];
   asked: string[];

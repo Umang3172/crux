@@ -51,6 +51,19 @@ export type Conclusion = {
 
 export type Outcome = { test_id: string; feature: string; value: number };
 
+/** Why the engine asked for a measurement, in its own numbers (`engine.request`). */
+export type RequestNumbers = {
+  test_id: string;
+  /** What each suspect is expected to read, by hypothesis id. */
+  expected_readings: Record<string, number>;
+  sigma: number;
+  /** The two leading suspects the check is meant to tell apart. */
+  separates: string[];
+  chance_of_settling: number;
+  expected_info_gain: number;
+  gain_per_minute: number;
+};
+
 export type Investigation = {
   id: string;
   machine: { id: string; name: string };
@@ -60,6 +73,11 @@ export type Investigation = {
   requested_tests: string[];
   outcomes: Outcome[];
   transcript: string[];
+  /** "unresolved" is a result, not an error: the engine names no cause below its bar. */
+  outcome: "open" | "concluded" | "unresolved";
+  unresolved_reason: string | null;
+  /** The numbers behind the latest requested measurement, if one was requested. */
+  request: RequestNumbers | null;
   conclusion: Conclusion | null;
 };
 
@@ -102,6 +120,8 @@ export type RunParams = {
   fault: string;
   severity: number;
   seed: number;
+  /** Extra sensor noise on the capture. Left out, the API's default applies. */
+  extra_noise?: number;
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
