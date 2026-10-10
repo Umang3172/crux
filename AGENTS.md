@@ -51,10 +51,12 @@ src/hypothesis_engine/
   physics/signatures.py     what each hypothesis predicts (tones + impact trains)
   physics/synth.py          Signature -> waveform (the virtual experiment)
   physics/likelihood.py     how well each hypothesis explains a capture, by simulation
+  physics/normal.py         the machine's own healthy captures: a case scored on the change from them
   physics/compare.py        simulated vs real correlation, for the picture only
   signals/features.py       waveform -> named observations, envelope analysis
   investigation/catalog.py  the measurements the agent can ask for, and their costs
   investigation/engine.py   the loop: observe, experiment, choose a test, conclude
+  investigation/recorded.py a recorded run as a case: its early recordings are its normal, later ones answer checks
   tools/                    what a model may call on a case, and the door readings come in by
   agents/investigator.py    the investigator loop: Gemini drives the tools, code ends it
   agents/scripted.py        the offline stand-in the loop runs on without credentials

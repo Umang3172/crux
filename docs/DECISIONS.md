@@ -361,3 +361,185 @@ amplitudes are in the model's own units, tied to the capture only through its
 noise level, so on a real sensor the predicted heights rest on an assumed
 tone-to-noise ratio until a machine's own baseline calibrates them.
 
+
+## ADR-0015 · With healthy captures of the machine, a case is scored on the change from its own normal
+
+**Context.** ADR-0014 left one thing open: signature amplitudes are in the
+model's own units, and the model's healthy machine is a textbook one, a 1x tone
+with a quarter of it at 2x. A real machine has its own normal spectrum. To see
+what that costs, a rig was built in `tests/test_own_normal.py` whose normal is
+not the textbook's: a 2x taller than its 1x, harmonics to 4x, noise that is
+quiet near the shaft lines and loud above 1 kHz. Scored against the textbook,
+that rig healthy read as misaligned at 0.95 or more, and so did the same rig
+with an imbalance or an inner-race fault. Its quirks were being scored as its
+diagnosis. A watcher on the same machine already knows what its normal looks
+like; the engine did not use it.
+
+**Decision.** `Investigation` takes `normal`: healthy captures of the same
+machine. With them, every measurement is restated before it is scored
+(`physics/normal.py`), in two steps. *Units*: the simulator's noise is set so
+its textbook 1x stands as far above the floor as the machine's healthy 1x, so
+the model's unit is the machine's own running tone. *Quirks*: each line's tone
+is taken as its amplitude above the noise, and what the machine has gained
+there since it was healthy is added to the textbook healthy machine. The
+scoring itself is unchanged. Amplitudes are added, not heights: on a rig whose
+2x is already tall, a misalignment is a small step in height and a large one in
+amplitude, and scored as a step in height the same capture read as imbalance.
+Healthy captures are first restated at today's noise floor; with several, the
+spread of their own restated lines widens every prediction; periodic impacts
+they already contain count as explained; a requested capture is restated the
+same way. A healthy verdict is refused once the overall level has doubled
+(`LEVEL_RISE`): nothing on the list explains that, and neither does a healthy
+machine. A recorded run supplies its own normal from its early recordings
+(`investigation/recorded.py`), which is how the alarm-to-investigation path
+calls the engine.
+
+**Consequence.** On that rig and six variants of it (sensor units scaled by
+0.01 and by 37, noise tilted the other way, sampled at 25.6 kHz in 1.28 s
+snapshots on an 8-ball bearing, a healthy 1x barely above the noise, a normal
+recorded 2 % slower), 42 cases over a healthy machine and five faults: 40 named
+correctly, 2 healthy machines left unresolved, none wrong. The verdict no
+longer moves with the sensor's units. This is a synthetic rig built to have the
+problem; it is not evidence about a real machine. The number that matters is
+`scripts/diagnose_runs.py` against `scripts/diagnose_runs.py --textbook` on
+recorded bearings, which needs the dataset and has not been run with this
+scoring. Without healthy captures the engine scores against the textbook
+machine as before, and says so. Known limits: one healthy capture gives no
+measure of the machine's own wander; a normal recorded at another speed moves a
+tone between spectral bins and can cost a healthy verdict (unresolved, not
+wrong); the early recordings of a run are assumed healthy.
+
+## ADR-0016 · The simulator runs at the capture's own noise shape, tones are read where they cannot slip, and the leader must explain every line
+
+**Context.** Three faults in how a capture was read and judged, found while
+building ADR-0015. (1) Every simulation ran in white noise at one level, the
+median above the sixth shaft harmonic. An accelerometer on a real machine shows
+little noise near the shaft lines and most of it higher up, so one level puts
+the simulated floor in the wrong place for the shaft lines or for the bearing
+band: with the unit fixed from the quiet 1x, an inner-race fault predicted
+envelope lines far taller than the loud band let through, and the case ended
+unresolved on a line 171 times the median. (2) A shaft-order tone was searched
+within the same ±2 % as a bearing line. Tones do not slip, and the wide window
+let a ball-pass rate of 3.08x leak into the reading of 3x. (3) Beliefs only
+rank the hypotheses, so the nearest one took all of it: a rig whose 3x alone
+had grown was called misaligned at 0.95, though misalignment also predicts a
+taller 2x and the 2x had not moved.
+
+**Decision.** (1) The capture's noise is read in two places, near the shaft
+lines and in the resonance band (`noise_profile`). When they differ by
+`FLAT_NOISE` or more, the simulated noise climbs from one level to the other
+(`Signature.noise_low`); otherwise it is white, as before. (2) Raw tones are
+read within `TONE_TOLERANCE` (±0.5 %); envelope lines keep ±2 %. (3) Before a
+verdict the leader is checked against every line at the severity the evidence
+favours (`Investigation.misfit`): a line further than `FITS_NONE_SIGMA` from
+what it predicts blocks the verdict, and the case ends unresolved naming the
+line. One case is exempt: a line of its own that reads above its prediction at
+the strongest severity simulated is more of the same fault, not another one.
+
+**Consequence.** Scored against the textbook, the rig of ADR-0015 no longer
+gets a confident wrong verdict: of 6 cases 1 is named and 5 end unresolved
+("misalignment leads but does not explain the line at 4x"), where before the
+check the healthy rig and the one with an imbalance were both concluded as
+misalignment. A suspect written for the unexplained line is then simulated and
+scored like any other, and takes the belief when it fits
+(`tests/test_own_normal.py`). The 180 cases of ADR-0014, answered honestly,
+still give no wrong verdict: 130 correct and 50 unresolved. One earlier figure
+no longer holds: the faint outer-race capture ADR-0014 reports as called
+healthy at 88 % now leads with healthy at 80 %, just under the bar, and is not
+concluded on the first look.
+
+## ADR-0017 · One way in for evidence, whoever is calling
+
+**Context.** Three kinds of caller reach the engine: the replay and API, the
+investigator agent through the case store, and the alarm-to-investigation path
+on recorded runs. The last drove the engine itself in two places, read each
+requested check out of a recording as a number, and so lost the capture's
+length and noise; an agent's case could only be answered with a number.
+
+**Decision.** A recorded run is investigated in one place
+(`investigation/recorded.py`): the reading is one recording, the run's early
+recordings are its normal, and a requested check is answered by handing the
+next recording to the engine whole. `tools.cases.open_case` takes the same
+`normal`, and `record_measurement` accepts a capture as well as a number. A
+check nobody can answer is marked as not taken and the next most useful one is
+asked for. `docs/ARCHITECTURE.md` lists every source of evidence and its door.
+
+**Consequence.** `api/maintenance.py` and `scripts/diagnose_runs.py` share that
+path, and the tab is told the outcome as it is: a fault only at the bar, a
+healthy verdict with its limit, or unresolved with the reason. Still missing: a
+door for a live sensor, and a place to keep a machine's healthy captures
+between cases.
+
+## ADR-0018 · What a model does is shown, and a failed model does not lose the case
+
+**Context.** The investigator loop existed only behind an endpoint. Nothing on
+screen showed what the model did, what it was not able to do, or which model
+had run. A live model can also fail for reasons that have nothing to do with a
+case (no quota, a retired model id, the network), and a failure then lost the
+case with a server error.
+
+**Decision.** A run keeps every tool call with what the tools answered
+(`InvestigationRun.steps`). `agents/trace.py` turns each into two plain
+sentences, what the model asked and what the physics answered, using only
+figures from the tool result; the model's own words appear only where it
+narrates. `/agent/about` reports the tools, their parameters and the run's
+limits from the code, so the screen cannot promise more than the tool layer
+allows. When a live model raises, the offline investigator picks the case up
+where it stands and the run says that it did and why; a failure of the offline
+investigator itself is a bug and is raised.
+
+**Consequence.** The Investigator tab shows a case as two voices, and says
+which model ran. It has only been run with the offline stand-in: no Gemini
+call has been made, so the instruction, the tool declarations and the model id
+are untested against the real service.
+
+## ADR-0019 · The deployed link works on every tab, with a synthetic life where it has no data
+
+**Context.** Built as the image was, the deployed link had two dead ends. The
+maintenance tab was empty, because no dataset ships in the image and a package
+installed as a wheel looked for `data/` inside the Python library folder. The
+lens tab refused every upload, because the image did not install the library
+that reads video.
+
+**Decision.** One definition of where data lives (`data/root.py`): the
+`CRUX_DATA` setting, else `data/` in a checkout, else `data/` under the working
+directory. The image installs every optional group a tab needs and gives the
+app a folder it may write to. With no recorded run on the server, the
+maintenance routes serve a synthetic pump life (`data/demo.py`): thirty hours at
+a snapshot every ten minutes, healthy until an outer-race fault starts and
+grows by a fixed factor per snapshot. The pump has a normal of its own (a 2x
+taller than its 1x, noise that rises with frequency), so the life also shows
+what scoring against a machine's own normal changes: each investigation
+reports what the same moment would have led with against a textbook machine.
+A recording now carries its own snapshot interval, so an hour on the screen
+maps to the right snapshot on any of them.
+
+**Consequence.** On a server with no data the path from health to alarm to
+investigation to ticket can be walked end to end, and every number on it is
+labelled synthetic. It is the engine run on its own signal model and proves
+nothing about a real machine. On it the watcher alarms at snapshot 162 of 180.
+Scanned at every second snapshot, the investigation names the outer race from
+snapshot 124 on (a test pins 130, about five hours of running before the
+alarm); at 120 and 122 it declines to conclude and points at the fault that
+predicts the impacts it sees; before that it reads the pump as healthy, as it
+will any fault fainter than the mildest it simulates. Checked by installing the
+project the way the image does and calling every tab's routes; the image itself
+was not built here.
+
+## ADR-0020 · A live sensor has a door, and it is closed by default
+
+**Context.** The firmware posted to `/ingest`, the architecture drew it, and
+the route did not exist. A machine's healthy captures also had nowhere to be
+kept between cases, which the own-normal scoring of ADR-0015 needs.
+
+**Decision.** `POST /ingest` takes the firmware's batches as they are.
+`data/stream.py` keeps the latest unbroken minute per machine; a batch that
+does not follow on starts a new stretch. A person marks the latest signal as
+the machine's normal, and opens a case on the latest two seconds, which is then
+a case like any other. Only machines whose bearing and speed are on file are
+accepted. Every route that writes needs `RIG_INGEST_TOKEN`, and with none set
+they answer that ingestion is off.
+
+**Consequence.** The hardware path has its server side and a test that posts
+what the firmware posts. Not run with the hardware. Memory only: a restart
+forgets the signal and the normal.

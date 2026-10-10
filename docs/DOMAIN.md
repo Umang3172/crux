@@ -103,25 +103,30 @@ read from every simulation, and the capture is scored with a Student-t per line.
 
 | Constant | Value | Where it comes from |
 |---|---|---|
-| `LINE_TOLERANCE` | ±2 % of the line | Measured ball-pass frequencies run "generally 1-2 % in deviation from the theoretical calculated frequencies" because rolling elements slip (Sawalhi, *J. Vibroengineering* 20(3):1322, 2018). The band covers the top of that range. |
+| `TONE_TOLERANCE` | ±0.5 % of the line | For a shaft-order tone in the raw spectrum. Shaft harmonics are exact multiples of shaft speed and do not slip, so the only error is in the speed, which is read from the capture's own 1× to within 0.2 % (`tests/test_order_tracking.py`). The tight window keeps a bearing line that falls near a shaft order (a ball-pass rate of 3.08× beside 3×) out of the tone's reading. |
+| `LINE_TOLERANCE` | ±2 % of the line (envelope lines) | Measured ball-pass frequencies run "generally 1-2 % in deviation from the theoretical calculated frequencies" because rolling elements slip (Sawalhi, *J. Vibroengineering* 20(3):1322, 2018). The band covers the top of that range. |
 | `SEVERITY_GRID` | 0.25, 0.5, 0.75, 1.0, 1.5 | The severity of a fault is unknown before the diagnosis, so the likelihood averages over this span of the signature model's own severity scale instead of assuming one. A range, not a measured quantity. |
 | `SEEDS_PER_SEVERITY` | 4 | Enough simulations to estimate a spread per line; at about 2.5 ms each, the first look costs about a quarter of a second. Compute budget, not physics. |
 | `MODEL_MISMATCH` | 0.15 (log10; ×1.4 in amplitude) | **Assumption, not yet calibrated.** The signature model is reduced-order, and a real machine will not match its line heights more closely than this. Calibrate on development recordings (the 0.007″ CWRU files), never on the files a result is reported on. |
 | `STUDENT_T_DOF` | 4 | **Judgement call.** Heavy tails cap what one badly modelled line can cost, so no single line decides a case. The method: Lange, Little & Taylor, *JASA* 84:881, 1989. |
 | `FLOOR_MIN_BINS` | 160 bins | The floor around a line is the median of at least this many spectral bins. A median of n noise bins scatters by about 0.72·√(1.5/n) of itself (Rayleigh magnitudes; a Hann window leaves about n/1.5 independent bins): 0.03 in log10 at 160, against 0.08 at the 28 bins a quarter-band gives around 1× in a two-second capture. Measured on white noise in `tests/test_likelihood.py`. A design choice: enough bins that the floor's scatter is small beside `MODEL_MISMATCH`. |
+| `FLAT_NOISE` | a factor of 1.5 | The simulator runs at the capture's own noise, read in two places: near the shaft lines and in the resonance band. When the two differ by less than this the noise is simulated as white: 1.5 moves a line's height by 0.18 in log10, about `MODEL_MISMATCH`. Above it the simulated noise climbs from one level to the other over `NOISE_RAMP_OCTAVES` (2). A design rule. |
 | `READING_SEEDS` | 2 | Simulated captures per severity when predicting what a requested measurement reads. A requested capture is 10 to 30 s long, so its sampling spread is small beside the test's own allowance, and each simulation costs up to 26 ms. Compute budget, not physics. |
 | `FALSE_ALARM_RATE` | 1 % per capture | **Design target.** A noise-only bin's power over the median exceeds x with probability exp(−x ln 2); the largest of N bins with 1 − (1 − exp(−x ln 2))^N. Solving at 1 % sets the unexplained-line threshold (about 16× the median power for 800 bins). `tests/test_likelihood.py` checks it on white noise; check it on healthy recordings before trusting it on a machine. |
 | `FITS_NONE_SIGMA` | 4 σ | A reading further than this from every hypothesis' prediction fits none of them: the two-sided Gaussian tail beyond 4 σ is about 6 × 10⁻⁵. |
 | `DISTINCT_SIGMA` | 1 σ | Two hypotheses that differ by less than this cannot be told apart. A suspect written during a case must differ from every existing hypothesis, at every severity it is simulated at, by at least this on some predicted line, or it is refused. A test is offered only if the two leading hypotheses are expected to read this far apart. A design rule. |
 | `BASELINE_1X` | 0.25 | The height of the normal 1× running tone in every signature. Heights are relative, so this only fixes the unit a written suspect's "4× as tall" is measured in. |
-| `BASELINE_2X` | 0.06 | The height of the normal 2× running tone, about a quarter of 1×, in every signature. A modelling choice in the same relative units; a machine's own baseline would replace it. |
+| `BASELINE_2X` | 0.06 | The height of the normal 2× running tone, about a quarter of 1×, in every signature. A modelling choice in the same relative units. A machine's own healthy captures replace it (below). |
+| `CLEAR_TONE` | 3 × a noise-only line | A machine's healthy 1× fixes the unit only where it stands this far above what a line reads on noise alone. Below it the height is mostly chance, and the model's own tone-to-noise ratio is assumed instead. A design rule. |
+| `LEVEL_RISE` | 2 × its own normal | A healthy verdict is refused once the capture's overall vibration (RMS) has doubled over the machine's healthy captures. The same doubling the watcher needs before it alarms (`MIN_RISE`, `docs/FORECAST.md`), so the two never disagree about a machine that has changed. |
+| `NORMAL_SNAPSHOTS` | recordings 2 to 6 of a run | What a recorded run's own normal is taken from (`investigation/recorded.py`): the start of its life, after the first recording, which on a freshly mounted bearing is still settling. A choice, to be checked against each dataset's healthy period. |
 | `REJECT_BELOW` | 3 % | Display only: below it a hypothesis is shown as rejected. It stays in the distribution. |
 | `CONCLUDE_ABOVE` | 80 % | The bar for a verdict. Below it the case asks for a measurement or ends "unresolved". |
 
 What the scoring cannot do, said plainly:
 
 - **Healthy against mild imbalance.** They differ only in how tall 1× stands,
-  and without the machine's own baseline that is weak evidence. The first look
+  and without the machine's own healthy captures that is weak evidence. The first look
   splits between them, and the engine asks for the measurement that separates
   them (a coast-down) rather than guess.
 - **A fault too faint for the capture.** A weak bearing fault in a short, noisy
@@ -129,11 +134,57 @@ What the scoring cannot do, said plainly:
   verdict then lists every fault it could not have seen: those that, at the
   mildest severity simulated, fit the evidence nearly as well as healthy does
   (one against one, keeping at least `REJECT_BELOW` of the belief).
-- **The sensor's units.** Signature amplitudes are in the model's own units and
-  are tied to a capture only through its noise level, so the predicted heights
-  assume the model's ratio of running tone to noise. On the synthetic rig that
-  holds by construction. On a real sensor it is an assumption until the
-  machine's own healthy baseline calibrates it.
+- **The sensor's units, with no normal on file.** Signature amplitudes are in
+  the model's own units and are tied to a capture only through its noise, so
+  the predicted heights assume the model's ratio of running tone to noise, and
+  a machine whose normal spectrum is not the textbook's can read as a fault. On
+  the synthetic rig neither matters, by construction. On a real machine both
+  do, until healthy captures of it are given (next section).
+- **A change no hypothesis makes.** Beliefs only rank the hypotheses, so the
+  nearest one can take all of it. Before a verdict the leader is checked
+  against every line at the severity the evidence favours: a line further than
+  `FITS_NONE_SIGMA` from what it predicts blocks the verdict, and the case ends
+  unresolved naming the line (`Investigation.misfit`).
+
+## The machine's own normal
+
+`physics/normal.py`. The signatures draw a textbook machine: 1×, a quarter of it
+at 2×, nothing else. A real machine has its own normal spectrum. A rig whose 2×
+has always stood taller than its 1× reads as misaligned against the textbook,
+healthy or not.
+
+Given healthy captures of the same machine (`Investigation(..., normal=...)`),
+the case is scored on the change from them instead:
+
+1. **Units.** Heights in a signature are multiples of the normal 1× tone. The
+   simulator's noise is set so that its textbook 1× stands as far above the
+   floor as this machine's healthy 1× does. The verdict then does not move with
+   the sensor's units (g, m/s², counts).
+2. **Quirks.** A tone is taken as its amplitude above the noise, in floors.
+   What the machine has gained at each line since it was healthy is added to
+   the textbook healthy machine, and that is what is scored. Amplitudes add, so
+   a fault is credited with exactly what it adds: on a rig whose 2× is already
+   tall, a misalignment is a small step in height and a large one in amplitude.
+3. **Noise that has risen.** A line is read against its local floor, so each
+   healthy capture's tone is first restated at today's floor. An unchanged tone
+   under louder noise is not a change.
+4. **Wander.** With several healthy captures, each is restated the same way and
+   their spread widens every prediction at that line. A tone that moves from
+   one healthy day to the next is not evidence when it moves again.
+5. **Its own impacts.** Periodic impacts present in the healthy captures count
+   as explained, so they are not mistaken for a cause missing from the list.
+   The strongest eight per capture are looked for (`NORMAL_LINES_MAX`, a
+   compute budget), each clearing the false-alarm threshold above.
+6. **A requested capture** is restated the same way: its feature, less what the
+   healthy captures read for it, cut to the same length.
+
+A healthy verdict is refused once the overall level has doubled (`LEVEL_RISE`):
+nothing on the list explains the change, and a healthy machine does not either.
+The ledger records how many healthy captures were used, the level against
+normal, and the lines that moved most.
+
+Without healthy captures the engine scores against the textbook machine, as
+before, with the two limits above.
 
 ## When the list is missing a cause
 

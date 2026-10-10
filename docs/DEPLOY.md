@@ -161,6 +161,17 @@ implementation behind each role. Show it once in the demo video (DEMO_SCRIPT.md)
 
 ## 4 · Before judging
 
+- **Open every tab on the live link.** The image carries each optional group a
+  tab needs (`llm`, `lens`, `forecast`), and ships no dataset: the maintenance
+  tab shows a synthetic pump life, labelled as one (`data/demo.py`), and what
+  the app saves goes under `CRUX_DATA` (`/app/data`), which on Cloud Run is
+  memory and is gone with the instance.
+- **Check which model the header names.** "Gemini off" means the investigator
+  tab is running its offline stand-in: either `_SECRETS` was empty, or the key
+  did not mount. If a Gemini call fails at run time (no quota, a model id that
+  has been retired) the case is finished by the stand-in and the tab says why,
+  so read that line rather than assuming the model answered.
+
 - **`_MIN_INSTANCES=1`** for the judging window, so nobody's first click waits on
   a cold start. Roughly a few dollars a month; set it back to `0` afterwards.
 
