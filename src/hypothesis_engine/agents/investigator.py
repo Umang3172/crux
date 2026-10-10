@@ -15,6 +15,9 @@ loop that plain code ends.
   is still out leaves the case open, waiting for it.
 * A run that spends its model calls or its time is stopped and closed the same
   way, so a model that loops cannot hold a case or run up a bill.
+* A live model that cannot be reached, or fails part-way, does not lose the
+  case: the offline investigator picks it up where it stands, and the run says
+  that it did and why.
 
 ADK is imported when a workflow is built, so the core runs without the `llm`
 extra. See ADR-0011.
@@ -78,15 +81,27 @@ def as_adk_tool(fn: Callable[..., Any]) -> Callable[..., dict[str, Any]]:
 
 
 @dataclass
+class ToolStep:
+    """One tool call the investigator made, and what the tools answered."""
+
+    tool: str
+    args: dict[str, Any]
+    result: dict[str, Any] | None = None
+    by: str = ""  # the model that made the call
+
+
+@dataclass
 class InvestigationRun:
     """One run of the loop, for the screen and for tests."""
 
     model: str
     case: CaseView | None = None
     tool_calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    steps: list[ToolStep] = field(default_factory=list)
     thoughts: list[str] = field(default_factory=list)
     rounds: int = 0
     stopped: str | None = None  # why the run was cut short, if it was
+    fallback: str | None = None  # why the offline investigator took over, if it did
 
 
 def build_workflow(store: CaseStore, model: Any, max_rounds: int, run: InvestigationRun):
@@ -141,27 +156,23 @@ def _close_by_rule(store: CaseStore, case_id: str, why: str) -> str:
     return case.status
 
 
-async def investigate_async(
+async def _drive(
     store: CaseStore,
     case_id: str,
-    model: Any = None,
-    max_rounds: int = MAX_ROUNDS,
-    max_model_calls: int = MAX_MODEL_CALLS,
-    max_seconds: float = MAX_SECONDS,
-) -> InvestigationRun:
-    """Run the investigator on an open case until the gate stops it, or until it
-    spends its model calls or its time."""
+    model: Any,
+    name: str,
+    run: InvestigationRun,
+    max_rounds: int,
+    max_model_calls: int,
+    max_seconds: float,
+) -> None:
+    """One pass of the workflow with one model, recording what it did on `run`."""
     from google.adk.agents.invocation_context import LlmCallsLimitExceededError
     from google.adk.agents.run_config import RunConfig
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
 
-    if model is None:
-        model, name = investigator_model()
-    else:
-        name = model if isinstance(model, str) else getattr(model, "model", type(model).__name__)
-    run = InvestigationRun(model=name)
     runner = Runner(
         app_name="crux_investigator",
         node=build_workflow(store, model, max_rounds, run),
@@ -182,6 +193,15 @@ async def investigate_async(
             ):
                 for call in event.get_function_calls():
                     run.tool_calls.append((call.name, dict(call.args or {})))
+                    run.steps.append(ToolStep(call.name, dict(call.args or {}), by=name))
+                for response in event.get_function_responses():
+                    answer = dict(response.response or {})
+                    answer = answer.get("result", answer)
+                    # The answer belongs to the oldest call of that tool still open.
+                    for step in run.steps:
+                        if step.tool == response.name and step.result is None:
+                            step.result = answer if isinstance(answer, dict) else {"value": answer}
+                            break
                 for part in (event.content.parts if event.content else None) or []:
                     if getattr(part, "thought", False) and part.text:
                         run.thoughts.append(part.text)
@@ -189,6 +209,40 @@ async def investigate_async(
         run.stopped = f"The investigator's budget of {max_model_calls} model calls is spent."
     except TimeoutError:
         run.stopped = f"The investigator's budget of {max_seconds:g} seconds is spent."
+
+
+async def investigate_async(
+    store: CaseStore,
+    case_id: str,
+    model: Any = None,
+    max_rounds: int = MAX_ROUNDS,
+    max_model_calls: int = MAX_MODEL_CALLS,
+    max_seconds: float = MAX_SECONDS,
+) -> InvestigationRun:
+    """Run the investigator on an open case until the gate stops it, or until it
+    spends its model calls or its time.
+
+    A live model can fail for reasons that have nothing to do with the case: no
+    quota, a model id that has been retired, the network. The case is not lost
+    to that. The offline investigator picks it up where it stands (every tool
+    leaves the case consistent), and `fallback` says why it had to.
+    """
+    if model is None:
+        model, name = investigator_model()
+    else:
+        name = model if isinstance(model, str) else getattr(model, "model", type(model).__name__)
+    run = InvestigationRun(model=name)
+    budgets = (max_rounds, max_model_calls, max_seconds)
+    try:
+        await _drive(store, case_id, model, name, run, *budgets)
+    except Exception as exc:
+        if not isinstance(model, str):
+            raise  # the offline investigator itself failed: a bug, not an outage
+        from .scripted import ScriptedInvestigator
+
+        why = f"{type(exc).__name__}: {exc}".strip().rstrip(":")
+        run.fallback = f"{name} could not finish the case ({why[:240]})."
+        await _drive(store, case_id, ScriptedInvestigator(), "offline-scripted", run, *budgets)
     if run.stopped is not None:
         _close_by_rule(store, case_id, run.stopped)
     run.case = InvestigatorTools(store).get_case(case_id)

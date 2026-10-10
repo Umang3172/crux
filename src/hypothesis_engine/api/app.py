@@ -10,14 +10,28 @@ Keep this layer thin: it serialises engine state, it does not decide anything.
 
 from __future__ import annotations
 
+import hmac
+import inspect
+import os
+from dataclasses import asdict
 from typing import Any
 
+import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from ..agents.factory import describe as describe_models
-from ..data.rig import BENCH_RIG, OffCatalogue, rig_oracle, synthetic_capture
+from ..agents.trace import describe
+from ..data.rig import (
+    BENCH_RIG,
+    BENCH_RIG_ESP32,
+    OFF_CATALOGUE,
+    OffCatalogue,
+    rig_oracle,
+    synthetic_capture,
+)
+from ..data.stream import CAPTURE_S, MAX_BATCH_SAMPLES, NotEnoughSignal, Stream, Streams
 from ..investigation.catalog import BY_ID, CATALOG
 from ..investigation.engine import Investigation
 from ..models import FaultKind, InvestigationState
@@ -77,6 +91,8 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
         "transcript": state.transcript,
         "outcome": state.outcome,
         "unresolved_reason": state.unresolved_reason,
+        # Set when the case was scored against the machine's own healthy captures.
+        "own_normal": state.extra.get("own_normal"),
         "conclusion": None
         if state.conclusion is None
         else {
@@ -218,6 +234,115 @@ def replay(req: StartRequest) -> dict[str, Any]:
     return serialise(state)
 
 
+# ------------------------------------------------------------------ a live sensor
+
+#: Machines whose bearing and speed are on file, so their signal can be simulated.
+_LIVE = Streams({BENCH_RIG_ESP32.machine_id: BENCH_RIG_ESP32})
+
+
+class IngestBatch(BaseModel):
+    """One batch as the rig's firmware posts it (`firmware/esp32_rig`)."""
+
+    machine_id: str
+    token: str = ""
+    sample_rate_hz: float = Field(gt=0)
+    started_at_ms: float = Field(ge=0, description="The sensor's own clock at the first sample.")
+    scale_g_per_lsb: float = Field(default=1.0, gt=0, description="Raw counts times this is g.")
+    samples: list[float] = Field(min_length=1, max_length=MAX_BATCH_SAMPLES)
+
+
+class IngestToken(BaseModel):
+    token: str = ""
+
+
+def _ingest_allowed(token: str) -> None:
+    """Writes from a sensor are off unless the server was given a token, and then
+    only for a caller that has it: the deployed link is open to anyone."""
+    expected = os.getenv("RIG_INGEST_TOKEN")
+    if not expected:
+        raise HTTPException(
+            503, "sensor ingestion is off on this server: set RIG_INGEST_TOKEN to turn it on"
+        )
+    if not hmac.compare_digest(token.encode(), expected.encode()):
+        raise HTTPException(401, "wrong ingest token")
+
+
+def _live(machine_id: str) -> Stream:
+    try:
+        return _LIVE.get(machine_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc.args[0])) from None
+
+
+def _stream_status(stream: Stream) -> dict[str, Any]:
+    return {
+        "machine": stream.machine.machine_id,
+        "name": stream.machine.name,
+        "sample_rate_hz": stream.machine.sample_rate_hz,
+        "seconds": round(stream.seconds, 2),
+        "batches": stream.batches,
+        "normal_captures": len(stream.normal),
+        "ready": stream.seconds >= CAPTURE_S,
+    }
+
+
+@app.post("/ingest")
+def ingest(batch: IngestBatch) -> dict[str, Any]:
+    """Take one batch of samples from a sensor. The server keeps the latest
+    unbroken stretch per machine; a batch that does not follow on starts a new one."""
+    _ingest_allowed(batch.token)
+    _live(batch.machine_id)
+    try:
+        stream = _LIVE.add(
+            batch.machine_id,
+            batch.sample_rate_hz,
+            batch.started_at_ms,
+            np.asarray(batch.samples, dtype=float) * batch.scale_g_per_lsb,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return _stream_status(stream)
+
+
+@app.get("/ingest/{machine_id}")
+def ingest_status(machine_id: str) -> dict[str, Any]:
+    """How much signal is on hand for a machine, and whether its normal is marked."""
+    return _stream_status(_live(machine_id))
+
+
+@app.post("/ingest/{machine_id}/normal")
+def ingest_normal(machine_id: str, who: IngestToken) -> dict[str, Any]:
+    """Keep the latest signal as this machine running normally. A person's call:
+    every later case is scored on the change from it."""
+    _ingest_allowed(who.token)
+    stream = _live(machine_id)
+    try:
+        _LIVE.mark_normal(machine_id)
+    except NotEnoughSignal as exc:
+        raise HTTPException(409, str(exc)) from None
+    return _stream_status(stream)
+
+
+@app.post("/ingest/{machine_id}/investigate")
+def ingest_investigate(machine_id: str, who: IngestToken) -> dict[str, Any]:
+    """Open a case on the latest signal, against the machine's own normal when one
+    is marked. It is a case like any other: answer what it asks through
+    `/investigations/{id}/evidence`."""
+    _ingest_allowed(who.token)
+    stream = _live(machine_id)
+    try:
+        obs = _LIVE.capture(machine_id)
+    except NotEnoughSignal as exc:
+        raise HTTPException(409, str(exc)) from None
+    inv = Investigation(stream.machine, obs, normal=stream.normal)
+    inv.observe()
+    inv.run_virtual_experiments()
+    inv.advance()
+    inv.state.ledger = inv.ledger.items
+    _INVESTIGATIONS[inv.state.id] = inv
+    return serialise(inv.state)
+
+
 # Cases the investigator agent works on, through the tool layer.
 _AGENT_CASES = InMemoryCaseStore()
 
@@ -246,11 +371,54 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
     run = await investigate_async(_AGENT_CASES, case.id)
     return {
         "model": run.model,
+        # True when a Gemini model made the calls from start to finish.
+        "live": run.model.startswith("gemini:") and run.fallback is None,
+        "fallback": run.fallback,
         "rounds": run.rounds,
         "stopped": run.stopped,
         "tool_calls": [{"tool": name, "args": args} for name, args in run.tool_calls],
+        "steps": [
+            {"by": step.by, **asdict(describe(step.tool, step.args, step.result))}
+            for step in run.steps
+        ],
         "thoughts": run.thoughts,
+        "ground_truth": str(req.fault),  # demo only; the investigator is never told
         "case": run.case.model_dump(mode="json") if run.case else None,
+    }
+
+
+@app.get("/agent/about")
+def agent_about() -> dict[str, Any]:
+    """What the investigator is, for the screen: which model would run, the tools
+    it is given and the limits a run is held to. Read from the code, so the
+    screen cannot promise more than the tool layer allows."""
+    from ..tools import InvestigatorTools
+
+    tools = InvestigatorTools(_AGENT_CASES)
+    limits: dict[str, Any] = {}
+    try:
+        from ..agents import investigator as loop
+
+        limits = {
+            "rounds": loop.MAX_ROUNDS,
+            "model_calls": loop.MAX_MODEL_CALLS,
+            "seconds": loop.MAX_SECONDS,
+        }
+    except ImportError:  # the agent framework is the optional `llm` extra
+        pass
+    return {
+        "models": describe_models(),
+        "tools": [
+            {
+                "name": fn.__name__,
+                "does": " ".join((fn.__doc__ or "").split()),
+                "takes": [p for p in inspect.signature(fn).parameters if p != "case_id"],
+            }
+            for fn in tools.agent_functions()
+        ],
+        "limits": limits,
+        "scenarios": [{"id": kind.value, "on_the_list": True} for kind in FaultKind]
+        + [{"id": name, "on_the_list": False} for name in OFF_CATALOGUE],
     }
 
 

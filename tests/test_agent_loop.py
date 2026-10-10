@@ -27,6 +27,7 @@ from hypothesis_engine.api.app import app  # noqa: E402
 from hypothesis_engine.data.rig import BENCH_RIG, rig_oracle, synthetic_capture  # noqa: E402
 from hypothesis_engine.models import FaultKind  # noqa: E402
 from hypothesis_engine.tools import (  # noqa: E402
+    AGENT_TOOL_NAMES,
     InMemoryCaseStore,
     InvestigatorTools,
     open_case,
@@ -275,3 +276,88 @@ def test_the_agent_replay_runs_a_fault_the_catalogue_does_not_list(monkeypatch):
     body = TestClient(app).post("/agent/replay", json={"fault": "rolling_element"}).json()
     assert body["case"]["status"] == "concluded"
     assert body["case"]["leader"] == "rolling_element_defect"
+
+
+# ---------------------------------------------------------------- the run, as told on screen
+
+
+_NO_CREDENTIALS = (
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_GENAI_USE_ENTERPRISE",
+)
+
+
+def _off_list_case():
+    store = InMemoryCaseStore()
+    obs = synthetic_capture("rolling_element", BENCH_RIG, seed=1, extra_noise=0.45)
+    answers = rig_oracle("rolling_element", BENCH_RIG, extra_noise=0.45)
+    return store, open_case(store, BENCH_RIG, obs, answers).id
+
+
+def test_every_call_is_kept_with_what_the_tools_answered():
+    store, case_id = _off_list_case()
+    run = investigate(store, case_id, model=ScriptedInvestigator())
+    assert [s.tool for s in run.steps] == [name for name, _ in run.tool_calls]
+    assert all(s.result is not None for s in run.steps), "every call got its answer"
+    written = next(s for s in run.steps if s.tool == "propose_suspect")
+    assert written.result["status"] == "tested"
+    assert written.by == "offline-scripted-investigator"
+
+
+def test_a_live_model_that_cannot_be_reached_does_not_lose_the_case(monkeypatch):
+    # Gemini asked for by name, with nothing to reach it by. The offline
+    # investigator takes the case on, and the run says that it did and why.
+    for name in _NO_CREDENTIALS:
+        monkeypatch.delenv(name, raising=False)
+    store, case_id = _off_list_case()
+    run = investigate(store, case_id, model="gemini-3.8-flash")
+    assert run.fallback is not None and "could not finish the case" in run.fallback
+    assert {s.by for s in run.steps} == {"offline-scripted"}
+    assert run.case.status == "concluded" and run.case.leader == "rolling_element_defect"
+
+
+def test_an_offline_model_that_fails_is_a_bug_and_is_not_hidden():
+    class _Broken(BaseLlm):
+        model: str = "broken"
+
+        async def generate_content_async(
+            self, llm_request: LlmRequest, stream: bool = False
+        ) -> AsyncGenerator[LlmResponse, None]:
+            raise RuntimeError("no such policy")
+            yield  # pragma: no cover
+
+    store, case_id = _off_list_case()
+    with pytest.raises(RuntimeError, match="no such policy"):
+        investigate(store, case_id, model=_Broken())
+
+
+def test_the_trace_says_who_asked_what_and_what_the_physics_answered(monkeypatch):
+    for name in _NO_CREDENTIALS:
+        monkeypatch.delenv(name, raising=False)
+    body = {"fault": "rolling_element", "seed": 1, "extra_noise": 0.45}
+    r = TestClient(app).post("/agent/replay", json=body).json()
+    assert r["live"] is False and r["fallback"] is None
+    steps = r["steps"]
+    assert {s["kind"] for s in steps} == {"asks", "says"}
+    told = " | ".join(f"{s['asked']} -> {s['answered']}" for s in steps)
+    assert "Compare the unexplained impact with this bearing's own frequencies." in told
+    assert "sit on 2xbsf x1 (rolling element)" in told
+    suspect = next(s for s in steps if s["tool"] == "propose_suspect")
+    assert "impacts 4.71 times per shaft turn" in suspect["asked"]
+    assert suspect["answered"].startswith("Simulated and scored on all the evidence.")
+    assert steps[-1]["answered"].startswith("Closed with a verdict: rolling element defect")
+    # The model's own words appear only where it narrates.
+    assert all(s["answered"] is None for s in steps if s["kind"] == "says")
+
+
+def test_the_screen_is_told_the_tools_and_limits_from_the_code():
+    about = TestClient(app).get("/agent/about").json()
+    assert [t["name"] for t in about["tools"]] == list(AGENT_TOOL_NAMES)
+    assert all(t["does"] for t in about["tools"]), "each tool says what it does"
+    taken = {p for t in about["tools"] for p in t["takes"]}
+    assert taken == {"test_id", "request_id", "suspect", "text", "reason"}
+    assert about["limits"] == {"rounds": 6, "model_calls": 30, "seconds": 120.0}
+    off = [s["id"] for s in about["scenarios"] if not s["on_the_list"]]
+    assert off == ["rolling_element", "unlisted_impact"]
