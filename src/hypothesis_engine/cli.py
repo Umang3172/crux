@@ -1,6 +1,7 @@
 """Command line: the fastest way to see the whole loop work.
 
 uv run hypengine demo --fault outer_race
+uv run hypengine evaluate --quick
 uv run hypengine benchmark
 uv run hypengine frequencies --rpm 1798
 uv run hypengine serve
@@ -420,6 +421,105 @@ def benchmark(
 
     for why in skipped:
         console.print(f"[dim]skipped {why}[/dim]")
+
+
+#: The hard synthetic cases `evaluate` runs: faults at three strengths under four
+#: levels of sensor noise, where the first capture alone often cannot decide.
+EVALUATE_FAULTS = (FaultKind.OUTER_RACE, FaultKind.INNER_RACE, FaultKind.IMBALANCE)
+EVALUATE_SEVERITIES = (0.35, 0.5, 0.75)
+EVALUATE_NOISE = (0.25, 0.35, 0.45, 0.6)
+EVALUATE_SEEDS = (11, 12, 13, 555, 1234)
+
+
+@dataclass(frozen=True)
+class Scored:
+    """One synthetic case: what was fed in, what Crux said, and what the best
+    spectral match alone would have said."""
+
+    truth: FaultKind
+    verdict: str | None  # None: Crux ended the case unresolved
+    best_match: str
+    asked: int
+
+    @property
+    def outcome(self) -> str:
+        if self.verdict is None:
+            return "unresolved"
+        return "right" if self.verdict == self.truth.value else "wrong"
+
+
+def score_synthetic(fault: FaultKind, severity: float, noise: float, seed: int) -> Scored:
+    """Run one case end to end, answered honestly by the rig, and read off what
+    a similarity classifier would have said from the same first capture.
+
+    The classifier is the simplest thing that always answers: simulate each
+    suspect once and name the one whose spectrum correlates best with the
+    capture. Crux draws that same comparison as a picture and does not decide by it.
+    """
+    obs = synthetic_capture(fault, BENCH_RIG, severity=severity, extra_noise=noise, seed=seed)
+    inv = Investigation(BENCH_RIG, obs)
+    state = inv.run(oracle=rig_oracle(fault, BENCH_RIG, severity=severity, extra_noise=noise))
+    best = max(state.hypotheses, key=lambda h: h.correlation or 0.0)
+    verdict = state.conclusion.cause if state.conclusion is not None else None
+    return Scored(fault, verdict, best.name, len(state.outcomes))
+
+
+@app.command()
+def evaluate(
+    quick: bool = typer.Option(False, help="18 cases in about half a minute, not all 180."),
+) -> None:
+    """How often is Crux wrong? Hard synthetic cases, answered honestly.
+
+    Each case is a fault at part strength under sensor noise. Crux gets one
+    capture, may ask for up to two measurements (answered by a new capture of
+    the same machine in the same state), and then names a cause or says it
+    cannot. Beside it: what the best spectral match alone would have named.
+
+    Synthetic: the captures and the simulations share one signal model, so this
+    measures the decision rule, not the model's fit to a real machine.
+    """
+    severities = (0.5,) if quick else EVALUATE_SEVERITIES
+    noises = (0.25, 0.45) if quick else EVALUATE_NOISE
+    seeds = EVALUATE_SEEDS[:3] if quick else EVALUATE_SEEDS
+    results: list[Scored] = []
+    with console.status("") as status:
+        for fault in EVALUATE_FAULTS:
+            for severity in severities:
+                for noise in noises:
+                    for seed in seeds:
+                        status.update(
+                            f"{len(results) + 1}: {fault.value}, strength {severity}, noise {noise}"
+                        )
+                        results.append(score_synthetic(fault, severity, noise, seed))
+
+    table = Table(title=f"\n{len(results)} synthetic cases — what Crux said, by true fault")
+    for name in ("true fault", "right", "unresolved", "wrong", "asked a check", "best match right"):
+        table.add_column(name, justify="left" if name == "true fault" else "right")
+    for fault in (*EVALUATE_FAULTS, None):
+        rows = [r for r in results if fault is None or r.truth is fault]
+        tally = Counter(r.outcome for r in rows)
+        matched = sum(r.best_match == r.truth.value for r in rows)
+        wrong = tally["wrong"]
+        table.add_row(
+            "all" if fault is None else fault.value.replace("_", " "),
+            f"[green]{tally['right']}[/green]",
+            f"[yellow]{tally['unresolved']}[/yellow]",
+            f"[red]{wrong}[/red]" if wrong else "0",
+            str(sum(r.asked > 0 for r in rows)),
+            f"{matched} of {len(rows)}",
+            end_section=fault is EVALUATE_FAULTS[-1],
+        )
+    console.print(table)
+    matched = sum(r.best_match == r.truth.value for r in results)
+    console.print(
+        f"The best spectral match alone names the true fault in {matched} of {len(results)} "
+        f"and a wrong one in {len(results) - matched}: it always answers. Crux names a cause "
+        "only at 80% belief with nothing left unexplained, and otherwise says it cannot."
+    )
+    console.print(
+        "[dim]Synthetic captures from the engine's own signal model: this measures the "
+        "decision rule, not how well the model fits a real machine (docs/DATA.md).[/dim]"
+    )
 
 
 @app.command()
