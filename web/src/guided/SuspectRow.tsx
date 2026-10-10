@@ -80,7 +80,16 @@ export function SuspectRow({
         <div className="g-bar">
           <i style={{ width: tested ? pct(h.posterior) : "0%" }} />
         </div>
-        <b>{tested ? pct(h.posterior) : "–"}</b>
+        {/* A belief is never shown as certain, either way. */}
+        <b>
+          {!tested
+            ? "–"
+            : h.posterior >= 0.995
+              ? ">99%"
+              : h.posterior < 0.005
+                ? "<1%"
+                : pct(h.posterior)}
+        </b>
       </div>
     </li>
   );

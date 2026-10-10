@@ -106,8 +106,8 @@ export function plainSentence(sentence: string): string {
   let out = sentence;
   for (const [code, words] of Object.entries(FEATURE_TEXT)) out = out.split(code).join(words);
   for (const [kind, text] of Object.entries(FAULT_TEXT)) {
-    // "Nothing wrong leads at 51%" reads as nonsense; a healthy pump is the suspect.
-    const words = kind === "healthy" ? "a healthy pump" : text.name.toLowerCase();
+    if (kind === "healthy") continue;
+    const words = text.name.toLowerCase();
     const label = kind.replace(/_/g, " ");
     out = out.split(label).join(words);
     // The engine starts a sentence with the suspect's name.
@@ -115,6 +115,13 @@ export function plainSentence(sentence: string): string {
       words.replace(/^./, (c) => c.toUpperCase()),
     );
   }
+  // "Nothing wrong leads at 51%" reads as nonsense: as a suspect, healthy is a
+  // healthy pump. Where the engine already says "a healthy machine" or "healthy
+  // captures", the word is left to do its ordinary job.
+  out = out.replace(/\b([Aa]) healthy machine\b/g, "$1 healthy pump");
+  out = out.replace(/(?<![Aa] )\b([Hh])ealthy\b(?! (?:pump|machine|captures))/g, (_m, h: string) =>
+    h === "H" ? "A healthy pump" : "a healthy pump",
+  );
   return out;
 }
 

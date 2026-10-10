@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Capture, EvidenceTest, Investigation, Spectra, capture, catalogue, spectra } from "../api";
 import { Beliefs } from "../components/Beliefs";
 import { Ledger } from "../components/Ledger";
+import { RepairPanel } from "../repair/Repair";
 import { CaseReportPanel } from "../report/Report";
 import { Phase, Step, investigate } from "../run";
 import { LiveTrace } from "./LiveTrace";
@@ -579,6 +580,7 @@ function StepText({
           {right ? "Crux found it." : "Crux got this one wrong."}
         </div>
       )}
+      {top.kind !== "healthy" && <RepairPanel id={inv.id} cause={top.kind} />}
     </div>
   );
 }
