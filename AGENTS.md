@@ -56,7 +56,9 @@ src/hypothesis_engine/
   investigation/catalog.py  the measurements the agent can ask for, and their costs
   investigation/engine.py   the loop: observe, experiment, choose a test, conclude
   tools/                    what a model may call on a case, and the door readings come in by
-  agents/                   optional model adapters + offline fallbacks
+  agents/investigator.py    the investigator loop: Gemini drives the tools, code ends it
+  agents/scripted.py        the offline stand-in the loop runs on without credentials
+  agents/                   other optional model adapters + offline fallbacks
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
   api/app.py                FastAPI, including /replay
@@ -64,20 +66,32 @@ src/hypothesis_engine/
 
 ## Common tasks
 
-**Add a fault hypothesis**: `FaultKind` → `predicted_signature()` →
-predictions for it in every test in `catalog.py` → a row in `docs/DOMAIN.md` →
-a case in `tests/test_investigation.py`. A suspect for one case only does not
+**Add a fault hypothesis**: `FaultKind` → `predicted_signature()` (the running
+tones plus what the fault adds) → a prediction for it in the two tests a person
+reports in `catalog.py` → a row in `docs/DOMAIN.md` → a case in
+`tests/test_investigation.py`. A suspect for one case only does not
 need any of that: write it as an `OrderSuspect` and pass it to
 `Investigation.add_hypothesis`, which simulates and scores it (ADR-0010).
 
 **Add a measurement the agent can request**: an `EvidenceTest` in `catalog.py`
-with its predictions, `sigma`, `effort_min`, and the coaching `procedure`; then
-teach `measure_from_capture()` or the rig oracle how to answer it.
+with `sigma`, `effort_min` and the coaching `procedure`. If a capture answers it,
+give it `capture_s` and a feature `physics.likelihood.capture_features` returns:
+the engine simulates what every hypothesis reads, and no table is typed
+(ADR-0013). If a person reports the value, give it a prediction table and teach
+the rig oracle to answer it.
 
-**Change how beliefs move**: only in `engine.py` (`_set_posteriors` is the one
+**Change how beliefs move**: only in `engine.py` (`_recompute` is the one
 writer) and `physics/likelihood.py`, and say why in `docs/DECISIONS.md`.
 `MODEL_MISMATCH` is an assumption awaiting calibration on recordings, not a
 tuning knob for demos.
+
+**Run the investigator**: `uv sync --extra dev --extra llm`, then
+`uv run hypengine investigate --fault inner_race --severity 0.5 --noise 0.45`.
+With no credentials it runs the scripted investigator; with Google Cloud's login
+(`GOOGLE_GENAI_USE_ENTERPRISE=true`, `GOOGLE_CLOUD_PROJECT`) or `GOOGLE_API_KEY`
+it runs Gemini. The first line it prints says which (ADR-0011).
+`--fault rolling_element` or `--fault unlisted_impact` induces a fault the
+catalogue does not list, to watch the investigator notice it (ADR-0012).
 
 ## What to check before you push
 

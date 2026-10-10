@@ -28,6 +28,10 @@ uv pip install -e ".[dev]"
 uv run hypengine demo --fault outer_race
 uv run hypengine frequencies --rpm 1798
 
+# the investigator agent: Gemini with credentials, an offline stand-in without
+uv pip install -e ".[dev,llm]"
+uv run hypengine investigate --fault rolling_element   # a fault the catalogue lacks
+
 # the API a judge would open
 uv run hypengine serve       # http://localhost:8080/docs
 curl -s localhost:8080/replay -X POST -H 'content-type: application/json' \
@@ -50,7 +54,8 @@ the system falls back to deterministic implementations and everything still runs
 | `src/hypothesis_engine/physics/` | Fault frequencies, predicted signatures, the synthesiser, the comparator |
 | `src/hypothesis_engine/signals/` | Waveform → named physical observations (no anomaly scores) |
 | `src/hypothesis_engine/investigation/` | The loop, the belief update, the test catalogue, the ledger |
-| `src/hypothesis_engine/agents/` | Gemini (narration) and Jev (typed per-second checks), both optional |
+| `src/hypothesis_engine/tools/` | What a model may call on a case; no tool takes a probability, a score or a reading |
+| `src/hypothesis_engine/agents/` | The investigator (Gemini drives a case through the tools; code ends the loop), narration and Jev checks, all optional |
 | `src/hypothesis_engine/data/` | Bench-rig captures (synthetic for now) and the CWRU loader |
 | `src/hypothesis_engine/api/` | FastAPI surface, including `/replay` for judges |
 | `firmware/esp32_rig/` | ESP32 + accelerometer sketch that streams the real rig |
@@ -64,8 +69,8 @@ Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
 
 ## The rules that keep this honest
 
-1. **Physics decides, the model explains.** Beliefs move only through spectral
-   comparison and measured evidence. A language model never edits a posterior.
+1. **Physics decides, the model explains.** Beliefs move only through simulated
+   likelihoods and measured evidence. A language model never edits a posterior.
 2. **Every claim cites evidence.** If it is not in the ledger, it does not go in
    the conclusion.
 3. **No invented numbers.** Prediction tables live in `investigation/catalog.py`

@@ -198,3 +198,166 @@ no capture could tell them apart.
 one is visibly rejected by the simulation. A verdict on a written suspect says it
 is not a catalogue cause and recommends inspection before repair. The tool
 layer's `propose_suspect` (ADR-0007) now reaches the physics directly.
+
+---
+
+## ADR-0011 · The investigator is a graph workflow that code ends
+**3 Oct 2026**
+
+**Context.** A language model is to drive investigations through the tools
+(ADR-0007). Left to itself, a model decides when it is done, and models are
+better at calling tools than at deciding when to call them. The agent framework
+in use (ADK 2) deprecates its loop agent in favour of graph workflows.
+
+**Decision.** `agents/investigator.py` builds an ADK graph `Workflow`: the
+investigator (`LlmAgent`, whose only tools are `InvestigatorTools`, each returning
+plain JSON), then `gate`, a plain function that routes back to the investigator
+while the case is open, no reading is out and rounds remain, then `finish`, a
+plain function that closes a case the rounds ran out on by the engine's own rule.
+No tool ends the loop. The model is Gemini when credentials are present (Google
+Cloud's own login preferred, an API key accepted; `GEMINI_MODEL`, default
+`gemini-3.8-flash`), and otherwise `agents/scripted.py`, a fixed policy over the
+same tools. Tests drive the loop with the scripted model, so it runs in CI with
+no network. A run is also capped in model calls and in seconds
+(`MAX_MODEL_CALLS`, `MAX_SECONDS`); one that hits either cap is closed by the same
+rule as one that spends its rounds, so a model that loops or stalls cannot hold a
+case open or run up a bill.
+
+**Consequence.** The model chooses the next step and the words; code chooses when
+to stop and what a verdict needs. An argument a tool does not declare is dropped
+before the tool runs (`tests/test_agent_loop.py`). The agent framework stays the
+optional `llm` extra: without it the core and its tests run, and the agent tests
+skip.
+
+---
+
+## ADR-0012 · An impact no suspect predicts stops the case at any belief
+**3 Oct 2026** · extends ADR-0009
+
+**Context.** ADR-0009 blocks a verdict over a strong periodic impact the leader
+does not predict, but checks only once the leader reaches the bar. Below it the
+engine kept asking for measurements. On a capture with impacts at 7.6x shaft
+speed, which nothing in the catalogue predicts, the list led with "healthy" at
+39 % and the engine asked a technician for a reading. The reading could only
+move belief among causes that all leave the impacts out, so no answer could have
+led to a verdict. And the investigator had nothing to go on when writing the
+missing suspect.
+
+**Decision.** `Investigation.blocking_gap()` first looks for the strongest
+envelope line that no hypothesis on the list predicts. If it is stronger than
+everything the list does explain, it blocks a verdict at any belief, because it
+would block whichever of those hypotheses came to lead: it is unexplained by
+each of them, and stronger than anything each one explains. The engine then
+closes the case as unresolved instead of requesting a reading, and
+`choose_next_test` in the tool layer refuses. A line only the leader leaves out
+still blocks once the leader reaches the bar. A new tool,
+`bearing_frequency_matches`, compares the blocking line with the bearing's own
+frequencies and names the part each points to (`docs/DOMAIN.md`). The offline
+investigator writes a suspect only where that points to a rolling element or the
+cage, and otherwise closes the case with the line as the clue. Open-ended
+suspects are Gemini's to write. The replay rig gains two faults the catalogue
+does not list, `rolling_element` and `unlisted_impact`, so the path can be shown
+from the deployed link. Every suspect the physics refuses is now written to the
+ledger with the reason, including one with a line the capture cannot contain;
+that check moved from the tool layer into `add_hypothesis`, so every caller gets
+it.
+
+**Consequence.** No technician time goes on a reading that cannot change the
+outcome. On a spalled rolling element the closed list leads with the wrong cause
+(healthy at 94 % on the replay capture) and is refused. The investigator matches
+the line to 2xBSF and writes the suspect, the physics tests it, and the case
+concludes on it at >99 % with "inspect before repair". Across 96 catalogue
+captures (six faults, three severities, two noise levels, three seeds) no line
+cleared the check, so no catalogue case changed. Still to check on recordings:
+how often the check fires on healthy machines (the caveat in ADR-0009).
+
+---
+
+## ADR-0013 · What a requested measurement will read is simulated, at one severity for all the evidence
+**5 Oct 2026** · extends ADR-0008; replaces the capture rows of the catalogue's prediction table
+
+**Context.** The measurement catalogue held one hand-typed prediction per fault
+for each test: for the envelope test, +1.20 for an outer-race fault and −0.90 for
+an inner-race one, whatever the fault's severity or the capture's noise. The
+replay rig answered a request from a clean, full-strength copy of the true
+fault, so the table was never held against an honest answer. Simulating one
+shows what it is: for an outer-race fault at severity 0.35 in noise 0.45, a
+second two-second capture reads +0.09, and the thirty-second capture the test
+asks for reads +0.43. Against the table, both sit nearer "not a bearing fault"
+(0.00) than "outer race" (+1.20), so an honest measurement would have moved
+belief away from the true cause. The chooser also bought the best test per
+minute even when no answer could change anything.
+
+**Decision.**
+- A test answered by a capture declares its length (`capture_s`) and carries no
+  table. What each hypothesis predicts it reads is simulated at that length, at
+  the capture's noise and at every severity (`physics.likelihood.predict_reading`),
+  and read by the same feature extraction as a real capture. A capture handed
+  over whole (`Investigation.apply_capture`) is scored at its own length and noise.
+- The evidence is kept per severity and averaged once: a hypothesis cannot be a
+  mild fault for the first capture and a severe one for the reading that follows.
+- The two tests a person reports keep a table. It describes a full-strength
+  fault; a milder one is taken to read proportionally closer to a healthy
+  machine. An assumption, stated in `docs/DOMAIN.md`.
+- A test is offered only when some imagined answer would bring a hypothesis to
+  the bar and the two leaders are expected to read at least `DISTINCT_SIGMA`
+  apart. `TestChoice` carries what each hypothesis is expected to read, the
+  allowance, the pair it separates and the chance of settling the case.
+- The replay rig answers from a new capture of the same machine in the same
+  state, as long as the test asks for. A reading nobody can take is recorded,
+  costs nothing, and the next most useful test is asked for.
+- The real-data benchmark answers a requested capture from the stretch of the
+  recording after the one the case was opened on.
+
+**Consequence.** On the synthetic rig with honest answers: of 63 cases (six
+faults, severities 0.25 to 1.0, three noise levels) 55 end in a verdict and 8
+unresolved, and 16 ask for a measurement. A moderate fault under heavy noise is
+settled by one or two requested measurements. A faint one (severity 0.35 at
+noise 0.45) ends unresolved; the old table and the full-strength answer had made
+it look settled. Choosing a test now costs one to two seconds of simulation, and
+the test suite about a minute. Each test's `sigma` is still a typed allowance,
+to be calibrated on recordings. The benchmark's answering stretch is seconds
+long where the test asks for thirty, so it settles less than a real capture
+would. Nothing here has been run on real recordings.
+
+---
+
+## ADR-0014 · A fault adds to the running tones, and a healthy verdict states its detection limit
+**5 Oct 2026** · corrects a claim in ADR-0008
+
+**Context.** Running the engine across mild faults in noise found 4 confident
+wrong verdicts in 63 cases: mild imbalance called healthy at 81 to 86 %, and a
+faint outer-race fault called inner race at 88 %. Two modelling flaws were behind
+them. The bearing-fault signatures carried the 1x running tone but dropped the
+normal 2x, against the model's own rule that a fault leaves the running tones in
+place; a missing 2x then counted as evidence against "healthy", and so did the
+work of telling a faint bearing fault from a healthy machine. And a line's height
+is read against the floor around it, which near 1x in a two-second capture was
+the median of 28 bins: that median scatters by 0.08 in log10, enough to hide a
+1x tone at twice its normal height. The independent test machine of ADR-0008
+shared the first flaw, which is why it did not show.
+
+**Decision.** Every fault signature, and every written suspect, carries the
+running 1x and 2x (`BASELINE_1X`, `BASELINE_2X`) and adds its fault to them. The
+floor around a line is the median of at least `FLOOR_MIN_BINS` (160) bins, which
+brings its scatter to 0.03. A faint fault can still look exactly like a healthy
+machine in a short, noisy capture, and no rule can know otherwise, so a healthy
+verdict now says what it could not have seen: every fault that, at the mildest
+severity simulated, fits the evidence nearly as well as healthy does
+(`Investigation.cannot_exclude`).
+
+**Consequence.** The same 63 cases now give one such verdict, not four: a faint
+outer-race fault (severity 0.25, noise 0.25) called healthy at 88 %, with "outer
+race at severity 0.25 cannot be excluded" in its reasoning. Across 180 further
+cases answered honestly (outer race, inner race and imbalance at severities 0.35
+to 0.75, four noise levels, five seeds) no verdict was wrong: 129 ended correct
+and 51 unresolved. The promise of ADR-0008 is restated as two, and tested on
+the independent machine: a fault is never named at the bar unless it is the true
+one, and a healthy verdict on a faulty machine names the true fault among those
+it cannot exclude (one of 54 captures there). With the running tones in place, a
+bent shaft written as "strong 1x, some 2x" is refused as a twin of heavy
+imbalance, which is what a spectrum alone can say. Still open: the signature
+amplitudes are in the model's own units, tied to the capture only through its
+noise level, so on a real sensor the predicted heights rest on an assumed
+tone-to-noise ratio until a machine's own baseline calibrates them.
+

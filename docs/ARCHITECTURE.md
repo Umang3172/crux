@@ -49,19 +49,26 @@ Deliberately a reduced-order signal model: tones, impact trains, resonance
 ringing, sidebands. No neural surrogate — see ADR-0001.
 
 **`investigation/`** owns beliefs. Posterior ∝ prior × the likelihood of the
-capture under each hypothesis (built by simulation, below), then multiplied by a
-Gaussian likelihood for each measured value. One method writes a posterior, and
-every hypothesis stays in the distribution, so one written off early can come
+capture under each hypothesis (built by simulation, below) × a Gaussian
+likelihood for each measured value, all at the same fault severity and averaged
+over severity once. What a requested capture will read is simulated too, at the
+capture's own length (ADR-0013). One method writes a posterior, and every
+hypothesis stays in the distribution, so one written off early can come
 back. There is no verdict below 80%, and none while the capture holds a strong
-periodic impact the leader does not predict: such a case ends "unresolved".
+periodic impact the leader, or the whole list, does not predict: such a case
+ends "unresolved".
 A suspect written during the case (`OrderSuspect`, in multiples of shaft speed)
 is simulated like the catalogue's and scored on everything already seen, so it
 wins only by explaining the evidence better; one no capture could tell apart
 from an existing hypothesis is refused.
 
-**`agents/`** is optional. Gemini explains and drafts; Jev gives the per-second
-typed verdicts while somebody takes a measurement. Both have offline fallbacks,
-so CI runs with no keys and a laptop with no network still demos.
+**`agents/`** is optional. The investigator (`agents/investigator.py`) is an ADK
+graph workflow: Gemini drives the case through `tools/`, a plain-code gate
+decides when the loop stops, and each run is capped in model calls and time
+(ADR-0011). Without credentials a scripted
+investigator runs the same loop over the same tools, so CI runs with no keys and
+a laptop with no network still demos. Jev gives typed verdicts while somebody
+takes a measurement, with a rule-based fallback.
 
 **`api/`** serialises state. `/replay` runs a whole case end to end for anyone
 without the rig, which is how a judge sees this working from the deployed link.
@@ -88,9 +95,13 @@ capture and an unbalanced one both scored best against the outer race
 it beside the plot of one simulation, as a picture of the fit.
 
 Before concluding, `unexplained_envelope_line` looks for a periodic impact the
-leader does not predict, above a threshold set for a 1 % false-alarm rate per
-capture on noise. If it is stronger than anything the leader explains, the list
-is missing a cause and the case cannot conclude.
+hypotheses do not predict, above a threshold set for a 1 % false-alarm rate per
+capture on noise. One that no hypothesis on the list predicts, stronger than
+anything the list explains, blocks a verdict at any belief, and no measurement is
+requested for it, since none could settle it. One the leader alone leaves out
+blocks once the leader reaches the bar. Either way the list is missing a cause:
+the investigator matches the line to the bearing's own frequencies and may write
+the suspect, which the physics then tests (ADR-0012).
 
 ## Data flow at the edge (once the rig is live)
 

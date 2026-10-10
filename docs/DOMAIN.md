@@ -38,7 +38,12 @@ comparison is scale-invariant — shape is what separates the causes.
 | **Looseness** | A run of harmonics (1×…5×) plus half-order peaks | The joint opens and closes; the response is non-linear |
 | **Outer race** | Impacts at BPFO, **no** 1× sidebands | The defect is stationary in the load zone |
 | **Inner race** | Impacts at BPFI **with** 1× sidebands | The defect rotates in and out of the load zone |
-| **Healthy** | Small 1×, broadband noise floor | Normal running |
+| **Healthy** | Small 1×, a smaller 2×, broadband noise floor | Normal running |
+
+A fault adds to the running tones; it does not replace them. Every signature
+carries the normal 1× and 2× (`BASELINE_1X`, `BASELINE_2X`), so a bearing fault
+is a healthy machine plus impacts, and a mild fault is a small change on a
+normal machine.
 
 The impacts matter more than the fault frequency itself: a spall rings a
 structural resonance (a few kHz), and that ringing is amplitude-modulated at the
@@ -79,33 +84,108 @@ read from every simulation, and the capture is scored with a Student-t per line.
 | `SEEDS_PER_SEVERITY` | 4 | Enough simulations to estimate a spread per line; at about 2.5 ms each, the first look costs about a quarter of a second. Compute budget, not physics. |
 | `MODEL_MISMATCH` | 0.15 (log10; ×1.4 in amplitude) | **Assumption, not yet calibrated.** The signature model is reduced-order, and a real machine will not match its line heights more closely than this. Calibrate on development recordings (the 0.007″ CWRU files), never on the files a result is reported on. |
 | `STUDENT_T_DOF` | 4 | **Judgement call.** Heavy tails cap what one badly modelled line can cost, so no single line decides a case. The method: Lange, Little & Taylor, *JASA* 84:881, 1989. |
+| `FLOOR_MIN_BINS` | 160 bins | The floor around a line is the median of at least this many spectral bins. A median of n noise bins scatters by about 0.72·√(1.5/n) of itself (Rayleigh magnitudes; a Hann window leaves about n/1.5 independent bins): 0.03 in log10 at 160, against 0.08 at the 28 bins a quarter-band gives around 1× in a two-second capture. Measured on white noise in `tests/test_likelihood.py`. A design choice: enough bins that the floor's scatter is small beside `MODEL_MISMATCH`. |
+| `READING_SEEDS` | 2 | Simulated captures per severity when predicting what a requested measurement reads. A requested capture is 10 to 30 s long, so its sampling spread is small beside the test's own allowance, and each simulation costs up to 26 ms. Compute budget, not physics. |
 | `FALSE_ALARM_RATE` | 1 % per capture | **Design target.** A noise-only bin's power over the median exceeds x with probability exp(−x ln 2); the largest of N bins with 1 − (1 − exp(−x ln 2))^N. Solving at 1 % sets the unexplained-line threshold (about 16× the median power for 800 bins). `tests/test_likelihood.py` checks it on white noise; check it on healthy recordings before trusting it on a machine. |
 | `FITS_NONE_SIGMA` | 4 σ | A reading further than this from every hypothesis' prediction fits none of them: the two-sided Gaussian tail beyond 4 σ is about 6 × 10⁻⁵. |
-| `DISTINCT_SIGMA` | 1 σ | A suspect written during a case must differ from every existing hypothesis, at every severity it is simulated at, by at least this on some predicted line. Otherwise no capture could tell them apart and testing it would prove nothing, so it is refused. A design rule. |
+| `DISTINCT_SIGMA` | 1 σ | Two hypotheses that differ by less than this cannot be told apart. A suspect written during a case must differ from every existing hypothesis, at every severity it is simulated at, by at least this on some predicted line, or it is refused. A test is offered only if the two leading hypotheses are expected to read this far apart. A design rule. |
 | `BASELINE_1X` | 0.25 | The height of the normal 1× running tone in every signature. Heights are relative, so this only fixes the unit a written suspect's "4× as tall" is measured in. |
+| `BASELINE_2X` | 0.06 | The height of the normal 2× running tone, about a quarter of 1×, in every signature. A modelling choice in the same relative units; a machine's own baseline would replace it. |
 | `REJECT_BELOW` | 3 % | Display only: below it a hypothesis is shown as rejected. It stays in the distribution. |
 | `CONCLUDE_ABOVE` | 80 % | The bar for a verdict. Below it the case asks for a measurement or ends "unresolved". |
 
-What the scoring cannot do, said plainly: the line heights are relative to the
-local floor, so a healthy machine and a mildly unbalanced one differ only in how
-tall 1× stands, and without the machine's own baseline that is weak evidence.
-The first look then splits between them, and the engine asks for the
-measurement that separates them (a coast-down) rather than guess.
+What the scoring cannot do, said plainly:
 
-## Predicted values in the test catalogue
+- **Healthy against mild imbalance.** They differ only in how tall 1× stands,
+  and without the machine's own baseline that is weak evidence. The first look
+  splits between them, and the engine asks for the measurement that separates
+  them (a coast-down) rather than guess.
+- **A fault too faint for the capture.** A weak bearing fault in a short, noisy
+  capture looks exactly like a healthy machine, and may be called healthy. The
+  verdict then lists every fault it could not have seen: those that, at the
+  mildest severity simulated, fit the evidence nearly as well as healthy does
+  (one against one, keeping at least `REJECT_BELOW` of the belief).
+- **The sensor's units.** Signature amplitudes are in the model's own units and
+  are tied to a capture only through its noise level, so the predicted heights
+  assume the model's ratio of running tone to noise. On the synthetic rig that
+  holds by construction. On a real sensor it is an assumption until the
+  machine's own healthy baseline calibrates it.
 
-`investigation/catalog.py` holds what each hypothesis predicts for each
-measurable feature. These are first-pass priors drawn from the table above.
+## When the list is missing a cause
 
-**They are not yet calibrated against the rig.** Week 2 of `docs/TASKS.md`
-replaces them with values measured from induced faults, three runs each, and the
-commit that does it must show the before/after diagnosis accuracy. Until then,
-treat them as a documented guess, and say so if a judge asks.
+Before a verdict the engine looks for the strongest envelope line the hypotheses
+do not explain. Harmonics up to 6x of an explained line, its 1x sidebands, and
+shaft harmonics up to 12x all count as explained. Such a line blocks a verdict
+only when it clears the false-alarm threshold above and is stronger than every
+line the same hypotheses do explain. A line the whole list leaves out blocks at
+any belief, because it would block whichever of those hypotheses came to lead.
+No reading on the menu can settle it, so none is requested.
 
-`sigma` on each test is the measurement noise in the same units. It is what
-makes the expected-information-gain calculation meaningful: a test that separates
-two hypotheses by 0.1 with a sigma of 0.3 is worthless, and the engine will not
-choose it.
+`bearing_frequency_matches` then compares that line with the bearing's own
+frequencies:
+
+| Constant | Value | Where it comes from |
+|---|---|---|
+| tolerance | `LINE_TOLERANCE`, ±2 % | The same slip band as the scoring, for the same reason. |
+| harmonics | up to 3x of FTF, 2xBSF, BPFO and BPFI; BSF once | An impact train's envelope spectrum carries the first few harmonics of its rate. BSF itself is for a defect that strikes only one race hard. Above 3x the candidates crowd together: on the 6205, 3x BPFO and 2x BPFI are already 0.7 % apart, so both are reported when both fit. A design choice. |
+
+A match points to the part that strikes: FTF to the cage, BSF or 2xBSF to a
+rolling element, BPFO and BPFI to the races. The offline investigator writes a
+suspect only for a rolling element or the cage. It writes it at the catalogue's
+bearing-fault strength: impacts of 1.0 at severity 1, which is 4x `BASELINE_1X`.
+A rolling element is modulated at FTF, because the cage carries the defect in
+and out of the load zone. Anything else it leaves unresolved, with the line as
+the clue.
+
+The replay rig's off-catalogue faults (`data/rig.py`) are demonstrations, not
+physics constants. `rolling_element` is impacts at 2xBSF, modulated at FTF.
+`unlisted_impact` is impacts at 7.6x shaft speed, a rate chosen to sit on no
+frequency of the 6205 (the nearest is 2x BPFO at 7.17x) and on no shaft
+harmonic. Both ring the same resonance, at the same strength, as the
+catalogue's bearing faults.
+
+## What a requested measurement will read
+
+`investigation/catalog.py` lists the measurements the engine can ask for. How a
+hypothesis's prediction for one is found depends on who answers it.
+
+**A capture** (`vib_10s`, `envelope`, `half_order`). The test states how long a
+capture its procedure asks for (`capture_s`: 10, 30 and 10 seconds). The engine
+simulates every hypothesis at that length, at the first capture's noise and at
+every severity, and reads the test's feature from each simulation with the same
+extraction a real capture goes through. Nothing is typed. The length matters: a
+longer capture resolves a weak line further above the floor, so an inner-race
+fault of severity 0.5 in noise 0.45 reads about −0.06 on a two-second capture
+and −0.45 on a thirty-second one. A capture handed over whole is scored at its
+own length and noise.
+
+**A value a person reports** (`temperature`, `coast_down`). There is no thermal
+or run-down model, so these keep a table of first-pass values from standard
+vibration diagnosis. **They are not calibrated against a machine**; treat them
+as a documented guess. The table gives a full-strength fault. A milder one is
+assumed to read proportionally closer to a healthy machine's value (linear in
+severity up to 1), so a small reading does not count against a small fault. The
+replay rig answers these two from a fixture built the same way, which makes
+them circular on synthetic data; on recordings they are never answered.
+
+`sigma` on each test is the allowance on a reading, in the feature's units: how
+far a real reading may sit from the simulated or tabled one. It is typed, not
+derived, and awaits calibration like `MODEL_MISMATCH`. The simulated spread
+between captures is added to it.
+
+**Severity is shared.** The evidence is kept per severity and averaged once, so
+a hypothesis must explain the first capture and every reading at the same
+severity.
+
+**Which test is offered.** For each test the engine imagines every live
+hypothesis answering it, three Gauss–Hermite points around its prediction at
+each severity the evidence still allows, and works out the belief each answer
+would leave. The entropy removed is the information gain; the share of answers
+that bring some hypothesis to `CONCLUDE_ABOVE` is the chance of settling the
+case. The test with the most gain per technician-minute is asked for, among
+those with some chance of settling the case and with the two leading hypotheses
+expected to read at least `DISTINCT_SIGMA` apart. If none qualifies, the case
+ends unresolved with that as the reason.
 
 ## Faults we deliberately do not induce on the bench
 

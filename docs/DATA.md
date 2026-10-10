@@ -135,16 +135,17 @@ Be blunt about this in the pitch; it is a limit of the data, not of the engine.
 - **One bearing, one rig, one speed range.** Roughly 1730–1797 rpm under
   steady load. Nothing here shows variable-speed or variable-load behaviour,
   which is exactly what ADR-0001 says the analytical model cannot extrapolate to.
-- **The requested measurement is re-read from the same recording.** In the field
-  the engine asks for a *fresh* 30 s capture; here `measure_from_capture` takes a
-  different feature out of the ten seconds we already have. That is a genuinely
-  different analysis, but its noise is not independent of the first look, so the
-  measurement looks slightly more decisive on this benchmark than it would on a
-  live machine.
-- **The benchmark uses the first 4 seconds** of each recording (`--seconds`).
-  At 12 kHz that is 48 000 samples and 0.25 Hz of frequency resolution, far finer
-  than the ±3 Hz peak search needs, and it keeps a full sweep to a few seconds.
-  Nothing in the result depends on the trim; raise it if you want to check.
+- **The requested measurement is the next stretch of the same recording.** In
+  the field the engine asks for a fresh 30 s capture; a CWRU file is about ten
+  seconds long. The case is opened on the first 4 seconds (`--seconds`) and a
+  requested capture is answered by the 4 seconds after them, scored against
+  simulations of that length. Its noise is independent of the first look, but it
+  is the same sensor in the same place seconds later, and far shorter than the
+  test asks for, so it adds less than a real 30 s capture would.
+- **Four seconds at 12 kHz** is 48 000 samples and 0.25 Hz of frequency
+  resolution, far finer than the peak search needs, and it keeps a full sweep to
+  a few seconds. A recording too short for a second stretch counts the request
+  as one the recording could not answer.
 
 ## If the download breaks
 
