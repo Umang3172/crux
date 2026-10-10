@@ -31,7 +31,8 @@ from typing import Literal
 import numpy as np
 from scipy import stats
 
-from ..signals.features import envelope_spectrum, magnitude_spectrum
+from ..models import MachineSpec, Observation
+from ..signals.features import envelope_spectrum, extract, magnitude_spectrum
 from .signatures import Signature
 from .synth import synthesize
 
@@ -60,6 +61,13 @@ SEVERITY_GRID: tuple[float, ...] = (0.25, 0.5, 0.75, 1.0, 1.5)
 #: Simulated captures per severity. Seeds are fixed so the result is reproducible.
 SEEDS_PER_SEVERITY = 4
 _SEED_BASE = 9_000
+
+#: Simulated captures per severity when predicting what a requested measurement
+#: will read. Two: a requested capture is long (10 to 30 s), so its sampling
+#: spread is small beside the catalogue's own allowance, and each simulation
+#: costs up to 26 ms. Compute budget, not physics.
+READING_SEEDS = 2
+_READING_SEED_BASE = 19_000
 
 #: False-alarm rate of the unexplained-line check, per capture. See
 #: `unexplained_envelope_line`.
@@ -116,10 +124,20 @@ def _window(freqs: np.ndarray, centre: float, half: float) -> np.ndarray:
     return (freqs >= centre - half) & (freqs <= centre + half)
 
 
+#: The floor around a line is the median of at least this many spectral bins. The
+#: median of n noise bins scatters by about 0.72 * sqrt(1.5 / n) of itself (bin
+#: magnitudes are Rayleigh; a Hann window leaves roughly n / 1.5 independent
+#: ones), which is 0.03 in log10 at 160 bins: small beside MODEL_MISMATCH. With
+#: the 28 bins a quarter-band gives around 1x in a two-second capture it was
+#: 0.08, enough to hide a doubling of the 1x tone.
+FLOOR_MIN_BINS = 160
+
+
 def line_height(freqs: np.ndarray, mag: np.ndarray, hz: float) -> float:
     """log10 of a line's peak over the local floor around it (0 = not there)."""
     peak_sel = _window(freqs, hz, LINE_TOLERANCE * hz)
-    floor_sel = _window(freqs, hz, max(0.25 * hz, 5.0)) & ~peak_sel & (freqs > 1.0)
+    half = max(0.25 * hz, 0.5 * FLOOR_MIN_BINS * (freqs[1] - freqs[0]))
+    floor_sel = _window(freqs, hz, half) & ~peak_sel & (freqs > 1.0)
     if not np.any(peak_sel) or not np.any(floor_sel):
         return 0.0
     floor = float(np.median(mag[floor_sel])) + 1e-15
@@ -233,18 +251,103 @@ def predict(
     return Prediction(tuple(means), tuple(scales))
 
 
-def log_likelihood(observed: np.ndarray, prediction: Prediction) -> float:
-    """log p(observed lines | suspect), averaged over the suspect's severities.
+def logmeanexp(values: np.ndarray) -> float:
+    """log of the mean of exp(values): an average over severities, taken in logs."""
+    values = np.asarray(values, dtype=float)
+    best = float(values.max())
+    if not math.isfinite(best):
+        return best
+    return best + math.log(float(np.mean(np.exp(values - best))))
+
+
+def log_likelihood_by_severity(observed: np.ndarray, prediction: Prediction) -> np.ndarray:
+    """log p(observed lines | suspect, severity), one value per simulated severity.
 
     Lines the capture cannot show (NaN) are left out, for every suspect alike.
+    Kept per severity so that later evidence about the same machine is weighed
+    at the same severity: a fault cannot be mild in one capture and severe in
+    the next.
     """
     per_severity = []
     for mu, scale in zip(prediction.means, prediction.scales, strict=True):
         seen = np.isfinite(observed) & np.isfinite(mu)
         logpdf = stats.t.logpdf(observed[seen], STUDENT_T_DOF, loc=mu[seen], scale=scale[seen])
         per_severity.append(float(np.sum(logpdf)))
-    best = max(per_severity)
-    return best + math.log(np.mean(np.exp(np.array(per_severity) - best)))
+    return np.array(per_severity)
+
+
+def log_likelihood(observed: np.ndarray, prediction: Prediction) -> float:
+    """log p(observed lines | suspect), averaged over the suspect's severities."""
+    return logmeanexp(log_likelihood_by_severity(observed, prediction))
+
+
+# ------------------------------------------------------------------ what a measurement would read
+
+
+def capture_features(
+    waveform: np.ndarray, fs: float, rpm: float, machine: MachineSpec
+) -> dict[str, float]:
+    """The named features one capture gives: what a requested measurement returns.
+
+    Read by the same `signals.features.extract` for a real capture and for every
+    simulated one. Envelope features are left out when the capture cannot see
+    the resonance band.
+    """
+    seen = extract(Observation(machine.machine_id, waveform, fs, rpm), machine)
+    found = {
+        "ratio_2x_1x": seen.ratio_2x_1x(),
+        "amp_half_x": seen.amp_half_x,
+        "crest_factor": seen.crest_factor,
+    }
+    if envelope_visible(fs):
+        found |= {
+            "env_contrast": seen.env_contrast(),
+            "env_bpfo": seen.env_bpfo,
+            "env_bpfi": seen.env_bpfi,
+        }
+    return {name: float(value) for name, value in found.items() if value is not None}
+
+
+@lru_cache(maxsize=2048)
+def _simulated_features(
+    signature: Signature, fs: float, n: int, seed: int, machine: MachineSpec, rpm: float
+) -> dict[str, float]:
+    return capture_features(synthesize(signature, fs, n / fs, seed=seed), fs, rpm, machine)
+
+
+def predict_reading(
+    signature_at: Callable[[float | None], Signature],
+    severities: Sequence[float | None],
+    feature: str,
+    fs: float,
+    n: int,
+    noise: float,
+    machine: MachineSpec,
+    rpm: float,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """What a suspect predicts a capture of `n` samples reads for `feature`.
+
+    The suspect is simulated at each severity, at the capture's length and
+    noise, and the feature is read from every simulation. Returns the mean and
+    the spread across simulations, one value per severity, or None when no
+    capture at this sample rate can give the feature. The length matters: a
+    longer capture resolves a weak line further above the floor, so the same
+    fault reads differently at 2 s and at 30 s.
+    """
+    means, spreads = [], []
+    for severity in severities:
+        signature = replace(signature_at(severity), noise=noise)
+        values = [
+            _simulated_features(signature, fs, n, _READING_SEED_BASE + 31 * k, machine, rpm).get(
+                feature
+            )
+            for k in range(READING_SEEDS)
+        ]
+        if any(value is None for value in values):
+            return None
+        means.append(float(np.mean(values)))
+        spreads.append(float(np.std(values, ddof=1)))
+    return np.array(means), np.array(spreads)
 
 
 # ------------------------------------------------------------------ what nobody explains

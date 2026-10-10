@@ -200,6 +200,7 @@ def load_capture(
     path: str | Path,
     rpm: float | None = None,
     duration_s: float | None = None,
+    offset_s: float = 0.0,
 ) -> Observation:
     """Load one CWRU .mat file as an Observation.
 
@@ -210,8 +211,10 @@ def load_capture(
     weaker. Speed comes from the file, then the motor-load table, then the
     nominal speed, in that order; see `LOAD_TO_RPM` for why the order matters.
 
-    `duration_s` trims to the first N seconds. The recordings are ~10 s and the
-    envelope analysis runs several FFTs per hypothesis, so the benchmark trims.
+    `duration_s` trims to N seconds, starting `offset_s` into the recording. The
+    recordings are ~10 s and the envelope analysis runs several FFTs per
+    hypothesis, so the benchmark opens a case on the first stretch and answers
+    a requested capture from the one after it.
     """
     from scipy.io import loadmat  # imported lazily: scipy is heavy
 
@@ -226,10 +229,11 @@ def load_capture(
         raise ValueError(f"{path.name} has no drive-end or fan-end channel; found {keys}")
 
     x = _first_channel(mat[channel_key])
+    x = x[int(offset_s * CWRU_DRIVE_END.sample_rate_hz) :]
     if duration_s is not None:
         x = x[: int(duration_s * CWRU_DRIVE_END.sample_rate_hz)]
     if x.size == 0:
-        raise ValueError(f"{path.name}: channel {channel_key} is empty")
+        raise ValueError(f"{path.name}: channel {channel_key} is empty from {offset_s:g} s")
 
     notes: list[str] = []
     if de_key is None:

@@ -100,6 +100,33 @@ class RequestView(BaseModel):
     downtime: str
 
 
+class UnexplainedView(BaseModel):
+    """A periodic impact in the capture that stands in the way of a verdict."""
+
+    order: float = Field(description="Impacts per shaft revolution")
+    hz: float
+    strength: float = Field(description="Power over the envelope median")
+    missed_by: str = Field(
+        description="'every suspect' when no suspect on the list predicts it, "
+        "otherwise the leading suspect, which does not"
+    )
+
+
+class KinematicMatchView(BaseModel):
+    frequency: str = Field(description="ftf, bsf, 2xbsf, bpfo or bpfi")
+    part: str
+    harmonic: int
+    order: float
+    deviation_percent: float
+
+
+class KinematicReport(BaseModel):
+    unexplained: UnexplainedView | None
+    matches: list[KinematicMatchView]
+    bearing_orders: dict[str, float]
+    detail: str
+
+
 class CaseView(BaseModel):
     case_id: str
     machine: str
@@ -112,6 +139,7 @@ class CaseView(BaseModel):
         default_factory=list, description="Why the case cannot conclude yet, from the physics"
     )
     unresolved_reason: str | None = None
+    unexplained: UnexplainedView | None = None
     suspects: list[SuspectView]
     evidence: list[EvidenceView]
     requests: list[RequestView]
@@ -144,6 +172,19 @@ class NextTest(BaseModel):
     gain_per_minute: float | None = None
     effort_min: float | None = None
     downtime: str | None = None
+    expected_readings: dict[str, float] = Field(
+        default_factory=dict,
+        description="What each live suspect is expected to read, from simulation or the table",
+    )
+    allowance: float | None = Field(
+        default=None, description="How far a real reading may sit from an expected one"
+    )
+    separates: list[str] = Field(
+        default_factory=list, description="The two leading suspects it is asked for to tell apart"
+    )
+    chance_of_settling: float | None = Field(
+        default=None, description="Share of plausible answers that would allow a verdict"
+    )
 
 
 class RequestResult(BaseModel):

@@ -19,8 +19,10 @@ from collections.abc import Callable
 from typing import Any
 
 from ..investigation.catalog import BY_ID
-from ..investigation.engine import CONCLUDE_ABOVE
-from ..physics.frequencies import fault_frequencies, shaft_hz
+from ..investigation.engine import CONCLUDE_ABOVE, Investigation
+from ..models import Hypothesis
+from ..physics.frequencies import fault_frequencies, kinematic_matches, shaft_hz
+from ..physics.likelihood import LINE_TOLERANCE, Unexplained
 from ..physics.signatures import OrderSuspect
 from .cases import (
     Case,
@@ -37,12 +39,15 @@ from .contract import (
     EvidenceView,
     ExperimentResult,
     Features,
+    KinematicMatchView,
+    KinematicReport,
     NextTest,
     RequestResult,
     RequestView,
     SuspectReview,
     SuspectSpec,
     SuspectView,
+    UnexplainedView,
 )
 
 #: Longest narration or reason a model may write in one call. An operational
@@ -53,6 +58,7 @@ MAX_TEXT_CHARS = 600
 AGENT_TOOL_NAMES: tuple[str, ...] = (
     "get_case",
     "extract_features",
+    "bearing_frequency_matches",
     "run_virtual_experiments",
     "choose_next_test",
     "request_measurement",
@@ -90,6 +96,57 @@ class InvestigatorTools:
             shaft_hz=round(ff.shaft, 3),
             fault_frequencies_hz={k: round(v, 3) for k, v in ff.as_dict().items()},
             observations={k: round(float(v), 4) for k, v in inv.evidence.as_dict().items()},
+        )
+
+    def bearing_frequency_matches(self, case_id: str) -> KinematicReport:
+        """The periodic impact that stands in the way of a verdict, if any, and
+        which frequencies of this machine's bearing it sits on. Use it before
+        writing a suspect: a match points to the part that is striking."""
+        inv = self._store.get(case_id).investigation
+        fr = shaft_hz(inv.rpm)
+        orders = {
+            name: round(hz / fr, 4)
+            for name, hz in fault_frequencies(inv.machine.bearing, inv.rpm).as_dict().items()
+            if name in ("ftf", "bsf", "2xbsf", "bpfo", "bpfi")
+        }
+        if not inv.experiments_run:
+            return KinematicReport(
+                unexplained=None,
+                matches=[],
+                bearing_orders=orders,
+                detail="Run the virtual experiments first.",
+            )
+        blocking = inv.blocking_gap()
+        if blocking is None:
+            return KinematicReport(
+                unexplained=None,
+                matches=[],
+                bearing_orders=orders,
+                detail="No periodic impact in the capture stands in the way of a verdict.",
+            )
+        gap, _ = blocking
+        matches = [
+            KinematicMatchView(
+                frequency=m.frequency,
+                part=m.part,
+                harmonic=m.harmonic,
+                order=m.order,
+                deviation_percent=round(100 * m.deviation, 2),
+            )
+            for m in kinematic_matches(gap.order, inv.machine.bearing, LINE_TOLERANCE)
+        ]
+        detail = (
+            f"Impacts at {gap.order:.3f}x shaft speed sit on "
+            + ", ".join(f"{m.frequency} x{m.harmonic} ({m.part})" for m in matches)
+            + "."
+            if matches
+            else f"Impacts at {gap.order:.3f}x shaft speed match no frequency of this bearing."
+        )
+        return KinematicReport(
+            unexplained=_unexplained_view(*blocking),
+            matches=matches,
+            bearing_orders=orders,
+            detail=detail,
         )
 
     def measurement_status(self, case_id: str, request_id: str) -> RequestResult:
@@ -138,7 +195,9 @@ class InvestigatorTools:
         if waiting:
             return NextTest(available=False, detail=f"{waiting[0]} is still waiting for a reading.")
         leader = inv.state.leader()
-        if leader.posterior >= CONCLUDE_ABOVE:
+        # A reading moves beliefs among the suspects on the list; it cannot
+        # account for an impact none of them predicts, so none is bought for one.
+        if leader.posterior >= CONCLUDE_ABOVE or inv.blocking_gap() is not None:
             blocked = inv.blockers()
             return NextTest(
                 available=False,
@@ -159,7 +218,9 @@ class InvestigatorTools:
         self._store.put(case)
         if choice is None:
             return NextTest(
-                available=False, detail="No test in the catalogue separates the live suspects."
+                available=False,
+                detail=inv.no_useful_test
+                or "No test in the catalogue separates the live suspects.",
             )
         return NextTest(
             available=True,
@@ -170,6 +231,10 @@ class InvestigatorTools:
             gain_per_minute=round(choice.gain_per_minute, 4),
             effort_min=choice.test.effort_min,
             downtime=choice.test.downtime,
+            expected_readings={k: round(v, 3) for k, v in choice.predictions.items()},
+            allowance=choice.sigma,
+            separates=list(choice.separates),
+            chance_of_settling=round(choice.settle_chance, 3),
         )
 
     def request_measurement(self, case_id: str, test_id: str) -> RequestResult:
@@ -214,6 +279,8 @@ class InvestigatorTools:
         produce. The physics simulates it and scores it on everything seen so
         far; it gains belief only by explaining the evidence better, and is
         refused if no capture could tell it apart from an existing suspect."""
+        if isinstance(suspect, dict):  # an agent framework may hand over plain JSON
+            suspect = SuspectSpec.model_validate(suspect)
         case = self._store.get(case_id)
         inv = case.investigation
         reasons: list[str] = []
@@ -226,25 +293,8 @@ class InvestigatorTools:
         if suspect.name in taken:
             reasons.append(f"'{suspect.name}' is already a suspect.")
 
-        # The only limits applied are the ones this capture imposes: a component
-        # above the Nyquist frequency cannot appear in it, whatever its cause.
-        fr = shaft_hz(inv.observation.rpm)
-        nyquist = inv.observation.sample_rate_hz / 2.0
-        for tone in suspect.tones:
-            hz = tone.order * fr
-            if hz >= nyquist:
-                reasons.append(f"A tone at {tone.order}x ({hz:.0f} Hz) is above {nyquist:.0f} Hz.")
-        for impact in suspect.impacts:
-            hz = impact.rate_order * fr
-            if hz >= nyquist:
-                reasons.append(
-                    f"Impacts at {impact.rate_order}x ({hz:.0f} Hz) are above {nyquist:.0f} Hz."
-                )
-            if impact.resonance_hz is not None and impact.resonance_hz >= nyquist:
-                reasons.append(
-                    f"A resonance at {impact.resonance_hz:.0f} Hz is above {nyquist:.0f} Hz."
-                )
-
+        # The physics applies the only other limits, the ones this capture imposes
+        # (`Investigation.add_hypothesis`), and records any refusal in the ledger.
         status = "refused"
         if not reasons:
             accepted, outcome = inv.add_hypothesis(_order_suspect(suspect))
@@ -272,8 +322,8 @@ class InvestigatorTools:
 
     def conclude(self, case_id: str) -> ConcludeResult:
         """Ask to close the case on its leading suspect. Refused while the leader
-        is below the bar, while the capture holds something the leader cannot
-        explain, or after a reading that fits no suspect."""
+        is below the bar, while the capture holds something the leader (or every
+        suspect) cannot explain, or after a reading that fits no suspect."""
         case = self._store.get(case_id)
         inv = case.investigation
         if case.status != "open":
@@ -316,6 +366,21 @@ class InvestigatorTools:
 
 
 # ------------------------------------------------------------------ helpers
+
+
+def _unexplained_view(gap: Unexplained, missed_by: Hypothesis | None) -> UnexplainedView:
+    return UnexplainedView(
+        order=gap.order,
+        hz=gap.hz,
+        strength=gap.power_over_median,
+        missed_by="every suspect" if missed_by is None else missed_by.name,
+    )
+
+
+def _blocking_view(inv: Investigation) -> UnexplainedView | None:
+    """The unexplained impact behind a blocked verdict, when that is a blocker."""
+    blocking = inv.blocking_gap()
+    return None if blocking is None else _unexplained_view(*blocking)
 
 
 def _order_suspect(spec: SuspectSpec) -> OrderSuspect:
@@ -414,6 +479,7 @@ def _view(case: Case) -> CaseView:
         conclude_at=CONCLUDE_ABOVE,
         blockers=inv.blockers() if case.status == "open" and inv.experiments_run else [],
         unresolved_reason=inv.state.unresolved_reason,
+        unexplained=_blocking_view(inv) if case.status == "open" else None,
         suspects=suspects,
         evidence=[
             EvidenceView(

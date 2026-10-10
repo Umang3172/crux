@@ -18,42 +18,59 @@ from rich.table import Table
 
 from .agents.factory import describe as describe_models
 from .data import cwru
-from .data.rig import BENCH_RIG, rig_oracle, synthetic_capture
+from .data.rig import BENCH_RIG, rig_oracle, scenario, synthetic_capture
 from .investigation.catalog import BY_ID
 from .investigation.engine import Investigation, verify_repair
-from .models import FaultKind
+from .models import FaultKind, Observation
 from .physics.frequencies import bearing_multipliers, fault_frequencies
 
 app = typer.Typer(add_completion=False, help="Hypothesis Engine — MechNova")
 console = Console()
 
 
+def _pct(p: float, decimals: int = 0) -> str:
+    """A belief as a percentage, never rounded up to certainty."""
+    if p >= 1.0 - 0.5 * 10 ** -(decimals + 2):
+        return f">{100 - 10**-decimals:.{decimals}f}%"
+    return f"{p:.{decimals}%}"
+
+
 @app.command()
 def demo(
-    fault: str = typer.Option("outer_race", help="Fault to induce on the synthetic rig"),
+    fault: str = typer.Option(
+        "outer_race",
+        help="Fault to induce on the synthetic rig: a catalogue fault, or rolling_element or "
+        "unlisted_impact, which the catalogue does not list",
+    ),
     rpm: float = typer.Option(1798.0),
     severity: float = typer.Option(1.0),
     noise: float = typer.Option(
         0.05,
-        help="Added sensor noise. With a low severity (e.g. --severity 0.35 --noise 0.45) "
-        "the physics cannot settle the case alone and asks for a measurement.",
+        help="Added sensor noise. With a moderate fault under heavy noise (e.g. --fault "
+        "inner_race --severity 0.5 --noise 0.45) the physics cannot settle the case alone and "
+        "asks for a measurement; a fainter one (--severity 0.35) ends unresolved.",
     ),
     verify: bool = typer.Option(True, help="Also show post-repair verification"),
 ) -> None:
     """Run one full investigation and print the transcript and ledger."""
-    kind = FaultKind(fault)
+    try:
+        kind = scenario(fault)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     console.print(
         Panel.fit(
             f"[bold]{BENCH_RIG.name}[/bold]  ·  {rpm:.0f} rpm\n"
             f"models: {describe_models()}\n"
-            f"[dim]ground truth (hidden from the agent): {kind.value}[/dim]",
+            f"[dim]ground truth (hidden from the agent): {kind}[/dim]",
             title="Hypothesis Engine",
         )
     )
 
     obs = synthetic_capture(kind, BENCH_RIG, rpm=rpm, severity=severity, extra_noise=noise)
     inv = Investigation(BENCH_RIG, obs)
-    state = inv.run(oracle=rig_oracle(kind, BENCH_RIG))
+    state = inv.run(
+        oracle=rig_oracle(kind, BENCH_RIG, severity=severity, extra_noise=noise, rpm=rpm)
+    )
 
     console.print("\n[bold]Transcript[/bold]")
     for line in state.transcript:
@@ -67,7 +84,7 @@ def demo(
     for h in sorted(state.hypotheses, key=lambda h: h.posterior, reverse=True):
         table.add_row(
             h.label,
-            f"{h.posterior:.1%}",
+            _pct(h.posterior, 1),
             "—" if h.correlation is None else f"{h.correlation:.2f}",
             "rejected" if h.rejected else "live",
         )
@@ -81,7 +98,7 @@ def demo(
     if c:
         console.print(
             Panel.fit(
-                f"[bold]{c.cause}[/bold] at {c.confidence:.0%}\n\n"
+                f"[bold]{c.cause}[/bold] at {_pct(c.confidence)}\n\n"
                 f"{c.reasoning}\n\n"
                 f"[bold]Action[/bold]: {c.recommended_action}\n"
                 f"[bold]What would change my mind[/bold]: {c.what_would_change_my_mind}",
@@ -91,12 +108,12 @@ def demo(
         correct = c.root_cause == kind
         console.print(
             f"\n[{'green' if correct else 'red'}]"
-            f"{'correct' if correct else 'WRONG'}[/] against the induced fault ({kind.value})"
+            f"{'correct' if correct else 'WRONG'}[/] against the induced fault ({kind})"
         )
     elif state.outcome == "unresolved":
         console.print(Panel.fit(state.unresolved_reason or "", title="Unresolved"))
         console.print(
-            f"\n[yellow]no verdict[/yellow] rather than a guess (the induced fault was {kind.value})"
+            f"\n[yellow]no verdict[/yellow] rather than a guess (the induced fault was {kind})"
         )
 
     if verify and c and c.root_cause is not None:
@@ -107,6 +124,77 @@ def demo(
                 "\n".join(f"{k}: {v}" for k, v in result.items()),
                 title="Repair verification",
             )
+        )
+
+
+@app.command()
+def investigate(
+    fault: str = typer.Option(
+        "outer_race",
+        help="Fault to induce on the synthetic rig: a catalogue fault, or rolling_element or "
+        "unlisted_impact, which the catalogue does not list",
+    ),
+    severity: float = typer.Option(1.0),
+    noise: float = typer.Option(0.05, help="Added sensor noise; see `demo --help`"),
+    rounds: int = typer.Option(6, help="Investigator turns before the loop stops itself"),
+) -> None:
+    """Let the investigator agent run a case through the tools.
+
+    Gemini when credentials are configured (Google Cloud login or an API key),
+    the scripted offline investigator otherwise. The first line says which.
+    """
+    from .agents.investigator import investigate as run_agent
+    from .tools import InMemoryCaseStore, open_case
+
+    try:
+        kind = scenario(fault)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    store = InMemoryCaseStore()
+    obs = synthetic_capture(kind, BENCH_RIG, severity=severity, extra_noise=noise)
+    case = open_case(
+        store,
+        BENCH_RIG,
+        obs,
+        answer_source=rig_oracle(kind, BENCH_RIG, severity=severity, extra_noise=noise),
+    )
+    try:
+        run = run_agent(store, case.id, max_rounds=rounds)
+    except ImportError as exc:  # the agent framework is the optional `llm` extra
+        console.print(
+            f"[red]The investigator needs the agent framework ({exc}).[/red]\n"
+            "Install it with:  uv sync --extra dev --extra llm"
+        )
+        raise typer.Exit(1) from exc
+    view = run.case
+
+    console.print(
+        Panel.fit(
+            f"[bold]model[/bold]: {run.model}\n[bold]rounds[/bold]: {run.rounds}\n"
+            + (f"[bold]stopped[/bold]: {run.stopped}\n" if run.stopped else "")
+            + f"[dim]ground truth (hidden from the agent): {kind}[/dim]",
+            title="Investigator",
+        )
+    )
+    console.print("\n[bold]Tool calls[/bold]")
+    for name, args in run.tool_calls:
+        shown = {k: v for k, v in args.items() if k != "case_id"}
+        console.print(f"  • {name}({', '.join(f'{k}={v!r}' for k, v in shown.items())})")
+    if run.thoughts:
+        console.print("\n[bold]Reasoning the model showed[/bold]")
+        for thought in run.thoughts:
+            console.print(f"  • {thought}")
+    console.print("\n[bold]Narration[/bold]")
+    for line in view.narration:
+        console.print(f"  • {line}")
+    if view.status == "concluded":
+        console.print(Panel.fit(f"{view.leader} at {_pct(view.leader_belief)}", title="Concluded"))
+    elif view.status == "unresolved":
+        console.print(Panel.fit(view.unresolved_reason or "", title="Unresolved"))
+    else:
+        waiting = [r.test_name for r in view.requests if r.status == "waiting"]
+        console.print(
+            Panel.fit(f"open; waiting for: {', '.join(waiting) or 'nothing'}", title="Open")
         )
 
 
@@ -137,24 +225,31 @@ class _CaseResult:
 def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _CaseResult:
     """One full investigation against a real capture.
 
-    There is no oracle here. A requested measurement is answered out of the
-    recording itself, and a test the recording cannot answer — a coast-down, a
-    temperature reading — comes back as nothing rather than as a fabricated
-    number. Faking those would make the headline number meaningless.
+    There is no oracle here. The case is opened on the first `seconds` of the
+    recording, and a requested capture is answered by the stretch that follows,
+    scored at its own length: the same machine in the same state, with noise the
+    first look has not seen. A test the recording cannot answer — a coast-down,
+    a temperature reading, or a capture when no second stretch of that length
+    is left — comes back as nothing rather than as a fabricated number. Faking
+    those would make the headline number meaningless.
     """
     observation = cwru.load_capture(case.file, duration_s=seconds)
     investigation = Investigation(cwru.CWRU_DRIVE_END, observation)
     answered: list[str] = []
     unanswerable: list[str] = []
 
-    def measure(test_id: str) -> float | None:
+    def measure(test_id: str) -> Observation | None:
         try:
-            value = investigation.measure_from_capture(test_id, observation)
+            if BY_ID[test_id].capture_s is None:
+                raise ValueError("only a person at the machine can report it")
+            later = cwru.load_capture(case.file, duration_s=seconds, offset_s=seconds)
+            if len(later.waveform) < len(observation.waveform):
+                raise ValueError("the recording has no second stretch of that length")
         except ValueError:
             unanswerable.append(test_id)
             return None
         answered.append(test_id)
-        return value
+        return later
 
     state = investigation.run(max_requests=max_requests, oracle=measure)
     conclusion = state.conclusion

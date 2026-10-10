@@ -11,12 +11,18 @@ Three rules hold everywhere below:
 * Beliefs are one distribution over every hypothesis, recomputed from each
   hypothesis' prior and the log-likelihood of all the evidence so far. Nothing
   is frozen out, so a hypothesis written off early can come back.
+* A fault has one severity, whatever it is. The evidence is kept per severity
+  and averaged at the end, so a hypothesis cannot explain the first capture as
+  a mild fault and a later reading as a severe one.
+* What a requested capture will read is simulated for every hypothesis, at the
+  capture's own length and noise, never typed in.
 * A suspect written during the case is simulated like any other and scored on
   everything already seen, the first capture and every reading. It gains belief
   only by explaining the evidence better.
 * There is no verdict below `CONCLUDE_ABOVE`, none while the capture holds a
-  strong periodic impact the leader cannot explain, and none after a reading
-  that fits no hypothesis. Such a case ends "unresolved", with the reason.
+  strong periodic impact the leader (or the whole list) cannot explain, and none
+  after a reading that fits no hypothesis. Such a case ends "unresolved", with
+  the reason.
 """
 
 from __future__ import annotations
@@ -24,7 +30,8 @@ from __future__ import annotations
 import math
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cached_property
 
 import numpy as np
 
@@ -46,11 +53,14 @@ from ..physics.likelihood import (
     Line,
     Prediction,
     Unexplained,
+    capture_features,
     evidence_lines,
-    log_likelihood,
+    log_likelihood_by_severity,
+    logmeanexp,
     measure_lines,
     noise_level,
     predict,
+    predict_reading,
     predicted_lines,
     unexplained_envelope_line,
 )
@@ -77,9 +87,10 @@ CONCLUDE_ABOVE = 0.80
 #: 4 sigma is about 6e-5, so this is almost never noise.
 FITS_NONE_SIGMA = 4.0
 
-#: A written suspect must differ from every existing hypothesis by at least this
-#: many combined standard deviations on some predicted line, or no measurement of
-#: the capture could ever tell them apart and it is refused as a duplicate.
+#: Two hypotheses that differ by less than this many standard deviations cannot
+#: be told apart. A written suspect must differ from every existing hypothesis by
+#: at least this much on some predicted line, or it is refused as a duplicate; a
+#: test is offered only if the two leaders are expected to read this far apart.
 DISTINCT_SIGMA = 1.0
 
 #: The correlation shown beside each hypothesis is computed on one simulation at
@@ -137,9 +148,22 @@ def _pct(p: float) -> str:
     return ">99%" if p >= 0.995 else f"{p:.0%}"
 
 
+def _blocks(gap: Unexplained | None) -> bool:
+    """An unexplained line stands in the way of a verdict only when it is
+    stronger than everything the same hypotheses do explain."""
+    return gap is not None and gap.power_over_median > gap.strongest_explained
+
+
+def _logsumexp(values: np.ndarray) -> float:
+    best = float(np.max(values))
+    if not math.isfinite(best):
+        return best
+    return best + math.log(float(np.sum(np.exp(values - best))))
+
+
 @dataclass(frozen=True)
-class _Reading:
-    """How each hypothesis scores one value of one test's feature.
+class _ReadingModel:
+    """What each hypothesis predicts one measurement reads, per severity.
 
     A hypothesis with no prediction for the feature gets a flat density across
     the span the others cover, padded by four sigma: it neither claims the
@@ -147,29 +171,109 @@ class _Reading:
     """
 
     test: EvidenceTest
-    predictions: tuple[float | None, ...]
+    means: tuple[np.ndarray | None, ...]
+    scales: tuple[np.ndarray | None, ...]
 
     @property
+    def known(self) -> bool:
+        return any(m is not None for m in self.means)
+
+    @cached_property
     def span(self) -> tuple[float, float]:
-        known = [p for p in self.predictions if p is not None]
-        return min(known) - 4.0 * self.test.sigma, max(known) + 4.0 * self.test.sigma
+        pairs = [(m, s) for m, s in zip(self.means, self.scales, strict=True) if m is not None]
+        return (
+            min(float((m - 4.0 * s).min()) for m, s in pairs),
+            max(float((m + 4.0 * s).max()) for m, s in pairs),
+        )
 
-    def densities(self, value: float) -> np.ndarray:
-        return np.exp(self.log_densities(value))
-
-    def log_densities(self, value: float) -> np.ndarray:
+    def log_densities(self, value: float) -> list[np.ndarray]:
+        """log p(value | hypothesis, severity): one array per hypothesis."""
         # In logs, so a reading far from a prediction costs a large finite
         # amount instead of underflowing to an impossible zero.
         lo, hi = self.span
-        flat = -math.log(hi - lo)
-        sigma = self.test.sigma
-        norm = math.log(sigma * math.sqrt(2.0 * math.pi))
+        flat = np.array([-math.log(hi - lo)])
+        return [
+            flat
+            if m is None
+            else -0.5 * ((value - m) / s) ** 2 - np.log(s * math.sqrt(2.0 * math.pi))
+            for m, s in zip(self.means, self.scales, strict=True)
+        ]
+
+    def marginal(self, value: float, weights: list[np.ndarray]) -> np.ndarray:
+        """log p(value | hypothesis), each averaged over its severities by `weights`."""
         return np.array(
             [
-                flat if p is None else -0.5 * ((value - p) / sigma) ** 2 - norm
-                for p in self.predictions
+                _logsumexp(np.log(np.maximum(w, 1e-300)) + d)
+                for w, d in zip(weights, self.log_densities(value), strict=True)
             ]
         )
+
+    def nearest(self, value: float) -> float:
+        """Sigmas between the value and the closest prediction of any hypothesis."""
+        return min(
+            float((np.abs(value - m) / s).min())
+            for m, s in zip(self.means, self.scales, strict=True)
+            if m is not None
+        )
+
+
+def _reported(test: EvidenceTest, kind: FaultKind, severity: float | None) -> float | None:
+    """What a fault at `severity` predicts for a value a person reports.
+
+    The catalogue's table gives a full-strength fault. A milder one is taken to
+    sit proportionally closer to what a healthy machine reads, so a small reading
+    does not count against a small fault. An assumption, stated in docs/DOMAIN.md.
+    """
+    typed = test.predict(kind)
+    rest = test.predict(FaultKind.HEALTHY)
+    if typed is None or rest is None or severity is None:
+        return typed
+    return rest + (typed - rest) * min(severity, 1.0)
+
+
+def _imagine(model: _ReadingModel, p: np.ndarray, weights: list[np.ndarray]) -> tuple[float, float]:
+    """Imagine each live hypothesis answering a test.
+
+    Under a hypothesis that predicts the reading, the answers are three
+    Gauss-Hermite points around its prediction at each severity; under one that
+    predicts nothing, seven points across the flat range. Returns the entropy
+    expected afterwards, and the chance the answer brings some hypothesis to
+    the bar.
+    """
+    lo, hi = model.span
+    expected_h, settle = 0.0, 0.0
+    for i, (m, s) in enumerate(zip(model.means, model.scales, strict=True)):
+        if m is None:
+            outcomes = [(float(v), 1.0 / 7.0) for v in np.linspace(lo, hi, 7)]
+        else:
+            outcomes = [
+                (float(m[j] + z * s[j]), float(weights[i][j] * w))
+                for j in range(len(m))
+                for z, w in zip(_GH_NODES, _GH_WEIGHTS, strict=True)
+            ]
+        for value, weight in outcomes:
+            if weight <= 0.0:
+                continue
+            marginal = model.marginal(value, weights)
+            post = p * np.exp(marginal - marginal.max())
+            if post.sum() <= 0:
+                continue
+            post = post / post.sum()
+            expected_h += p[i] * weight * _entropy(post)
+            if post.max() >= CONCLUDE_ABOVE:
+                settle += p[i] * weight
+    return expected_h, settle
+
+
+@dataclass(frozen=True)
+class _Taken:
+    """A reading already in the evidence, kept so a late suspect is scored on it too."""
+
+    test: EvidenceTest
+    value: float
+    evidence_id: str
+    n: int | None = None  # samples in the answering capture, if not what the test asks for
+    noise: float | None = None  # its noise, if measured
 
 
 @dataclass
@@ -178,6 +282,14 @@ class TestChoice:
     expected_info_gain: float
     gain_per_minute: float
     reason: str
+    #: What each live hypothesis is expected to read, by name.
+    predictions: dict[str, float] = field(default_factory=dict)
+    #: The allowance on a reading, in the same units.
+    sigma: float = 0.0
+    #: The two leading hypotheses the test is bought to tell apart.
+    separates: tuple[str, ...] = ()
+    #: The chance its answer brings some hypothesis to the bar.
+    settle_chance: float = 0.0
 
 
 class Investigation:
@@ -214,14 +326,21 @@ class Investigation:
         # Beliefs are recomputed from these: log prior + log-likelihood of the
         # first capture + log-likelihood of every reading, per hypothesis name.
         self._log_prior = {h.name: math.log(h.prior) for h in self.state.hypotheses}
-        self._first_look: dict[str, float] | None = None
-        self._reading_log = {h.name: 0.0 for h in self.state.hypotheses}
-        self._readings: list[tuple[EvidenceTest, float, str]] = []
+        # Both are kept per severity (see `_log_evidence`).
+        self._first_look: dict[str, np.ndarray] | None = None
+        self._reading_log = {
+            h.name: np.zeros(len(self._severities(h))) for h in self.state.hypotheses
+        }
+        self._readings: list[_Taken] = []
         self._written: dict[str, OrderSuspect] = {}
         self._noise: float | None = None
         self._fit_ids: dict[str, str] = {}
         self._misfits: list[str] = []
-        self._unexplained: dict[str, Unexplained | None] = {}
+        self._unexplained: dict[str | None, Unexplained | None] = {}
+        #: Why the last `choose_next_test` offered nothing, in words.
+        self.no_useful_test = ""
+        #: Requested readings nobody could take, by test name.
+        self._untaken: list[str] = []
 
     # ------------------------------------------------------------------ helpers
     @property
@@ -296,14 +415,7 @@ class Investigation:
         """The only place a posterior is written: prior times the likelihood of
         all the evidence so far, for every hypothesis, normalised."""
         names = [h.name for h in self.state.hypotheses]
-        logs = np.array(
-            [
-                self._log_prior[n]
-                + (self._first_look[n] if self._first_look is not None else 0.0)
-                + self._reading_log[n]
-                for n in names
-            ]
-        )
+        logs = np.array([self._log_prior[n] + logmeanexp(self._log_evidence(n)) for n in names])
         finite = np.isfinite(logs)
         if not finite.any():
             return  # nothing can be said; keep the beliefs as they were
@@ -311,6 +423,27 @@ class Investigation:
         weights = weights / weights.sum()
         for h, w in zip(self.state.hypotheses, weights, strict=True):
             h.posterior = float(w)
+
+    def _log_evidence(self, name: str) -> np.ndarray:
+        """log p(everything seen so far | hypothesis, severity), per severity."""
+        first = self._first_look[name] if self._first_look is not None else 0.0
+        return np.atleast_1d(first + self._reading_log[name]).astype(float)
+
+    def _severity_weights(self, h: Hypothesis) -> np.ndarray:
+        """How the evidence so far spreads a hypothesis over its severities."""
+        logs = self._log_evidence(h.name)
+        finite = np.isfinite(logs)
+        if not finite.any():
+            return np.full(len(logs), 1.0 / len(logs))
+        weights = np.where(finite, np.exp(logs - logs[finite].max()), 0.0)
+        return weights / weights.sum()
+
+    def _capture_noise(self) -> float:
+        """The first capture's broadband noise, which every simulation is run at."""
+        if self._noise is None:
+            obs = self.observation
+            self._noise = noise_level(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm))
+        return self._noise
 
     def _relabel(self) -> None:
         """Mark hypotheses as rejected, or back in contention, after an update."""
@@ -331,8 +464,9 @@ class Investigation:
         """Log-likelihood of the first capture under each hypothesis, relative to the best."""
         if self._first_look is None:
             return None
-        best = max(self._first_look.values())
-        return {n: v - best for n, v in self._first_look.items()}
+        fits = {n: logmeanexp(v) for n, v in self._first_look.items()}
+        best = max(fits.values())
+        return {n: v - best for n, v in fits.items()}
 
     @property
     def experiments_run(self) -> bool:
@@ -346,7 +480,9 @@ class Investigation:
         lines = self._lines()
         observed = measure_lines(obs.waveform, fs, fr, lines)
         predictions = self._predictions(lines)
-        self._first_look = {n: log_likelihood(observed, p) for n, p in predictions.items()}
+        self._first_look = {
+            n: log_likelihood_by_severity(observed, p) for n, p in predictions.items()
+        }
         return len(lines)
 
     def _record_fit(self, h: Hypothesis) -> None:
@@ -371,8 +507,9 @@ class Investigation:
             return dict(self.fit)
 
         obs = self.observation
-        self._noise = noise_level(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm))
-        self.ledger.add("broadband noise of the capture", round(self._noise, 3), "", "sensor")
+        self.ledger.add(
+            "broadband noise of the capture", round(self._capture_noise(), 3), "", "sensor"
+        )
         n_lines = self._score_first_look()
 
         # The correlation stays as the picture of the comparison (the UI draws
@@ -396,6 +533,13 @@ class Investigation:
             f"lines. Belief: {ranked}."
         )
         self._relabel()
+        gap = self.unexplained_by_any()
+        if _blocks(gap):
+            self.state.transcript.append(
+                f"The capture also has periodic impacts at {gap.order:.2f}x shaft speed that "
+                "no hypothesis on the list predicts, stronger than anything on the list "
+                "explains: the list is missing a cause."
+            )
         return dict(self.fit)
 
     # ------------------------------------------------------------ written suspects
@@ -406,13 +550,17 @@ class Investigation:
         already seen: the first capture (re-scored for everyone on the lines it
         adds) and every reading taken (it predicts none of the catalogue's
         features, so each counts flat for it). Refused, and not added, when it
-        predicts nothing that sets it apart from an existing hypothesis.
+        predicts nothing that sets it apart from an existing hypothesis, or a line
+        the capture cannot contain; such a refusal is written to the ledger.
         Returns (accepted, what happened).
         """
         if self.state.outcome != "open":
             return False, f"The case is already {self.state.outcome}."
         if any(h.name == suspect.name for h in self.state.hypotheses):
             return False, f"'{suspect.name}' is already a hypothesis."
+        unseen = self._beyond_the_capture(suspect)
+        if unseen:
+            return self._refuse(suspect, " ".join(unseen))
 
         prior = float(np.mean([h.prior for h in self.state.hypotheses]))
         h = Hypothesis(
@@ -426,10 +574,10 @@ class Investigation:
         self._written[suspect.name] = suspect
         self.state.hypotheses.append(h)
 
-        if self._noise is None:
+        if not self.experiments_run:
             # The experiments have not run yet; it will be scored with everyone.
             self._log_prior[h.name] = math.log(prior)
-            self._reading_log[h.name] = 0.0
+            self._replay_readings(h)
             self._recompute()
             self.state.transcript.append(
                 f"New suspect {h.label}: waiting for the virtual experiments."
@@ -442,22 +590,20 @@ class Investigation:
         if twin is not None:
             self.state.hypotheses.remove(h)
             del self._written[suspect.name]
-            return False, (
+            return self._refuse(
+                suspect,
                 f"It predicts nothing that sets it apart from {twin.replace('_', ' ')}: on every "
                 f"line they differ by less than {DISTINCT_SIGMA:g} sigma, so no capture could "
-                "tell them apart."
+                "tell them apart.",
             )
 
         self._log_prior[h.name] = math.log(prior)
-        self._reading_log[h.name] = 0.0
-        for test, value, _ in self._readings:
-            reading = _Reading(
-                test, tuple(self._prediction_for(test, x) for x in self.state.hypotheses)
-            )
-            self._reading_log[h.name] += float(reading.log_densities(value)[-1])
+        self._replay_readings(h)
         obs = self.observation
         observed = measure_lines(obs.waveform, obs.sample_rate_hz, shaft_hz(self.rpm), lines)
-        self._first_look = {n: log_likelihood(observed, p) for n, p in predictions.items()}
+        self._first_look = {
+            n: log_likelihood_by_severity(observed, p) for n, p in predictions.items()
+        }
         self._unexplained.clear()
 
         sim = synthesize(
@@ -476,6 +622,32 @@ class Investigation:
         )
         self._relabel()
         return True, f"Tested: belief {_pct(h.posterior)}."
+
+    def _beyond_the_capture(self, suspect: OrderSuspect) -> list[str]:
+        """Lines of a suspect this capture cannot contain, whatever their cause: a
+        component at or above the Nyquist frequency cannot appear in it."""
+        fr, nyquist = shaft_hz(self.rpm), self.observation.sample_rate_hz / 2.0
+        found = [
+            f"A tone at {order:g}x ({order * fr:.0f} Hz) is above {nyquist:.0f} Hz."
+            for order, _ in suspect.tones
+            if order * fr >= nyquist
+        ]
+        for rate_order, _, _, resonance_hz in suspect.impacts:
+            if rate_order * fr >= nyquist:
+                found.append(
+                    f"Impacts at {rate_order:g}x ({rate_order * fr:.0f} Hz) are above "
+                    f"{nyquist:.0f} Hz."
+                )
+            if resonance_hz is not None and resonance_hz >= nyquist:
+                found.append(f"A resonance at {resonance_hz:.0f} Hz is above {nyquist:.0f} Hz.")
+        return found
+
+    def _refuse(self, suspect: OrderSuspect, why: str) -> tuple[bool, str]:
+        """A written suspect the physics will not test, with the reason on the record."""
+        self.ledger.add(
+            f"written suspect {suspect.name.replace('_', ' ')} refused: {why}", source="physics"
+        )
+        return False, why
 
     def _indistinct(self, name: str, predictions: dict[str, Prediction]) -> str | None:
         """The existing hypothesis this one cannot be told apart from, if any.
@@ -497,65 +669,164 @@ class Investigation:
                     return other
         return None
 
-    @staticmethod
-    def _prediction_for(test: EvidenceTest, h: Hypothesis) -> float | None:
-        return test.predict(h.kind) if h.kind is not None else None
+    def _replay_readings(self, h: Hypothesis) -> None:
+        """Score a hypothesis that has just joined on every reading already taken."""
+        total = np.zeros(len(self._severities(h)))
+        position = self.state.hypotheses.index(h)
+        for taken in self._readings:
+            model = self._reading_model(taken.test, self.state.hypotheses, taken.n, taken.noise)
+            total = total + model.log_densities(taken.value)[position]
+        self._reading_log[h.name] = total
+
+    # ------------------------------------------------------ what a test would read
+    def _reading_prediction(
+        self, test: EvidenceTest, h: Hypothesis, n: int | None = None, noise: float | None = None
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """What `h` predicts `test` reads, per severity: the value and its scale.
+
+        A value a person reports comes from the catalogue's table, the same at
+        every severity. A capture is simulated: `n` samples at `noise`, by
+        default the length the test asks for at the first capture's noise. None
+        when the hypothesis says nothing about the feature, or this sensor
+        cannot give it.
+        """
+        severities = self._severities(h)
+        if test.capture_s is None:
+            if h.kind is None:
+                return None
+            means = [_reported(test, h.kind, severity) for severity in severities]
+            if means[0] is None:
+                return None
+            return np.array(means, dtype=float), np.full(len(severities), test.sigma)
+        fs = self.observation.sample_rate_hz
+        found = predict_reading(
+            self._signature_builder(h),
+            severities,
+            test.feature,
+            fs,
+            n or round(test.capture_s * fs),
+            self._capture_noise() if noise is None else noise,
+            self.machine,
+            self.rpm,
+        )
+        if found is None:
+            return None
+        means, spreads = found
+        return means, np.sqrt(spreads**2 + test.sigma**2)
+
+    def _reading_model(
+        self,
+        test: EvidenceTest,
+        hypotheses: list[Hypothesis],
+        n: int | None = None,
+        noise: float | None = None,
+    ) -> _ReadingModel:
+        found = [self._reading_prediction(test, h, n, noise) for h in hypotheses]
+        return _ReadingModel(
+            test,
+            tuple(None if f is None else f[0] for f in found),
+            tuple(None if f is None else f[1] for f in found),
+        )
+
+    def _expected_reading(self, test: EvidenceTest, h: Hypothesis) -> float | None:
+        """What `h` would most plausibly read for `test`: its prediction at the
+        one severity the evidence favours."""
+        severity = self._severities(h)[int(np.argmax(self._severity_weights(h)))]
+        if test.capture_s is None:
+            return None if h.kind is None else _reported(test, h.kind, severity)
+        fs = self.observation.sample_rate_hz
+        found = predict_reading(
+            self._signature_builder(h),
+            [severity],
+            test.feature,
+            fs,
+            round(test.capture_s * fs),
+            self._capture_noise(),
+            self.machine,
+            self.rpm,
+        )
+        return None if found is None else float(found[0][0])
 
     # ----------------------------------------------------------- choose a test
     def choose_next_test(self) -> TestChoice | None:
-        """Expected information gain per technician-minute.
+        """Expected information gain per technician-minute, among the tests whose
+        answer could settle the case.
 
-        For each test, imagine its outcome under every live hypothesis (three
-        Gauss-Hermite points around its prediction, or the flat range for a
-        hypothesis that predicts nothing), work out the posterior each outcome
-        would produce, and average the entropy left. Every live hypothesis takes
-        part; none is dropped for lacking a prediction.
+        Every live hypothesis is imagined taking each test, at each severity the
+        evidence still allows (`_imagine`). The entropy the answers would leave
+        gives the test's information gain; the share of answers that would bring
+        some hypothesis to the bar is its chance of settling the case. A test is
+        not offered, however cheap, when no answer would settle the case or when
+        the two leading hypotheses are expected to read within `DISTINCT_SIGMA`
+        of each other. When nothing is offered, `no_useful_test` says why.
         """
+        self.no_useful_test = ""
         live = self.state.surviving(REJECT_BELOW)
         if len(live) < 2:
             return None
         p = np.array([h.posterior for h in live], dtype=float)
         p = p / p.sum()
+        weights = [self._severity_weights(h) for h in live]
         h_before = _entropy(p)
+        first, second = sorted(live, key=lambda h: h.posterior, reverse=True)[:2]
 
         best: TestChoice | None = None
+        cannot_settle: TestChoice | None = None
         for test in CATALOG:
             if test.id in self.state.requested_tests:
                 continue
-            reading = _Reading(test, tuple(self._prediction_for(test, h) for h in live))
-            known = [v for v in reading.predictions if v is not None]
-            if not known:
+            model = self._reading_model(test, live)
+            if not model.known:
                 continue
-            lo, hi = reading.span
-
-            expected_h = 0.0
-            for i, pred in enumerate(reading.predictions):
-                if pred is None:
-                    outcomes = zip(np.linspace(lo, hi, 7), np.full(7, 1.0 / 7), strict=True)
-                else:
-                    outcomes = zip(pred + _GH_NODES * test.sigma, _GH_WEIGHTS, strict=True)
-                for value, weight in outcomes:
-                    post = p * reading.densities(float(value))
-                    if post.sum() <= 0:
-                        continue
-                    expected_h += p[i] * weight * _entropy(post / post.sum())
-
+            expected_h, settle = _imagine(model, p, weights)
             gain = h_before - expected_h
             per_min = gain / max(test.effort_min, 0.1)
-            spread = (max(known) - min(known)) / test.sigma
+            expected = {
+                h.name: float(w @ m)
+                for h, w, m in zip(live, weights, model.means, strict=True)
+                if m is not None
+            }
+            apart: float | None = None
+            if first.name in expected and second.name in expected:
+                apart = abs(expected[first.name] - expected[second.name]) / test.sigma
+                told = f"{first.label} and {second.label} expected {apart:.1f} sigma apart"
+            else:
+                told = f"{first.label} or {second.label} predicts nothing for it"
             reason = (
-                f"separates the survivors by {spread:.1f} sigma; "
+                f"{told}; {settle:.0%} chance of settling the case; "
                 f"{test.effort_min:.0f} min, downtime: {test.downtime}"
             )
-            choice = TestChoice(test, gain, per_min, reason)
-            if best is None or per_min > best.gain_per_minute:
+            choice = TestChoice(
+                test, gain, per_min, reason, expected, test.sigma, (first.name, second.name), settle
+            )
+            # Not worth a technician's time: no answer would settle the case, or
+            # the two leaders are expected to read within a sigma of each other.
+            if settle <= 0.0 or (apart is not None and apart < DISTINCT_SIGMA):
+                if cannot_settle is None or gain > cannot_settle.expected_info_gain:
+                    cannot_settle = choice
+            elif best is None or per_min > best.gain_per_minute:
                 best = choice
 
-        if best:
-            top = [h.label for h in sorted(live, key=lambda h: h.posterior, reverse=True)[:3]]
-            self.state.transcript.append(
-                f"Cannot separate {' vs '.join(top)}. Requesting: {best.test.name} ({best.reason})."
-            )
+        if best is None:
+            if cannot_settle is None:
+                self.no_useful_test = "No measurement on the menu separates them."
+            elif cannot_settle.settle_chance <= 0.0:
+                self.no_useful_test = (
+                    "No measurement on the menu can settle it: no answer to the most "
+                    f"informative one, {cannot_settle.test.name}, would bring any hypothesis "
+                    f"to {CONCLUDE_ABOVE:.0%}."
+                )
+            else:
+                self.no_useful_test = (
+                    "No measurement on the menu can settle it: the most informative one, "
+                    f"{cannot_settle.test.name}, is expected to read less than "
+                    f"{DISTINCT_SIGMA:g} sigma apart for {first.label} and {second.label}."
+                )
+            return None
+        top = [h.label for h in sorted(live, key=lambda h: h.posterior, reverse=True)[:3]]
+        self.state.transcript.append(
+            f"Cannot separate {' vs '.join(top)}. Requesting: {best.test.name} ({best.reason})."
+        )
         return best
 
     def request(self, choice: TestChoice) -> None:
@@ -566,35 +837,74 @@ class Investigation:
             " nats expected",
             "physics",
         )
+        # Why this test, in numbers, for whoever draws the request.
+        self.state.extra["request"] = {
+            "test_id": choice.test.id,
+            "expected_readings": {k: round(v, 3) for k, v in choice.predictions.items()},
+            "sigma": choice.sigma,
+            "separates": list(choice.separates),
+            "chance_of_settling": round(choice.settle_chance, 3),
+            "expected_info_gain": round(choice.expected_info_gain, 4),
+            "gain_per_minute": round(choice.gain_per_minute, 4),
+        }
 
     # ------------------------------------------------------ incorporate evidence
     def apply_outcome(self, test_id: str, value: float, collected_by: str = "technician") -> None:
+        """Take in a reading as a number. For a test answered by a capture, the
+        capture is assumed to be as long as the test asks for, at the first
+        capture's noise; hand over the capture itself (`apply_capture`) when it
+        is not."""
+        self._apply_reading(BY_ID[test_id], float(value), collected_by)
+
+    def apply_capture(
+        self, test_id: str, observation: Observation, collected_by: str = "sensor"
+    ) -> float:
+        """Take in a requested capture: read the test's feature from it, and score
+        that against every hypothesis simulated at this capture's own length and
+        noise. Returns the value read."""
         test = BY_ID[test_id]
+        if observation.sample_rate_hz != self.observation.sample_rate_hz:
+            raise ValueError(
+                f"the capture is sampled at {observation.sample_rate_hz:.0f} Hz, the case at "
+                f"{self.observation.sample_rate_hz:.0f} Hz"
+            )
+        value = self.measure_from_capture(test_id, observation)
+        noise = noise_level(observation.waveform, observation.sample_rate_hz, shaft_hz(self.rpm))
+        self._apply_reading(test, value, collected_by, len(observation.waveform), noise)
+        return value
+
+    def _apply_reading(
+        self,
+        test: EvidenceTest,
+        value: float,
+        collected_by: str,
+        n: int | None = None,
+        noise: float | None = None,
+    ) -> None:
         hyps = self.state.hypotheses
-        reading = _Reading(test, tuple(self._prediction_for(test, h) for h in hyps))
-        if all(v is None for v in reading.predictions):
+        model = self._reading_model(test, hyps, n, noise)
+        if not model.known:
             raise ValueError(f"no hypothesis predicts {test.feature}")
-        densities = reading.densities(float(value))
+        by_severity = model.log_densities(value)
+        # How well each hypothesis expected this value, given what the evidence
+        # so far says of its severity.
+        expected = model.marginal(value, [self._severity_weights(h) for h in hyps])
 
         ev = self.ledger.add(
             f"{test.name}: {test.feature}",
-            round(float(value), 3),
+            round(value, 3),
             "",
             "human_measurement" if collected_by == "technician" else "sensor",
         )
-        top = densities.max()
-        for h, pred, d in zip(hyps, reading.predictions, densities, strict=True):
-            if pred is not None:
-                (h.supports if d >= 0.5 * top else h.tensions).append(ev.id)
+        within = float(expected.max()) + math.log(0.5)
+        for h, mean, log_d in zip(hyps, model.means, expected, strict=True):
+            if mean is not None:
+                (h.supports if log_d >= within else h.tensions).append(ev.id)
 
-        outcome = TestOutcome(test_id=test_id, feature=test.feature, value=value)
-        self.state.outcomes.append(outcome)
-        self._readings.append((test, float(value), ev.id))
+        self.state.outcomes.append(TestOutcome(test_id=test.id, feature=test.feature, value=value))
+        self._readings.append(_Taken(test, value, ev.id, n, noise))
 
-        nearest = min(
-            (abs(value - p) / test.sigma for p in reading.predictions if p is not None),
-            default=math.inf,
-        )
+        nearest = model.nearest(value)
         if nearest > FITS_NONE_SIGMA:
             note = (
                 f"{test.feature} = {value:.2f} fits none of the hypotheses: the nearest "
@@ -603,8 +913,8 @@ class Investigation:
             self._misfits.append(note)
             self.ledger.add(note, round(nearest, 1), " sigma", "physics")
 
-        for h, log_d in zip(hyps, reading.log_densities(float(value)), strict=True):
-            self._reading_log[h.name] += float(log_d)
+        for h, log_d in zip(hyps, by_severity, strict=True):
+            self._reading_log[h.name] = self._reading_log[h.name] + log_d
         self._recompute()
         leader = self.state.leader()
         self.state.transcript.append(
@@ -616,42 +926,76 @@ class Investigation:
 
     def measure_from_capture(self, test_id: str, observation: Observation) -> float:
         """Read a test's feature out of a real capture (the rig or a phone upload)."""
-        ev = feat.extract(observation, self.machine)
         test = BY_ID[test_id]
-        table = {
-            "ratio_2x_1x": ev.ratio_2x_1x(),
-            "env_contrast": ev.env_contrast(),
-            "env_bpfo": ev.env_bpfo,
-            "env_bpfi": ev.env_bpfi,
-            "amp_half_x": ev.amp_half_x,
-            "crest_factor": ev.crest_factor,
-        }
-        if test.feature not in table:
+        if test.capture_s is None:
             raise ValueError(f"{test.feature} cannot be read from a capture; a person reports it")
-        return float(table[test.feature])
+        found = capture_features(
+            observation.waveform, observation.sample_rate_hz, observation.rpm, self.machine
+        )
+        if test.feature not in found:
+            raise ValueError(
+                f"{test.feature} cannot be read from a capture sampled at "
+                f"{observation.sample_rate_hz:.0f} Hz"
+            )
+        return found[test.feature]
 
     # ------------------------------------------------------------------ verdict
+    def _gap(self, key: str | None, statement: str, explained: set[Line]) -> Unexplained | None:
+        """The strongest periodic impact in the capture that `explained` leaves
+        out, cached under `key` (None for the whole list) and written to the
+        ledger the first time it is found."""
+        if key not in self._unexplained:
+            gap = unexplained_envelope_line(
+                self.observation.waveform,
+                self.observation.sample_rate_hz,
+                shaft_hz(self.rpm),
+                explained,
+            )
+            self._unexplained[key] = gap
+            if gap is not None:
+                note = f"envelope line at {gap.order:.2f}x shaft ({gap.hz:.0f} Hz) that {statement}"
+                if all(e.statement != note for e in self.ledger.items):
+                    self.ledger.add(note, gap.power_over_median, "x median power", "physics")
+        return self._unexplained[key]
+
     def unexplained(self, name: str | None = None) -> Unexplained | None:
         """The strongest periodic impact in the capture that hypothesis `name`
         (default: the leader) does not predict, if it clears the false-alarm
         threshold."""
         h = self.hypothesis(name) if name else self.state.leader()
-        if h.name not in self._unexplained:
-            fr = shaft_hz(self.rpm)
-            explained = predicted_lines(self._signature_builder(h)(None), fr)
-            gap = unexplained_envelope_line(
-                self.observation.waveform, self.observation.sample_rate_hz, fr, explained
-            )
-            self._unexplained[h.name] = gap
-            if gap is not None:
-                self.ledger.add(
-                    f"envelope line at {gap.order:.2f}x shaft ({gap.hz:.0f} Hz) that "
-                    f"{h.label} does not predict",
-                    gap.power_over_median,
-                    "x median power",
-                    "physics",
-                )
-        return self._unexplained[h.name]
+        explained = predicted_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
+        return self._gap(h.name, f"{h.label} does not predict", explained)
+
+    def unexplained_by_any(self) -> Unexplained | None:
+        """The strongest periodic impact that no hypothesis on the list predicts."""
+        fr = shaft_hz(self.rpm)
+        explained: set[Line] = set()
+        for h in self.state.hypotheses:
+            explained |= predicted_lines(self._signature_builder(h)(None), fr)
+        return self._gap(None, "no hypothesis predicts", explained)
+
+    def blocking_gap(self) -> tuple[Unexplained, Hypothesis | None] | None:
+        """A periodic impact that stands between the case and a verdict, and the
+        hypothesis that leaves it out (None when every hypothesis does).
+
+        Either kind blocks only when it is stronger than everything the same
+        hypotheses explain, so a weaker stray line on a real machine does not.
+        A line the leader leaves out matters once the leader has reached the
+        bar. A line the whole list leaves out matters at any belief: it would
+        block whichever of these hypotheses came to lead, so no reading can
+        bring a verdict, and the list is missing a cause.
+        """
+        if not self.experiments_run:
+            return None
+        gap = self.unexplained_by_any()
+        if _blocks(gap):
+            return gap, None
+        leader = self.state.leader()
+        if leader.posterior >= CONCLUDE_ABOVE:
+            gap = self.unexplained(leader.name)
+            if _blocks(gap):
+                return gap, leader
+        return None
 
     def blockers(self) -> list[str]:
         """Why the case cannot conclude yet. Empty when a verdict is supported."""
@@ -665,16 +1009,20 @@ class Investigation:
                 f"{leader.label} leads at {_pct(leader.posterior)} and {runner.label} follows "
                 f"at {_pct(runner.posterior)}; a verdict needs {CONCLUDE_ABOVE:.0%}."
             )
-        else:
-            # Only a leader that would otherwise win is held to this: a strong
-            # periodic impact it cannot account for means the list is missing a cause.
-            gap = self.unexplained(leader.name)
-            if gap is not None and gap.power_over_median > gap.strongest_explained:
-                reasons.append(
-                    f"The capture has periodic impacts at {gap.order:.2f}x shaft speed "
-                    f"({gap.hz:.0f} Hz, {gap.power_over_median:.0f}x the median) that "
-                    f"{leader.label} does not predict, stronger than anything it explains."
-                )
+        blocking = self.blocking_gap()
+        if blocking is not None:
+            gap, h = blocking
+            where = (
+                f"{gap.order:.2f}x shaft speed ({gap.hz:.0f} Hz, "
+                f"{gap.power_over_median:.0f}x the median)"
+            )
+            reasons.append(
+                f"The capture has periodic impacts at {where} that no hypothesis on the list "
+                "predicts, stronger than anything on the list explains."
+                if h is None
+                else f"The capture has periodic impacts at {where} that {h.label} does not "
+                "predict, stronger than anything it explains."
+            )
         reasons += self._misfits
         return reasons
 
@@ -689,7 +1037,7 @@ class Investigation:
         change_my_mind = "Nothing in the current catalogue would move this materially."
         best_gap = 0.0
         for test in CATALOG:
-            a, b = self._prediction_for(test, leader), self._prediction_for(test, runner_up)
+            a, b = self._expected_reading(test, leader), self._expected_reading(test, runner_up)
             if a is None or b is None:
                 continue
             gap = abs(a - b) / test.sigma
@@ -701,6 +1049,15 @@ class Investigation:
                     f"would move this toward {runner_up.label}."
                 )
 
+        reasoning = self._reasoning(leader)
+        if leader.kind is FaultKind.HEALTHY:
+            unseen = self.cannot_exclude()
+            if unseen:
+                reasoning += (
+                    " A mild fault would look the same in this evidence: "
+                    + ", ".join(f"{h.label} at severity {severity:g}" for h, severity in unseen)
+                    + " cannot be excluded."
+                )
         if leader.kind is not None:
             action = ACTIONS[leader.kind]
         else:
@@ -711,7 +1068,7 @@ class Investigation:
         conclusion = Conclusion(
             root_cause=leader.kind,
             confidence=leader.posterior,
-            reasoning=self._reasoning(leader),
+            reasoning=reasoning,
             recommended_action=action,
             what_would_change_my_mind=change_my_mind,
             evidence_ids=self.ledger.ids(),
@@ -724,6 +1081,27 @@ class Investigation:
             f"Conclusion: {leader.label} at {_pct(leader.posterior)}. {action}"
         )
         return conclusion
+
+    def cannot_exclude(self) -> list[tuple[Hypothesis, float]]:
+        """The detection limit of a healthy verdict: the faults the evidence fits
+        nearly as well as a healthy machine, each at the mildest severity
+        simulated.
+
+        "Nearly as well" is the rejection threshold applied one against one: a
+        fault is listed if, set alone against healthy with equal priors, it
+        would keep at least `REJECT_BELOW` of the belief.
+        """
+        healthy = next((h for h in self.state.hypotheses if h.kind is FaultKind.HEALTHY), None)
+        if healthy is None:
+            return []
+        reference = float(self._log_evidence(healthy.name).max())
+        keep = math.log(REJECT_BELOW / (1.0 - REJECT_BELOW))
+        found = []
+        for h in self.state.hypotheses:
+            severity = self._severities(h)[0]
+            if severity is not None and float(self._log_evidence(h.name)[0]) - reference >= keep:
+                found.append((h, severity))
+        return found
 
     def _reasoning(self, leader: Hypothesis) -> str:
         """Say why, from the ledger, without claiming more than it shows."""
@@ -743,7 +1121,9 @@ class Investigation:
                     f"favoured {leader.label}"
                 )
         if self._readings:
-            readings = ", ".join(f"{t.feature} = {v:.2f} ({eid})" for t, v, eid in self._readings)
+            readings = ", ".join(
+                f"{r.test.feature} = {r.value:.2f} ({r.evidence_id})" for r in self._readings
+            )
             parts.append(f"measured: {readings}")
         if not parts:
             return f"{leader.label} leads on the evidence in the ledger."
@@ -764,8 +1144,19 @@ class Investigation:
         problems = self.blockers()
         if not problems:
             self.conclude()
-        else:
-            self.declare_unresolved(" ".join([*problems, why_stopped]).strip())
+            return
+        untaken = [f"Nobody could take the requested reading ({name})." for name in self._untaken]
+        self.declare_unresolved(" ".join([*problems, *untaken, why_stopped]).strip())
+
+    def could_not_take(self, test_id: str, why: str = "") -> None:
+        """Record that a requested reading cannot be had. It is not asked for
+        again, and the next most useful test can be."""
+        name = BY_ID[test_id].name
+        self._untaken.append(name)
+        self.ledger.add(f"requested measurement could not be taken: {name}", source="physics")
+        self.state.transcript.append(
+            f"Nobody could take the requested reading ({name})" + (f": {why}." if why else ".")
+        )
 
     # --------------------------------------------------------------------- run
     def advance(self) -> TestChoice | None:
@@ -777,12 +1168,12 @@ class Investigation:
         if not self.blockers():
             self.conclude()
             return None
-        if self.state.leader().posterior >= CONCLUDE_ABOVE:
+        if self.state.leader().posterior >= CONCLUDE_ABOVE or self.blocking_gap() is not None:
             self.finish("No measurement on the menu addresses what is unexplained.")
             return None
         choice = self.choose_next_test()
         if choice is None:
-            self.finish("No measurement on the menu separates them.")
+            self.finish(self.no_useful_test or "No measurement on the menu separates them.")
             return None
         self.request(choice)
         return choice
@@ -790,24 +1181,32 @@ class Investigation:
     def run(self, max_requests: int = 2, oracle=None) -> InvestigationState:
         """Drive the whole loop.
 
-        `oracle` supplies requested measurements: a callable (test_id) -> value
-        or None. In the demo it is the rig; in production it is a coached
-        technician, and without one the case stops open, waiting for the reading.
+        `oracle` supplies requested measurements: a callable (test_id) -> a
+        value, a capture, or None. In the demo it is the rig; in production it
+        is a coached technician, and without one the case stops open, waiting
+        for the reading.
         """
         self.observe()
         self.run_virtual_experiments()
 
-        for _ in range(max_requests):
+        taken = 0
+        while taken < max_requests:
             choice = self.advance()
             if choice is None:
                 break
             if oracle is None:
                 break
-            value = oracle(choice.test.id)
-            if value is None:
-                self.finish(f"Nobody could take the requested reading ({choice.test.name}).")
-                break
-            self.apply_outcome(choice.test.id, value)
+            answer = oracle(choice.test.id)
+            if answer is None:
+                # It costs no technician time, so it does not count against the
+                # budget; the next most useful test is asked for instead.
+                self.could_not_take(choice.test.id)
+                continue
+            if isinstance(answer, Observation):
+                self.apply_capture(choice.test.id, answer)
+            else:
+                self.apply_outcome(choice.test.id, answer)
+            taken += 1
         else:
             if self.state.outcome == "open":
                 self.finish(f"The budget of {max_requests} measurements is spent.")

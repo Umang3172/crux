@@ -146,6 +146,6 @@ def mark_unanswerable(
         raise ValueError(f"{request_id} is {req.status}, not waiting for a reading")
     req.status = "unanswerable"
     req.note = why
-    case.investigation.state.transcript.append(f"{request_id} cannot be answered: {why}")
+    case.investigation.could_not_take(req.test_id, why)
     store.put(case)
     return req

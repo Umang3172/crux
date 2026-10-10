@@ -10,7 +10,7 @@ Install with the `llm` extra:  uv pip install -e ".[llm]"
 
 from __future__ import annotations
 
-import os
+from .factory import gemini_model_id
 
 SYSTEM = """You are the investigator on a machine-diagnosis case.
 You are given: the machine, the measured evidence, the hypotheses with their
@@ -21,22 +21,20 @@ Rules:
 - If the evidence does not decide the case, say what measurement would.
 """
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-pro")
-
 
 class GeminiNarrator:
-    name = f"gemini:{MODEL}"
-
     def __init__(self) -> None:
         from google import genai  # type: ignore
 
+        self.model = gemini_model_id()
+        self.name = f"gemini:{self.model}"
         self._client = genai.Client()
 
     def explain(self, prompt: str, context: dict) -> str:
         import json
 
         response = self._client.models.generate_content(
-            model=MODEL,
+            model=self.model,
             contents=[
                 {"role": "user", "parts": [{"text": SYSTEM}]},
                 {

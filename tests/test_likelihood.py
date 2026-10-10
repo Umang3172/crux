@@ -38,8 +38,9 @@ TONES: dict[FaultKind, dict[float, float]] = {
     FaultKind.IMBALANCE: {1.0: 1.6, 2.0: 0.15},
     FaultKind.MISALIGNMENT: {1.0: 0.7, 2.0: 1.3, 3.0: 0.5},
     FaultKind.LOOSENESS: {0.5: 0.4, 1.0: 0.9, 1.5: 0.3, 2.0: 0.6, 3.0: 0.5, 4.0: 0.35, 5.0: 0.3},
-    FaultKind.OUTER_RACE: {1.0: 0.3},
-    FaultKind.INNER_RACE: {1.0: 0.3},
+    # A machine keeps its normal running tones when a bearing race is damaged.
+    FaultKind.OUTER_RACE: {1.0: 0.3, 2.0: 0.04},
+    FaultKind.INNER_RACE: {1.0: 0.3, 2.0: 0.04},
 }
 
 
@@ -123,15 +124,42 @@ def test_a_healthy_machine_is_never_confidently_called_faulty():
         assert inv.state.belief()[FaultKind.HEALTHY] > 0.3
 
 
+def test_a_mild_imbalance_in_noise_is_not_called_healthy():
+    # A 1x tone at more than twice its normal height. Read against a floor
+    # estimated from too few bins, that difference drowned in the floor's own
+    # scatter and the capture was called healthy at 81 to 86 %.
+    for noise in (0.25, 0.45):
+        for seed in (11, 12, 13):
+            capture = synthetic_capture(
+                FaultKind.IMBALANCE, BENCH_RIG, severity=0.35, extra_noise=noise, seed=seed
+            )
+            leader, _ = _leader_after_first_look(capture)
+            assert not (leader.kind is FaultKind.HEALTHY and leader.posterior >= CONCLUDE_ABOVE), (
+                noise,
+                seed,
+                leader.posterior,
+            )
+
+
 def test_never_confidently_wrong_on_the_independent_machine():
-    wrong = []
+    # Two promises. A fault is never named at the bar unless it is the true one.
+    # And a faint fault that a two-second capture cannot tell from a healthy
+    # machine may be called healthy, but then the verdict's own detection limit
+    # must name the true fault among those it could not exclude.
+    wrong_fault, unadmitted = [], []
     for fault in FaultKind:
         for level in (1.0, 0.5, 0.3):
             for seed in (11, 12, 13):
-                leader, _ = _leader_after_first_look(independent_capture(fault, level, seed))
-                if leader.posterior >= CONCLUDE_ABOVE and leader.kind is not fault:
-                    wrong.append((fault.value, level, seed, leader.kind.value))
-    assert not wrong, f"confident and wrong: {wrong}"
+                leader, inv = _leader_after_first_look(independent_capture(fault, level, seed))
+                if leader.posterior < CONCLUDE_ABOVE or leader.kind is fault:
+                    continue
+                case = (fault.value, level, seed, leader.kind.value)
+                if leader.kind is not FaultKind.HEALTHY:
+                    wrong_fault.append(case)
+                elif fault not in [h.kind for h, _ in inv.cannot_exclude()]:
+                    unadmitted.append(case)
+    assert not wrong_fault, f"a wrong fault named at the bar: {wrong_fault}"
+    assert not unadmitted, f"called healthy without admitting the true fault: {unadmitted}"
 
 
 # ------------------------------------------------------------------ the pieces
@@ -145,6 +173,20 @@ def test_line_height_reads_a_tone_and_reads_nothing_where_there_is_none():
     assert line_height(freqs, mag, 97.0) < 0.6  # noise: within a few times its floor
     # A line slipped by less than the tolerance is still found.
     assert line_height(freqs, mag, 60.0 * (1 - 0.8 * LINE_TOLERANCE)) > 1.5
+
+
+def test_a_tone_reads_the_same_height_whatever_the_noise_around_it_does():
+    # A fixed 1x tone in fresh noise each time. Its peak does not move; what
+    # scatters is the floor it is read against. With the floor taken from the
+    # 28 bins a quarter-band gives at 30 Hz, the height scattered by about 0.08
+    # in log10, as much as a 20 % change in the tone. From 160 bins it is 0.03.
+    t = np.arange(int(FS * 2)) / FS
+    heights = []
+    for seed in range(40):
+        noise = np.random.default_rng(seed).normal(0.0, 0.26, t.size)
+        freqs, mag = magnitude_spectrum(0.6 * np.sin(2 * np.pi * 30.0 * t) + noise, FS)
+        heights.append(line_height(freqs, mag, 30.0))
+    assert np.std(heights) < 0.05
 
 
 def test_noise_level_recovers_the_noise_it_was_given():
