@@ -46,6 +46,10 @@ export type Conclusion = {
   reasoning: string;
   recommended_action: string;
   what_would_change_my_mind: string;
+  /** What a healthy verdict could not have seen. Empty otherwise. */
+  limit: string;
+  /** The same as data: the suspects a healthy verdict cannot exclude when mild. */
+  cannot_exclude: { kind: string; severity: number }[];
   evidence_ids: string[];
 };
 

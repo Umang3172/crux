@@ -15,7 +15,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { faultText } from "../guided/plain";
+import { faultText, plainSentence } from "../guided/plain";
+import { CaseReportPanel } from "../report/Report";
 import { About, AgentRun, RunParams, Suspect, about, investigate } from "./api";
 import "./investigator.css";
 
@@ -103,8 +104,21 @@ function Outcome({ run }: { run: AgentRun }) {
           </small>
         </div>
       )}
-      {c.unresolved_reason && <p>{c.unresolved_reason}</p>}
+      {c.unresolved_reason && <p>{plainSentence(c.unresolved_reason)}</p>}
+      {c.investigator_reason && (
+        <p className="g-muted">
+          The investigator's own reason, in its words: "{c.investigator_reason}" The reason above
+          is the physics' and is the one on record.
+        </p>
+      )}
       {run.stopped && <p className="g-muted">{run.stopped}</p>}
+      {c.status === "concluded" && (
+        <CaseReportPanel
+          id={c.case_id}
+          parts={["why", "plain", "limit", "action", "change"]}
+          plain={plainSentence}
+        />
+      )}
       <ul className="i-ranked">
         {ranked.map((s) => (
           <li key={s.name} className={s.status === "rejected" ? "out" : ""}>

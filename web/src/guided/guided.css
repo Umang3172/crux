@@ -599,6 +599,10 @@
   color: var(--ask-ink);
 }
 
+.g-row.unseen .g-row-status {
+  color: var(--ask-ink);
+}
+
 .g-row.ruled-out {
   opacity: 0.42;
 }

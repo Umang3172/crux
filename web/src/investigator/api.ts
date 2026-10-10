@@ -36,7 +36,10 @@ export type AgentCase = {
   leader_belief: number;
   conclude_at: number;
   blockers: string[];
+  /** Why there is no verdict, in the physics' own words. */
   unresolved_reason: string | null;
+  /** What the investigator gave as its reason for closing without one. */
+  investigator_reason: string | null;
   suspects: Suspect[];
 };
 

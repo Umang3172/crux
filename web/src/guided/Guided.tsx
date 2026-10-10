@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Capture, EvidenceTest, Investigation, Spectra, capture, catalogue, spectra } from "../api";
 import { Beliefs } from "../components/Beliefs";
 import { Ledger } from "../components/Ledger";
+import { CaseReportPanel } from "../report/Report";
 import { Phase, Step, investigate } from "../run";
 import { LiveTrace } from "./LiveTrace";
 import { PumpScene, SceneStatus } from "./PumpScene";
@@ -25,6 +26,7 @@ import {
   NOISE_LEVELS,
   SCENARIOS,
   SEVERITY_LEVELS,
+  belief,
   faultText,
   leader,
   list,
@@ -147,6 +149,10 @@ export function Guided() {
       if (!revealed) return "testing";
       const h = i.hypotheses.find((x) => x.kind === kind);
       if (!h) return "waiting";
+      // A healthy verdict names the mild faults it could not have seen. Calling
+      // one of those "ruled out" beside it would contradict the answer.
+      if (step.phase === "conclusion" && i.conclusion?.cannot_exclude?.some((u) => u.kind === kind))
+        return "unseen";
       if (h.rejected) return "ruled-out";
       return leader(i).kind === kind ? "leading" : "live";
     },
@@ -325,7 +331,10 @@ export function Guided() {
                   onClick={advance}
                   disabled={!revealed}
                 >
-                  {NEXT_LABEL[step.phase]}
+                  {/* Say where the button leads: a clear case goes straight to its answer. */}
+                  {step.phase !== "conclusion" && current?.steps[cursor + 1]?.phase === "conclusion"
+                    ? "See the answer"
+                    : NEXT_LABEL[step.phase]}
                 </button>
               </div>
             </div>
@@ -547,7 +556,7 @@ function StepText({
       <div className={`g-verdict${top.kind === "healthy" ? " ok" : ""}`}>
         <span>{sure ? "Cause" : "Best guess"}</span>
         <b>{text.name}</b>
-        <small>{pct(inv.conclusion?.confidence ?? top.posterior)} confident</small>
+        <small>{belief(inv.conclusion?.confidence ?? top.posterior)} confident</small>
       </div>
       {text.story && <p>{text.story}</p>}
       {top.kind !== "healthy" && (
@@ -558,6 +567,7 @@ function StepText({
       <p>
         <b>What to do:</b> {text.fix}
       </p>
+      <CaseReportPanel id={inv.id} parts={["why", "plain", "limit"]} plain={plainSentence} />
       {inv.conclusion?.what_would_change_my_mind && (
         <p className="g-muted">
           What would change Crux's mind: {plainSentence(inv.conclusion.what_would_change_my_mind)}

@@ -11,7 +11,7 @@
 import { Hypothesis, Spectra } from "../api";
 import { faultText, pct } from "./plain";
 
-export type RowState = "waiting" | "testing" | "live" | "leading" | "ruled-out";
+export type RowState = "waiting" | "testing" | "live" | "leading" | "ruled-out" | "unseen";
 
 export const BEARING_FAULTS = new Set(["outer_race", "inner_race"]);
 
@@ -21,6 +21,7 @@ const STATUS: Record<RowState, string> = {
   live: "Still possible",
   leading: "Most likely",
   "ruled-out": "Ruled out",
+  unseen: "Not shown, but a mild one would look the same",
 };
 
 function trace(values: number[]): string {

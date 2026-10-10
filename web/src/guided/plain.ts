@@ -106,7 +106,14 @@ export function plainSentence(sentence: string): string {
   let out = sentence;
   for (const [code, words] of Object.entries(FEATURE_TEXT)) out = out.split(code).join(words);
   for (const [kind, text] of Object.entries(FAULT_TEXT)) {
-    out = out.split(kind.replace(/_/g, " ")).join(text.name.toLowerCase());
+    // "Nothing wrong leads at 51%" reads as nonsense; a healthy pump is the suspect.
+    const words = kind === "healthy" ? "a healthy pump" : text.name.toLowerCase();
+    const label = kind.replace(/_/g, " ");
+    out = out.split(label).join(words);
+    // The engine starts a sentence with the suspect's name.
+    out = out.split(label.replace(/^./, (c) => c.toUpperCase())).join(
+      words.replace(/^./, (c) => c.toUpperCase()),
+    );
   }
   return out;
 }
@@ -144,6 +151,9 @@ export const FAULT_IDS = [
 ];
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+/** A belief as the engine words it: never "100%", which nothing measured can be. */
+export const belief = (x: number) => (x >= 0.995 ? "over 99%" : pct(x));
 
 export function ranked(inv: Investigation): Hypothesis[] {
   return [...inv.hypotheses].sort((a, b) => b.posterior - a.posterior);

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EvidenceTest, catalogue, health } from "./api";
 import { Beliefs } from "./components/Beliefs";
 import { ConclusionCard } from "./components/Conclusion";
+import { CaseReportPanel } from "./report/Report";
 import { Ledger } from "./components/Ledger";
 import { RequestCard } from "./components/RequestCard";
 import { Spectrum } from "./components/Spectrum";
@@ -239,7 +240,15 @@ export default function App({ embedded = false }: { embedded?: boolean }) {
           )}
 
           {inv?.conclusion && step?.phase === "conclusion" && (
-            <ConclusionCard conclusion={inv.conclusion} />
+            <>
+              <ConclusionCard conclusion={inv.conclusion} />
+              <section className="panel">
+                <header>
+                  <h2>In plain words, and the check on them</h2>
+                </header>
+                <CaseReportPanel id={inv.id} parts={["plain"]} />
+              </section>
+            </>
           )}
 
           {inv && !inv.conclusion && inv.outcome === "unresolved" && step?.phase === "conclusion" && (
