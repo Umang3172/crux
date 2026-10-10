@@ -31,6 +31,8 @@ data/cameras.json
 data/hub/
 data/site/
 data/lens/
+# Benchmark results: a number is quoted from the file, with the commit in it.
+data/results/
 *.mat
 *.npz
 captures/

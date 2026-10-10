@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +53,16 @@ LOAD_TO_RPM: dict[int, float] = {0: 1797.0, 1: 1772.0, 2: 1750.0, 3: 1730.0}
 #: The healthy baselines are published as bare file numbers, one per motor load.
 #: Source: CWRU Bearing Data Center, "Normal Baseline Data" table.
 NORMAL_BASELINE_IDS: dict[str, int] = {"97": 0, "98": 1, "99": 2, "100": 3}
+
+#: The healthy baselines were recorded at 48 kHz; the drive-end fault files used
+#: here at 12 kHz. Source: Smith & Randall, "Rolling element bearing diagnostics
+#: using the Case Western Reserve University data: A benchmark study", Mechanical
+#: Systems and Signal Processing 64-65 (2015) 100-131, Table A1 ("48 k normal
+#: baseline data; fs = 48 kHz"). The CWRU download page gives no rate for them.
+#: Read at 12 kHz, every line of a healthy recording would sit at a quarter of
+#: its frequency, so a healthy file is brought down to 12 kHz when it is loaded,
+#: and the rate is checked against the file's own shaft line (`_native_rate`).
+NORMAL_BASELINE_FS = 48_000.0
 
 _FAULT_KINDS: dict[str, FaultKind] = {
     "IR": FaultKind.INNER_RACE,
@@ -197,13 +208,102 @@ def _rpm_from_mat(mat: dict[str, object], keys: list[str]) -> float | None:
     return rpm if rpm > 0 else None
 
 
+def _shaft_line_shows(x: np.ndarray, fs: float, rpm: float) -> bool:
+    """Whether a recording read at `fs` has a clear line at its stated shaft speed."""
+    from ..signals.features import estimate_rpm, magnitude_spectrum
+
+    stretch = x[: int(4.0 * fs)]  # four seconds resolve the line; more only costs time
+    if len(stretch) < 16:
+        return False
+    return estimate_rpm(*magnitude_spectrum(stretch, fs), rpm).from_signal
+
+
+def _native_rate(path: Path, x: np.ndarray, rpm: float) -> tuple[float, str | None]:
+    """The rate a file was recorded at, and a note when that needed saying.
+
+    The documented rate is used when the file's own shaft line sits where that
+    rate puts it. If it does not, and it does at the other rate CWRU used, the
+    file is believed over the document: a mirror may hold healthy files already
+    brought down to 12 kHz. If neither shows a line, the documented rate stands;
+    for a healthy file, where being wrong moves every line fourfold, the note
+    says it could not be checked.
+    """
+    target = CWRU_DRIVE_END.sample_rate_hz
+    try:
+        healthy = parse_filename(path).kind is FaultKind.HEALTHY
+    except ValueError:
+        healthy = False
+    documented = NORMAL_BASELINE_FS if healthy else target
+    if _shaft_line_shows(x, documented, rpm):
+        return documented, None
+    other = target if documented != target else NORMAL_BASELINE_FS
+    if _shaft_line_shows(x, other, rpm):
+        return other, (
+            f"read as {other / 1000:g} kHz: its shaft line is not where "
+            f"{documented / 1000:g} kHz would put it"
+        )
+    if not healthy:
+        return documented, None
+    return documented, f"taken as {documented / 1000:g} kHz: no shaft line to check it by"
+
+
+@lru_cache(maxsize=32)
+def _recording(path: str, modified_ns: int) -> tuple[np.ndarray, float, tuple[str, ...]]:
+    """A whole recording at 12 kHz, its speed, and what had to be assumed.
+
+    Cached by the file's own timestamp: the benchmark reads each recording
+    several times, and bringing a 48 kHz one down is not free.
+    """
+    from scipy.io import loadmat  # imported lazily: scipy is heavy
+
+    file = Path(path)
+    mat = loadmat(path)
+    keys = sorted(k for k in mat if not k.startswith("__"))
+
+    de_key = next((k for k in keys if k.endswith("_DE_time")), None)
+    fe_key = next((k for k in keys if k.endswith("_FE_time")), None)
+    channel_key = de_key or fe_key
+    if channel_key is None:
+        raise ValueError(f"{file.name} has no drive-end or fan-end channel; found {keys}")
+    x = _first_channel(mat[channel_key])
+
+    notes: list[str] = []
+    if de_key is None:
+        notes.append("fan-end channel: no drive-end data in this file")
+    rpm = _rpm_from_mat(mat, keys)
+    if rpm is None:
+        rpm = _load_table_rpm(file)
+        notes.append("speed from the motor-load table: no RPM in this file")
+
+    native, said = _native_rate(file, x, rpm)
+    if said:
+        notes.append(said)
+    target = CWRU_DRIVE_END.sample_rate_hz
+    if native != target:
+        from scipy.signal import resample_poly
+
+        # Low-pass and keep every fourth sample: the 1.5 to 5 kHz band the
+        # envelope analysis uses is below the new 6 kHz limit.
+        x = resample_poly(x, 1, int(round(native / target)))
+        notes.append(f"recorded at {native / 1000:g} kHz, brought down to {target / 1000:g} kHz")
+    x.setflags(write=False)
+    return x, float(rpm), tuple(notes)
+
+
+def seconds_in(path: str | Path) -> float:
+    """How long a recording is, at the rate it is used at."""
+    path = Path(path)
+    x, _, _ = _recording(str(path), path.stat().st_mtime_ns)
+    return len(x) / CWRU_DRIVE_END.sample_rate_hz
+
+
 def load_capture(
     path: str | Path,
     rpm: float | None = None,
     duration_s: float | None = None,
     offset_s: float = 0.0,
 ) -> Observation:
-    """Load one CWRU .mat file as an Observation.
+    """Load one CWRU .mat file as an Observation at 12 kHz.
 
     CWRU stores variables like `X097_DE_time` (drive end), `X097_FE_time` (fan
     end) and `X097RPM` — but not every file has all three, so we fall back to
@@ -211,50 +311,31 @@ def load_capture(
     capture sees the drive-end bearing through the shaft and its impacts are
     weaker. Speed comes from the file, then the motor-load table, then the
     nominal speed, in that order; see `LOAD_TO_RPM` for why the order matters.
+    A healthy baseline is recorded at 48 kHz and is brought down to 12 kHz
+    (`NORMAL_BASELINE_FS`); the source string says so.
 
     `duration_s` trims to N seconds, starting `offset_s` into the recording. The
     recordings are ~10 s and the envelope analysis runs several FFTs per
     hypothesis, so the benchmark opens a case on the first stretch and answers
     a requested capture from the one after it.
     """
-    from scipy.io import loadmat  # imported lazily: scipy is heavy
-
     path = Path(path)
-    mat = loadmat(str(path))
-    keys = sorted(k for k in mat if not k.startswith("__"))
-
-    de_key = next((k for k in keys if k.endswith("_DE_time")), None)
-    fe_key = next((k for k in keys if k.endswith("_FE_time")), None)
-    channel_key = de_key or fe_key
-    if channel_key is None:
-        raise ValueError(f"{path.name} has no drive-end or fan-end channel; found {keys}")
-
-    x = _first_channel(mat[channel_key])
-    x = x[int(offset_s * CWRU_DRIVE_END.sample_rate_hz) :]
+    whole, file_rpm, notes = _recording(str(path), path.stat().st_mtime_ns)
+    fs = CWRU_DRIVE_END.sample_rate_hz
+    x = whole[int(offset_s * fs) :]
     if duration_s is not None:
-        x = x[: int(duration_s * CWRU_DRIVE_END.sample_rate_hz)]
+        x = x[: int(duration_s * fs)]
     if x.size == 0:
-        raise ValueError(f"{path.name}: channel {channel_key} is empty from {offset_s:g} s")
-
-    notes: list[str] = []
-    if de_key is None:
-        notes.append("fan-end channel: no drive-end data in this file")
-
-    if rpm is None:
-        rpm = _rpm_from_mat(mat, keys)
-        if rpm is None:
-            rpm = _load_table_rpm(path)
-            notes.append("speed from the motor-load table: no RPM in this file")
+        raise ValueError(f"{path.name}: the recording is empty from {offset_s:g} s")
 
     source = f"cwru:{path.name}"
     if notes:
         source += f" [{'; '.join(notes)}]"
-
     return Observation(
         machine_id=CWRU_DRIVE_END.machine_id,
-        waveform=x,
-        sample_rate_hz=CWRU_DRIVE_END.sample_rate_hz,
-        rpm=float(rpm),
+        waveform=np.array(x),
+        sample_rate_hz=fs,
+        rpm=float(file_rpm if rpm is None else rpm),
         source=source,
     )
 

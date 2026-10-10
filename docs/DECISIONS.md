@@ -713,3 +713,29 @@ real model treats an order in a note has not been tried. The hazard list is
 short, English only, and will miss a hazard described in other words: it is a
 prompt to a person, not a safety system.
 
+## ADR-0026 · The real-data benchmark reads each file at its own rate and scores it against the healthy recording at its load
+
+**Context.** Two things stood between the benchmark and a number that means
+anything. The loader labelled every CWRU file 12 kHz, and the healthy baselines
+it fetches were recorded at 48 kHz (Smith & Randall, Mech. Syst. Signal
+Process. 64-65 (2015) 100-131, Table A1; the CWRU page gives no rate), so each
+healthy recording would have been read with every line at a quarter of its
+frequency. And every case was scored against the textbook machine, which is the
+mode that failed on the first real recordings tried (ADR-0015).
+
+**Decision.** The loader brings a healthy baseline down to 12 kHz and checks
+the rate against the file's own shaft line; where the file and the document
+disagree, the file is believed and the capture's source says so. The benchmark
+keeps the first 40% of each load's healthy recording, as four captures, as that
+machine's normal, scores every recording at that load on the change from it,
+and uses the rest of the healthy recording as the healthy case. `--textbook`
+scores against the textbook machine for the comparison. Each run is written to
+a result file with every case, the counts, the settings and the commit.
+
+**Consequence.** Found before any data was on hand; the first number has not
+been produced. Tested on made-up files in the dataset's shape, from a simulated
+machine whose normal is not the textbook's: against its own normal three of
+three recordings get the right verdict, against the textbook none gets a
+verdict at all. The lengths of the real baselines, and so how much of each is
+left for its case, have not been checked.
+

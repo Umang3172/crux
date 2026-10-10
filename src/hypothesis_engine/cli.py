@@ -10,8 +10,12 @@ uv run hypengine serve
 
 from __future__ import annotations
 
+import json
+import subprocess
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -21,6 +25,7 @@ from rich.table import Table
 from .agents.factory import describe as describe_models
 from .data import cwru
 from .data.rig import BENCH_RIG, rig_oracle, scenario, synthetic_capture
+from .data.root import DATA_ROOT
 from .investigation.catalog import BY_ID
 from .investigation.engine import Investigation
 from .investigation.repair import check_repair
@@ -222,6 +227,10 @@ class _CaseResult:
     answered: tuple[str, ...]  # tests the recording could answer
     unanswerable: tuple[str, ...]  # tests only a person at the machine can answer
     reason: str = ""
+    #: What the case was scored against: the machine's own healthy recording at
+    #: the same load, or the textbook machine.
+    scored: str = "textbook"
+    note: str = ""
 
     @property
     def minutes(self) -> float:
@@ -236,19 +245,50 @@ class _CaseResult:
         return self.predicted is self.case.kind
 
 
-def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _CaseResult:
+#: Share of a healthy recording kept as that machine's normal, and the number of
+#: captures it is cut into. The rest of the recording is the healthy case itself,
+#: so nothing is both a case and its own normal. Four captures show how far the
+#: normal wanders, and most of the recording is left for the case. Design
+#: choices (docs/DATA.md).
+NORMAL_SHARE = 0.4
+NORMAL_CAPTURES = 4
+
+
+def _own_normal(healthy: cwru.CwruCase) -> tuple[list[Observation], float]:
+    """The start of a healthy recording as the machine's normal at that load, and
+    the second at which the rest of the recording begins."""
+    kept = NORMAL_SHARE * cwru.seconds_in(healthy.file)
+    each = kept / NORMAL_CAPTURES
+    captures = [
+        cwru.load_capture(healthy.file, duration_s=each, offset_s=k * each)
+        for k in range(NORMAL_CAPTURES)
+    ]
+    return captures, kept
+
+
+def _run_cwru_case(
+    case: cwru.CwruCase,
+    max_requests: int,
+    seconds: float,
+    normal: list[Observation] | None = None,
+    offset_s: float = 0.0,
+    note: str = "",
+) -> _CaseResult:
     """One full investigation against a real capture.
 
-    There is no oracle here. The case is opened on the first `seconds` of the
-    recording, and a requested capture is answered by the stretch that follows,
-    scored at its own length: the same machine in the same state, with noise the
-    first look has not seen. A test the recording cannot answer — a coast-down,
-    a temperature reading, or a capture when no second stretch of that length
-    is left — comes back as nothing rather than as a fabricated number. Faking
-    those would make the headline number meaningless.
+    There is no oracle here. The case is opened on `seconds` of the recording,
+    from `offset_s`, and a requested capture is answered by the stretch that
+    follows, scored at its own length: the same machine in the same state, with
+    noise the first look has not seen. A test the recording cannot answer — a
+    coast-down, a temperature reading, or a capture when no second stretch of
+    that length is left — comes back as nothing rather than as a fabricated
+    number. Faking those would make the headline number meaningless.
+
+    With `normal`, healthy captures of the same machine at the same load, the
+    case is scored on the change from them; without, against the textbook machine.
     """
-    observation = cwru.load_capture(case.file, duration_s=seconds)
-    investigation = Investigation(cwru.CWRU_DRIVE_END, observation)
+    observation = cwru.load_capture(case.file, duration_s=seconds, offset_s=offset_s)
+    investigation = Investigation(cwru.CWRU_DRIVE_END, observation, normal=normal or ())
     answered: list[str] = []
     unanswerable: list[str] = []
 
@@ -256,7 +296,7 @@ def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _C
         try:
             if BY_ID[test_id].capture_s is None:
                 raise ValueError("only a person at the machine can report it")
-            later = cwru.load_capture(case.file, duration_s=seconds, offset_s=seconds)
+            later = cwru.load_capture(case.file, duration_s=seconds, offset_s=offset_s + seconds)
             if len(later.waveform) < len(observation.waveform):
                 raise ValueError("the recording has no second stretch of that length")
         except ValueError:
@@ -274,7 +314,95 @@ def _run_cwru_case(case: cwru.CwruCase, max_requests: int, seconds: float) -> _C
         answered=tuple(answered),
         unanswerable=tuple(unanswerable),
         reason=state.unresolved_reason or "",
+        scored="own normal" if normal else "textbook",
+        note=note,
     )
+
+
+def _summary(results: list[_CaseResult]) -> dict[str, float | int]:
+    """The benchmark's counts, in the order they are reported."""
+    n = len(results)
+    concluded = [r for r in results if r.concluded]
+    right = sum(r.correct for r in concluded)
+    return {
+        "cases": n,
+        "settled_by_simulation": sum(1 for r in concluded if not r.answered and not r.unanswerable),
+        "settled_after_measurement": sum(1 for r in concluded if r.answered),
+        "unresolved": n - len(concluded),
+        "asked_what_no_recording_answers": sum(1 for r in results if r.unanswerable),
+        "mean_minutes": round(sum(r.minutes for r in results) / n, 2),
+        "wrong": len(concluded) - right,
+        "right": right,
+    }
+
+
+def _code_version() -> dict[str, str | bool] | None:
+    """The commit a result was produced by, when the code is in a checkout."""
+    here = Path(__file__).resolve().parent
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=here,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()
+        changed = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=here,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {"commit": commit, "uncommitted_changes": bool(changed)}
+
+
+def _result_file(
+    results: list[_CaseResult],
+    skipped: list[str],
+    *,
+    textbook: bool,
+    seconds: float,
+    max_requests: int,
+) -> dict:
+    """Everything needed to quote a number from this run and say where it came from."""
+    return {
+        "benchmark": "CWRU drive end, 12 kHz",
+        "data": "Case Western Reserve University Bearing Data Center",
+        "scored_against": "the textbook machine"
+        if textbook
+        else "each machine's own healthy recording at the same load",
+        "code": _code_version(),
+        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "settings": {
+            "seconds": seconds,
+            "max_requests": max_requests,
+            "normal_share": NORMAL_SHARE,
+            "normal_captures": NORMAL_CAPTURES,
+        },
+        "summary": _summary(results),
+        "cases": [
+            {
+                "file": r.case.file.name,
+                "truth": r.case.kind.value,
+                "load_hp": r.case.load_hp,
+                "diagnosed": r.predicted.value if r.predicted is not None else None,
+                "belief": round(r.confidence, 4),
+                "scored": r.scored,
+                "asked": list(r.answered),
+                "unanswerable": list(r.unanswerable),
+                "minutes": r.minutes,
+                "reason": r.reason,
+                "note": r.note,
+            }
+            for r in results
+        ],
+        "skipped": skipped,
+    }
 
 
 def _confusion(results: list[_CaseResult]) -> Table:
@@ -311,6 +439,16 @@ def benchmark(
     seconds: float = typer.Option(4.0, help="Seconds of each recording to use"),
     max_requests: int = typer.Option(2, help="Measurements the investigator may ask for"),
     per_case: bool = typer.Option(True, help="Print a row per recording as well as the summary"),
+    textbook: bool = typer.Option(
+        False,
+        help="Score every case against the textbook machine, ignoring the healthy recordings. "
+        "The default scores each case on the change from the healthy recording at its load.",
+    ),
+    out: str = typer.Option(
+        "",
+        help="Where to write the result file. Default: results/cwru-own-normal.json or "
+        "results/cwru-textbook.json under the data folder. 'none' writes nothing.",
+    ),
 ) -> None:
     """Run the investigator over real CWRU bearing recordings.
 
@@ -318,6 +456,11 @@ def benchmark(
     interesting one here: a classifier can win it. The three lines above it —
     cases settled by simulation alone, cases that needed a human measurement,
     and technician-minutes spent — are what this product is for.
+
+    Each load's healthy recording is that machine's normal: its start is kept
+    as the normal, the rest is the healthy case, and every fault recording at
+    that load is scored on the change from it. `--textbook` gives the comparison.
+    The run is written to a result file, with the commit that produced it.
     """
     files = cwru.available(data_dir)
     if not files:
@@ -347,10 +490,21 @@ def benchmark(
             console.print(f"  [dim]{why}[/dim]")
         raise typer.Exit()
 
+    healthy_at = {c.load_hp: c for c in cases if c.kind is FaultKind.HEALTHY}
     results: list[_CaseResult] = []
     with console.status(f"Investigating {len(cases)} recordings…"):
         for case in cases:
-            results.append(_run_cwru_case(case, max_requests, seconds))
+            normal, start, note = None, 0.0, ""
+            if not textbook:
+                baseline = healthy_at.get(case.load_hp)
+                if baseline is None:
+                    note = "no healthy recording at this load: scored against the textbook"
+                else:
+                    normal, kept = _own_normal(baseline)
+                    # A healthy recording is not judged against itself: its case
+                    # is the part its normal did not use.
+                    start = kept if case.kind is FaultKind.HEALTHY else 0.0
+            results.append(_run_cwru_case(case, max_requests, seconds, normal, start, note))
 
     if per_case:
         table = Table(title=f"Real captures · first {seconds:.0f} s of each recording")
@@ -360,6 +514,7 @@ def benchmark(
         table.add_column("conf", justify="right")
         table.add_column("asked for")
         table.add_column("min", justify="right")
+        table.add_column("scored against")
         for r in results:
             asked = list(r.answered)
             asked += [f"[yellow]{t} (unanswerable)[/yellow]" for t in r.unanswerable]
@@ -374,20 +529,21 @@ def benchmark(
                 f"{r.confidence:.0%}",
                 ", ".join(asked) or "[dim]nothing[/dim]",
                 f"{r.minutes:.0f}",
+                r.scored if not r.note else f"[yellow]{r.scored}[/yellow]",
             )
         console.print(table)
 
     console.print(_confusion(results))
 
-    n = len(results)
+    counts = _summary(results)
+    n = int(counts["cases"])
     concluded = [r for r in results if r.concluded]
-    correct = sum(r.correct for r in concluded)
-    wrong = len(concluded) - correct
-    sim_only = sum(1 for r in concluded if not r.answered and not r.unanswerable)
-    measured = sum(1 for r in concluded if r.answered)
-    unresolved = n - len(concluded)
-    blocked = sum(1 for r in results if r.unanswerable)
-    mean_minutes = sum(r.minutes for r in results) / n
+    correct, wrong = int(counts["right"]), int(counts["wrong"])
+    sim_only = int(counts["settled_by_simulation"])
+    measured = int(counts["settled_after_measurement"])
+    unresolved = int(counts["unresolved"])
+    blocked = int(counts["asked_what_no_recording_answers"])
+    mean_minutes = float(counts["mean_minutes"])
 
     def row(label: str, value: str, share: str = "") -> str:
         return f"{label:<42}[bold]{value:>7}[/bold]  {share}"
@@ -405,6 +561,9 @@ def benchmark(
         Panel.fit(
             "\n".join(
                 [
+                    "Scored against "
+                    + ("the textbook machine." if textbook else "each machine's own normal."),
+                    "",
                     row("settled by simulation alone", f"{sim_only} / {n}", f"{sim_only / n:.0%}"),
                     row(
                         "settled after a requested measurement",
@@ -434,6 +593,19 @@ def benchmark(
 
     for why in skipped:
         console.print(f"[dim]skipped {why}[/dim]")
+    for r in results:
+        if r.note:
+            console.print(f"[yellow]{r.case.file.name}: {r.note}[/yellow]")
+
+    if out.lower() != "none":
+        name = "cwru-textbook.json" if textbook else "cwru-own-normal.json"
+        path = Path(out) if out else DATA_ROOT / "results" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = _result_file(
+            results, skipped, textbook=textbook, seconds=seconds, max_requests=max_requests
+        )
+        path.write_text(json.dumps(record, indent=2) + "\n")
+        console.print(f"[dim]Result written to {path}[/dim]")
 
 
 #: The hard synthetic cases `evaluate` runs: faults at three strengths under four
