@@ -569,8 +569,10 @@ def _repair_view(check: RepairCheck, rig: dict[str, Any] | None = None) -> dict[
         "statement": check.statement,
         "limit": check.limit,
         "limit_names_cause": check.limit_names_cause,
+        "caveat": check.caveat,
         "lines": [asdict(change) for change in check.lines],
         "usual_from": check.usual_from,
+        "asked": list(check.asked),
         "after": serialise(follow.state),
         "rig": rig,  # demo only: what the rig was given for the capture after the repair
     }
@@ -605,8 +607,17 @@ def repair(investigation_id: str, req: RepairRequest) -> dict[str, Any]:
         seed=req.seed,
         extra_noise=rig["extra_noise"],
     )
+    # The rig answers a requested measurement in the state the repair left it in,
+    # the way it answered the first case.
+    answers = rig_oracle(
+        given["fault"],
+        BENCH_RIG,
+        severity=given["severity"],
+        extra_noise=rig["extra_noise"],
+        rpm=rig["rpm"],
+    )
     try:
-        check = check_repair(inv, after)
+        check = check_repair(inv, after, answers)
     except NothingToVerify as exc:
         raise HTTPException(409, str(exc)) from None
     return _repair_view(check, given)

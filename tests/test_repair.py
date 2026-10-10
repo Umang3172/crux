@@ -134,6 +134,41 @@ def test_one_capture_that_cannot_tell_says_so_and_why():
     assert "a verdict needs 80%" in check.statement and ONE_CAPTURE in check.statement
 
 
+def test_on_a_noisy_floor_a_good_repair_takes_one_more_reading_to_verify():
+    # The first case needed a measurement to tell this fault from a healthy
+    # machine. So does the check after the repair: one capture cannot say, and
+    # with the rig answering, one more reading can.
+    case = _closed(FaultKind.INNER_RACE, severity=0.5, noise=0.45)
+    assert case.state.conclusion.cause == "inner_race" and case.state.outcomes, "the premise"
+    repaired = _after(FaultKind.HEALTHY, noise=0.45)
+    rig = rig_oracle(FaultKind.HEALTHY, BENCH_RIG, extra_noise=0.45)
+
+    alone = check_repair(case, repaired)
+    asked = check_repair(case, repaired, rig)
+
+    assert alone.outcome == "cannot_tell" and alone.asked == ()
+    assert asked.outcome == "verified" and len(asked.asked) == 1
+    assert f"It took one more reading to say so: {asked.asked[0]}." in asked.statement
+    # That reading was a temperature, scored against a table nobody has measured.
+    assert asked.asked == ("Housing temperature above baseline",)
+    assert "has not been measured on a machine" in asked.caveat
+    assert alone.caveat == ""
+
+
+def test_half_a_repair_on_a_noisy_floor_stays_unsettled_and_says_what_it_tried():
+    # A faint leftover under heavy noise is the case the engine cannot settle,
+    # before a repair or after one. It asks for what could help and says so.
+    case = _closed(FaultKind.INNER_RACE, severity=0.5, noise=0.45)
+    leftover = _after(FaultKind.INNER_RACE, severity=0.25, noise=0.45)
+    rig = rig_oracle(FaultKind.INNER_RACE, BENCH_RIG, severity=0.25, extra_noise=0.45)
+
+    check = check_repair(case, leftover, rig)
+
+    assert check.outcome == "cannot_tell" and len(check.asked) == 2
+    assert "It took 2 more readings to say so" in check.statement
+    assert check.statement.startswith("Not verified either way.")
+
+
 def test_a_verified_repair_says_what_one_capture_could_not_have_seen(outer):
     # On this rig a mild imbalance hides in a healthy capture. After a balancing
     # job that is the repaired cause itself, and the check says so.
@@ -237,12 +272,26 @@ def test_the_rig_can_be_repaired_well_half_way_or_badly_through_the_api():
     assert (badly["outcome"], badly["found"]) == ("something_else", "misalignment")
     assert well["lines"][0]["after"] < well["lines"][0]["before"]
     assert well["usual_from"] == "simulation"
+    assert well["asked"] == [] and well["caveat"] == "", "a clear case needs no further reading"
     # The capture after the repair is a case like any other.
     after = client.get(f"/investigations/{well['after']['id']}").json()
     assert after["conclusion"]["root_cause"] == "healthy"
     assert client.get(f"/investigations/{well['after']['id']}/report").status_code == 200
     # The first case is as it was.
     assert client.get(f"/investigations/{case['id']}").json()["conclusion"] == case["conclusion"]
+
+
+def test_the_rig_answers_what_the_check_after_a_repair_asks_for():
+    noisy = {"fault": "inner_race", "severity": 0.5, "extra_noise": 0.45, "seed": 1234}
+    case = client.post("/replay", json=noisy).json()
+    assert case["conclusion"]["root_cause"] == "inner_race"
+
+    well = client.post(f"/investigations/{case['id']}/repair", json={"removed": 1.0}).json()
+
+    assert well["outcome"] == "verified"
+    assert well["asked"] == ["Housing temperature above baseline"]
+    assert "has not been measured on a machine" in well["caveat"]
+    assert [o["test_id"] for o in well["after"]["outcomes"]] == ["temperature"]
 
 
 def test_the_repair_route_refuses_what_makes_no_sense():

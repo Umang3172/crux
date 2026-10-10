@@ -1721,7 +1721,13 @@ class Investigation:
         """
         self.observe()
         self.run_virtual_experiments()
+        return self.settle(max_requests, oracle)
 
+    def settle(self, max_requests: int = 2, oracle=None) -> InvestigationState:
+        """From the first look on: ask for the measurement that would settle the
+        case, take the answer, and go on until it closes or the budget is spent.
+        The part of `run` after the virtual experiments, for a case that had
+        something done to it in between (a suspect added, say)."""
         taken = 0
         while taken < max_requests:
             choice = self.advance()

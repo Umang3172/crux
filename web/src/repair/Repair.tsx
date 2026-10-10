@@ -21,7 +21,7 @@ const HEADINGS: Record<RepairOutcome, string> = {
   still_there: "Not verified: the fault is still there",
   something_else: "That fault is gone, but something else shows",
   cause_gone: "That fault is gone. The rest is not settled",
-  cannot_tell: "One capture cannot tell",
+  cannot_tell: "Not settled either way",
 };
 
 type Choice = { id: string; label: string; hint: string; done: RepairDone };
@@ -78,8 +78,9 @@ export function RepairPanel({ id, cause }: { id: string; cause: string }) {
     <section className="p-repair" aria-label="After the repair">
       <h3>Now make the repair, and check it</h3>
       <p className="g-muted">
-        Crux captures the pump again and investigates that capture from scratch, with every suspect
-        back at even odds. Choose how the repair went. Crux is not told.
+        Crux captures the pump again and investigates it from scratch, with every suspect back at
+        even odds, asking for another check if one capture is not enough. Choose how the repair
+        went. Crux is not told.
       </p>
       <div className="p-choices">
         {choices(cause).map((c) => (
@@ -107,6 +108,7 @@ export function RepairPanel({ id, cause }: { id: string; cause: string }) {
               {check.limit_names_cause && " Check again on the next round to be sure."}
             </p>
           )}
+          {check.caveat && <p className="p-limit">{check.caveat}</p>}
           {check.lines.length > 0 && (
             <table className="p-lines">
               <caption>

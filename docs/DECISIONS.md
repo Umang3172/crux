@@ -660,17 +660,27 @@ and cannot tell. Beside it are the lines the repaired cause predicts, as each
 read before and after and in a healthy machine, for the reader; the answer does
 not come from them. The typed table is deleted.
 
+Where someone can answer, the follow-up asks for a measurement when one capture
+is not enough, as the first case could; with nobody to ask it closes on the one
+capture and says so.
+
 `POST /investigations/{id}/repair` runs it on the synthetic rig, where the
 caller says how much of the fault the repair removed or which fault it left;
-the engine is not told. `POST /ingest/{machine}/repair/{id}` runs it on a live
-machine's latest signal. The Guided answer offers the three repairs.
+the engine is not told, and the rig answers what the follow-up asks for in the
+state the repair left it in. `POST /ingest/{machine}/repair/{id}` runs it on a
+live machine's latest signal, with nobody to ask. The Guided answer offers the
+three repairs.
 
 **Consequence.** On the 12 kHz rig a full repair is verified for all five
 faults, half a repair is not, and the sentence names the fault's own line still
 standing (for a bearing race the line at its rate, not the taller 1x every
 machine has). A verified repair carries the healthy verdict's own limit: after
 balancing, a mild imbalance cannot be excluded from one two-second capture, and
-the check says so. The 2 kHz hardware rig cannot see where bearing damage
+the check says so. On a noisy floor (noise 0.45) one capture cannot verify a
+good repair of a moderate bearing fault; one more reading can, and that reading
+is the housing temperature, scored against a table nobody has measured, which
+the check then states. Half a repair there stays unsettled after two more
+readings. The 2 kHz hardware rig cannot see where bearing damage
 shows, so it never concludes "healthy"; there the most it can say is that the
 repaired cause is gone, which is the fourth answer. Captures after a repair
 come from the same synthetic rig as the first; not run on a real repair.

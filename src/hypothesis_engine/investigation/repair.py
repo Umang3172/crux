@@ -4,7 +4,10 @@ After a verdict the fix is made and the machine is captured again. That capture
 is investigated as a case of its own, with the same suspects, scored the way the
 first was: on the change from the machine's own normal when the first case had
 its healthy captures, against the textbook machine otherwise. It starts from
-even odds, so the first verdict does not lean on the second.
+even odds, so the first verdict does not lean on the second. Where someone can
+answer (`answers`), it asks for a measurement when one capture is not enough,
+exactly as the first case could; with nobody to ask it says what one capture
+supports.
 
 Nothing here is a typed expectation of how much a repair should help. The answer
 is whatever the engine concludes about the machine as it now runs:
@@ -28,10 +31,12 @@ from them.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 from ..models import FaultKind, Observation
+from .catalog import BY_ID
 from .engine import ACTIONS, Investigation, _pct
 
 Outcome = Literal["verified", "still_there", "something_else", "cause_gone", "cannot_tell"]
@@ -70,9 +75,14 @@ class RepairCheck:
     limit: str
     #: True when that limit names the very cause that was repaired.
     limit_names_cause: bool
+    #: Set when the follow-up's verdict leans on a reading scored against an
+    #: unmeasured table (`Conclusion.caveat`). Empty otherwise.
+    caveat: str
     lines: tuple[LineChange, ...]  # largest fall first
     #: Where `LineChange.usual` comes from: "healthy captures" or "simulation".
     usual_from: str
+    #: The measurements the follow-up asked for and was given, by name.
+    asked: tuple[str, ...]
     follow: Investigation  # the case on the capture after the repair, with its own ledger
 
 
@@ -86,8 +96,18 @@ def _times_floor(height: float) -> float | None:
     return None if height != height else round(float(10.0**height), 1)
 
 
-def check_repair(case: Investigation, after: Observation) -> RepairCheck:
-    """Investigate the machine as it runs after the repair `case` called for."""
+def check_repair(
+    case: Investigation,
+    after: Observation,
+    answers: Callable[[str], float | Observation | None] | None = None,
+    max_requests: int = 2,
+) -> RepairCheck:
+    """Investigate the machine as it runs after the repair `case` called for.
+
+    `answers` supplies a requested measurement by test id, as it does for any
+    case (a number, a capture, or None when it cannot be had). Without it the
+    follow-up closes on the one capture it was given.
+    """
     verdict = case.state.conclusion
     if verdict is None:
         raise NothingToVerify("The case has no verdict, so no repair followed from it.")
@@ -108,8 +128,12 @@ def check_repair(case: Investigation, after: Observation) -> RepairCheck:
     # the cause, "still there" has to be a possible answer.
     for suspect in case.written_suspects:
         follow.add_hypothesis(suspect)
-    follow.finish(ONE_CAPTURE)
+    if answers is None:
+        follow.finish(ONE_CAPTURE)
+    else:
+        follow.settle(max_requests, answers)
     state = follow.state
+    asked = tuple(BY_ID[o.test_id].name for o in state.outcomes)
 
     lines = case.cause_lines(cause.name)
     before = case.read(lines)
@@ -135,7 +159,7 @@ def check_repair(case: Investigation, after: Observation) -> RepairCheck:
     # than one that went from 950 to 150.
     changes.sort(key=lambda c: c.before / c.after, reverse=True)
 
-    limit, names_cause = "", False
+    limit, names_cause, caveat = "", False, ""
     found: str | None = None
     belief: float | None = None
     closing = state.conclusion
@@ -167,6 +191,7 @@ def check_repair(case: Investigation, after: Observation) -> RepairCheck:
             statement = f"Not verified either way.{where} {state.unresolved_reason}"
     else:
         found, belief = closing.cause, closing.confidence
+        caveat = closing.caveat
         now_fits = follow.hypothesis(found)
         if closing.root_cause is FaultKind.HEALTHY:
             outcome = "verified"
@@ -193,6 +218,11 @@ def check_repair(case: Investigation, after: Observation) -> RepairCheck:
                 f"{cause.label.capitalize()} no longer explains the capture, but "
                 f"{now_fits.label} now does ({_pct(belief)} belief). {action}"
             )
+    if asked:
+        statement += (
+            f" It took {'one more reading' if len(asked) == 1 else f'{len(asked)} more readings'} "
+            f"to say so: {', '.join(asked)}."
+        )
     if changes:
         statement += " " + _line_sentence(cause.label, changes, outcome, usual_from)
     return RepairCheck(
@@ -203,8 +233,10 @@ def check_repair(case: Investigation, after: Observation) -> RepairCheck:
         statement=statement,
         limit=limit,
         limit_names_cause=names_cause,
+        caveat=caveat,
         lines=tuple(changes),
         usual_from=usual_from,
+        asked=asked,
         follow=follow,
     )
 

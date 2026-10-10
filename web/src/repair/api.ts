@@ -30,6 +30,10 @@ export type RepairCheck = {
   /** What a "verified" could not have seen. Empty otherwise. */
   limit: string;
   limit_names_cause: boolean;
+  /** Set when the verdict after the repair leans on a reading scored against an unmeasured table. */
+  caveat: string;
+  /** The measurements the check asked for and was given, by name. */
+  asked: string[];
   lines: LineChange[];
   /** Where `usual` comes from: the machine's own healthy captures, or a simulation. */
   usual_from: "healthy captures" | "simulation";
