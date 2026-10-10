@@ -218,3 +218,42 @@ mkdir -p data/jung2023/acoustic && unzip acoustic.zip -d data/jung2023/acoustic
 The layout the loaders expect: `data/mafaulda/normal/12.288.csv`,
 `data/mafaulda/overhang/ball_fault/0g/22.3232.csv` and so on, and
 `data/jung2023/acoustic/0Nm_BPFO_10.mat`.
+
+## Scoring the sound check on real recordings
+
+`scripts/lens_sound_eval.py` runs `experiments.sound_experiments`, the call a
+scan makes, on every recording found under `data/`, twice:
+
+- **raw**: the dataset's measurement microphone;
+- **phone**: the same sound through `lens/phone.py`, an emulation kept apart from
+  the physics: resampled to 48 kHz (AES5's recommended rate), a fourth-order
+  high-pass at 200 Hz (phone microphones hear little below it, IEEE 7449545; the
+  order is an assumption until a real phone's response replaces it), and white
+  noise at a stated SNR when `--snr` is given.
+
+The speed is the dataset's: MaFaulDa's own tachometer column, read with
+hysteresis and a straight-line fit through every pulse (`datasets.tach_rpm`);
+Jung et al.'s stated 3,010 rpm. The bearing is the dataset's (`lens/bearings.py`).
+Labels only score. The report gives, per condition: true cause against leading
+cause, how often the top two are within `TIE` ("can't tell"), the rank of the
+right bearing fault, shaft faults on their own rows, and for ball and cage faults
+(causes Crux does not hold) how often a bearing fault leads anyway. Rows with
+fewer than 30 cases are flagged. It also reports the tachometer-to-file-name
+speed ratio (the 50 versus 51.2 kHz question) and, with `--label-check`, which
+bearing line each MaFaulDa folder's accelerometer actually carries.
+
+```bash
+uv run python scripts/lens_sound_eval.py --label-check --out data/lens_eval/sound.md
+```
+
+**Results: none yet (10 Oct 2026).** Neither dataset is downloaded on the
+machine this was written on, and downloading is a person's step (download steps
+above). Until a run is written here, Crux has no measured accuracy for the sound
+check. Expectations, not results: shaft faults should read poorly from sound,
+worse through the phone emulation, because their evidence sits below the 200 Hz
+cut (on MaFaulDa 1x is 12 to 61 Hz and 3x at most 184 Hz); bearing faults depend on whether
+the microphone hears the impacts in the 1.5 to 5 kHz envelope band the physics
+reads. Jung et al. gives n = 5 recordings (60 cases of 5 s, not independent), so
+any share from it is anecdotal; MaFaulDa gives 1,951. If the results are poor,
+the fix is reported with the numbers and goes through `docs/DECISIONS.md`; no
+constant is moved to improve them.

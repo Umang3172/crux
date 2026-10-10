@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from scipy.ndimage import fourier_shift, gaussian_filter
 
-from hypothesis_engine.lens import bearings, look
+from hypothesis_engine.lens import bearings, datasets, look, phone
 from hypothesis_engine.lens import experiments as ex
 from hypothesis_engine.lens.motion import Box, measure, shake_map
 from hypothesis_engine.models import SKF_6205_2RS_JEM, FaultKind, MachineSpec
@@ -249,6 +249,133 @@ def test_sound_says_why_when_the_bearing_cannot_be_read():
     x = np.random.default_rng(0).normal(0, 1, int(fs))
     scores, why = ex.sound_experiments(x, fs, RPM, "6204")
     assert scores == [] and "enter the full designation" in why
+
+
+# ---------------------------------------------------------------- real recordings
+
+
+def _mafaulda_csv(path, fs=50_000.0, seconds=0.4, shaft_hz=24.8, seed=0):
+    """A file shaped like MaFaulDa's: 8 columns, no header, a low pulse once per turn."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(fs * seconds)) / fs
+    tach = np.where((t * shaft_hz) % 1.0 < 0.05, 0.2, 4.6) + rng.normal(0, 0.3, len(t))
+    mic = 0.1 * np.sin(2 * np.pi * 3000 * t) + rng.normal(0, 0.05, len(t))
+    cols = [tach] + [rng.normal(0, 0.1, len(t)) for _ in range(6)] + [mic]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savetxt(path, np.column_stack(cols), delimiter=",", fmt="%.6g")
+
+
+def test_mafaulda_loader_reads_sound_speed_and_label(tmp_path):
+    root = tmp_path / "mafaulda"
+    _mafaulda_csv(root / "overhang" / "outer_race" / "20g" / "24.8.csv")
+    rec = datasets.read_mafaulda(datasets.mafaulda_files(root)[0], root, keep=("overhang_radial",))
+    assert rec.truth is FaultKind.OUTER_RACE and rec.added_mass_g == 20.0
+    # Speed from the tachometer column, through noise of 0.3 V on 4.4 V pulses.
+    assert rec.rpm == pytest.approx(24.8 * 60, rel=2e-3) and rec.rpm_source == "tachometer"
+    assert rec.fs == 50_000.0 and len(rec.audio) == 20_000 and rec.name_hz == pytest.approx(24.8)
+    assert "overhang_radial" in rec.channels and ex.bearing_for(rec.bearing) is not None
+
+
+@pytest.mark.parametrize(
+    ("rel", "truth", "mass"),
+    [
+        ("normal/12.288.csv", FaultKind.HEALTHY, 0.0),
+        ("imbalance/35g/40.96.csv", FaultKind.IMBALANCE, 0.0),
+        ("vertical-misalignment/1.90mm/30.72.csv", FaultKind.MISALIGNMENT, 0.0),
+        ("underhang/cage_fault/6g/20.48.csv", None, 6.0),
+        ("overhang/ball_fault/0g/22.3232.csv", None, 0.0),
+    ],
+)
+def test_mafaulda_folders_name_the_cause(rel, truth, mass):
+    from pathlib import Path
+
+    assert datasets.mafaulda_label(Path(rel)) == (truth, mass)
+
+
+def test_a_flat_tachometer_is_refused_not_guessed():
+    with pytest.raises(ValueError, match="flat"):
+        datasets.tach_rpm(np.ones(5000), 50_000.0)
+
+
+def test_jung_loader_reads_the_signal_struct(tmp_path):
+    from scipy.io import savemat
+
+    fs = 51_200.0
+    y = np.sin(2 * np.pi * 1000 * np.arange(int(fs * 0.5)) / fs)
+    signal = {
+        "x_values": {"start_value": 0.0, "increment": 1 / fs, "number_of_values": len(y)},
+        "y_values": {"values": y[:, None], "quantity": "Pa"},
+        "function_record": {"name": "microphone"},
+    }
+    savemat(tmp_path / "0Nm_BPFI_03.mat", {"Signal": signal})
+    rec = datasets.read_jung(datasets.jung_files(tmp_path)[0])
+    assert rec.truth is FaultKind.INNER_RACE and "0.3 mm" in rec.label
+    assert rec.fs == pytest.approx(fs) and len(rec.audio) == len(y)
+    assert rec.rpm == 3010.0 and bearings.lookup(rec.bearing).bearing.name == "NSK 6205 DDU"
+    assert len(datasets.windows(rec, 0.2)) == 2
+
+
+def test_phone_emulation_resamples_and_cuts_low_sound():
+    fs = 50_000.0
+    t = np.arange(int(fs)) / fs
+    x = np.sin(2 * np.pi * 50 * t) + np.sin(2 * np.pi * 2000 * t)
+    y, fy = phone.emulate(x, fs)
+    assert fy == 48_000.0 and len(y) == 48_000
+    f, mag = magnitude_spectrum(y, fy)
+    # 50 Hz is two octaves below the 200 Hz corner: about -48 dB at fourth order.
+    assert peak_near(f, mag, 50.0, 2.0) < 0.01 * peak_near(f, mag, 2000.0, 2.0)
+    noisy, _ = phone.emulate(x, fs, snr_db=0.0, seed=1)
+    assert np.var(noisy - y) == pytest.approx(np.mean(y**2), rel=0.1)
+
+
+def _sound_eval():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "scripts" / "lens_sound_eval.py"
+    spec = importlib.util.spec_from_file_location("lens_sound_eval", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_sound_eval_runs_on_files_shaped_like_the_datasets(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "mafaulda"
+    _mafaulda_csv(root / "normal" / "24.8.csv")
+    _mafaulda_csv(root / "overhang" / "outer_race" / "0g" / "24.8.csv", seed=1)
+    monkeypatch.setattr(datasets, "MAFAULDA_DIR", root)
+    monkeypatch.setattr(datasets, "JUNG_DIR", tmp_path / "absent")
+    assert _sound_eval().main(["--workers", "1", "--label-check"]) == 0
+    out = capsys.readouterr().out
+    assert "| healthy | 1 |" in out and "Phone emulation" in out and "label check" in out
+
+
+def test_sound_eval_prints_the_download_steps_when_nothing_is_there(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(datasets, "MAFAULDA_DIR", tmp_path / "absent")
+    monkeypatch.setattr(datasets, "JUNG_DIR", tmp_path / "absent")
+    assert _sound_eval().main([]) == 1
+    assert "mafaulda" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(not datasets.mafaulda_files(), reason="MaFaulDa not downloaded (docs/LENS.md)")
+def test_real_mafaulda_recordings_load():
+    rec = datasets.read_mafaulda(datasets.mafaulda_files()[0])
+    assert len(rec.audio) == 250_000
+    # Within the 50 versus 51.2 kHz question (docs/LENS.md), never further.
+    assert rec.name_hz and abs(rec.rpm / 60 / rec.name_hz - 1) < 0.05
+
+
+@pytest.mark.skipif(
+    not datasets.jung_files(), reason="Jung et al. sound not downloaded (docs/LENS.md)"
+)
+def test_real_jung_recordings_load():
+    recs = [datasets.read_jung(p) for p in datasets.jung_files()]
+    assert all(r.fs == pytest.approx(51_200.0) for r in recs)
+    assert {r.truth for r in recs} == {
+        FaultKind.HEALTHY,
+        FaultKind.INNER_RACE,
+        FaultKind.OUTER_RACE,
+    }
 
 
 def test_next_check_separates_what_is_left():
