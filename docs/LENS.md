@@ -185,7 +185,11 @@ normal scan was taken). The gate's blur and exposure bars are provisional (below
 | `photo.DARK_P99`, `photo.BRIGHT_P1` | 32, 223 of 255 | **provisional**: the brightest 1% in the bottom eighth, or the darkest 1% in the top eighth, is a near-black or near-white frame |
 | `photo.CROP_MARGIN`, `photo.CROP_MIN_FRACTION` | half the box each side; a quarter of the short side at least | design choice: the second look sees a leak's source and the floor under it; not fitted |
 
-## Known limits (7 Oct 2026)
+## Known limits (7 Oct 2026, updated 10 Oct)
+
+- No measured accuracy for anything in Lens: the sound check has scripts and
+  loaders but no downloaded data; the photo check was scored on 7 stand-in photos
+  only (above); the motion check has no public video to score on.
 
 - Tested on synthetic video only: a textured scene, and a real rig photo whose
   motor was made to shake at known shaft orders, encoded with H.264. No phone
@@ -310,3 +314,115 @@ reads. Jung et al. gives n = 5 recordings (60 cases of 5 s, not independent), so
 any share from it is anecdotal; MaFaulDa gives 1,951. If the results are poor,
 the fix is reported with the numbers and goes through `docs/DECISIONS.md`; no
 constant is moved to improve them.
+
+## Scoring the photo check
+
+`scripts/photo_eval.py` runs `camera.inspect`, the call a ticket and a scan make,
+on `data/photo_eval/<label>/*.jpg` (label `normal` or checklist items joined by
+`+`), without and, where `pairs.csv` names one, with the normal photo beside it,
+and reads each look after the first look and after the second. Per item it
+counts hits, misses, unsure, cannot see, false alarms on normal photos and
+retakes, with n everywhere. A fixed 20% of photos, chosen by a hash of the file
+name, is the calibration split: never scored, used only by `--calibrate` to set
+the gate's bars (the bar that keeps 99% of them; no recommendation below 30).
+
+**Run of 10 Oct 2026: Gemma 4 8B (Q4_K_M) through Ollama, temperature 0.** No
+labelled photos of real machines exist yet, so the set is what was on hand:
+
+- 8 normal photos of 2 rigs: the XJTU-SY authors' photo of their test bed, six
+  grey frames of the two synthetic Lens videos made from that same photo, and the
+  330 x 245 px photo in the IMS readme. Labelled normal by us: nothing wrong is
+  visible in them.
+- 1 damage photo: the XJTU-SY authors' photo of a bearing whose outer ring broke,
+  cropped from their figure of failed bearings without its caption, labelled
+  crack. Their other three panels are left out: two show wear, which is not on
+  the checklist, and in the third (a broken cage) we cannot see the break.
+
+The hash split held out 2 normal photos; 7 were scored (6 normal, 1 crack) plus
+one normal pair with the normal photo beside it. Results:
+
+- **False alarms on normal photos: 0 of 7 looks** (6 without a reference, 1 with
+  it). With zero events in 7, the false-alarm rate could still be as high as about
+  40% (95% bound, 3/n), and 7 looks of 2 rigs are not independent. It rules out
+  only a model that alarms on most normal photos. Nothing was reported present,
+  so the second look had nothing to check.
+- On the small IMS photo the model answered "cannot see" for 5 of 7 items
+  rather than guessing.
+- **The damage photo was turned back by the quality gate as blurred (sharpness
+  91, bar 100) although it is in focus**: most of its frame is plain white
+  background, which lowers the whole-frame variance of the Laplacian. A false
+  retake on 1 of 1 damage photos, from the provisional bar. The bar is not moved
+  to pass it; the fix is the calibration split (30 photos or more) or a sharpness
+  measured only where the photo has detail, and either needs photos to justify it.
+- Diagnostic, with the gate bypassed, not a score: Gemma 4 answered crack
+  "absent" on that photo and reported low-severity corrosion on the bearing
+  body, which the cropped second look confirmed. On the only real damage photo
+  the local model missed a plainly broken ring, as it missed the crack with the
+  open question before the checklist (docs/FORECAST.md).
+- 25 to 27 s per first look on this laptop.
+
+What this means: the pipeline runs end to end and is cautious on normal photos;
+it says nothing about accuracy on real machines, and the 8B local model is not
+good enough at seeing a crack. Gemini 3 Flash with Agentic Vision is the next
+run (below). The report and every answer are in `data/lens_eval/` (not committed).
+
+## Video for the motion check: none public, and what would do
+
+No public video could score the motion check (10 Oct 2026; table above).
+Phys-AD's clips are 1 to 4 s at 60 fps of toys and parts with no shaft speed or
+shaft-fault label; SURVISHNO 2019 is one fan at varying speed; SURVISHNO 2023 is
+one bearing filmed at 2,000 fps at varying speed. So no loader or score was
+written for the motion check, and it has no measured accuracy.
+
+The video that would score it, recorded on a rig where the fault is induced and
+known:
+
+- **Faults:** healthy; imbalance at three or more added masses; parallel and
+  angular misalignment at three or more offsets; looseness by slackened foot
+  bolts. Each on the same machine, so a scan marked normal exists for the
+  comparison with a normal scan.
+- **Phones:** at least two (one iPhone, one Android), each in its own camera app at
+  240 fps Slo-mo and at 30 or 60 fps, 1080p or better, sound on; at least 10 s
+  per clip (0.1 Hz resolution).
+- **Speeds:** at least three, chosen so 1x falls both below and above half the
+  frame rate (600 to 3,000 rpm covers both at 30 and 60 fps), to test the
+  aliasing logic.
+- **View:** side-on to the shaft, housing in the middle, a textured wall or floor
+  in frame for shake removal; phone resting on a support at about 1 m, plus a
+  handheld take of each.
+- **Truth recorded alongside:** a once-per-revolution optical tachometer and a
+  radial accelerometer on the bearing housing (5 kHz or more), synchronised to the
+  video by a visible and audible marker (a clap or a flash).
+- **Count:** 30 clips or more per fault and phone, so no row rests on fewer than 30.
+- **Licence:** CC BY 4.0, with the frame times and the metadata above.
+
+## Magnified clip (optional): not built
+
+A motion-magnified clip would let a viewer see the wobble, for display only.
+It is not built, for a reason outside the code: the methods are patented. MIT's
+licensing office lists US 9,811,901, 10,007,986 and 10,217,218, "linear-based
+eulerian motion modulation", all granted and offered for non-exclusive licence
+(tlo.mit.edu, "Eulerian Video Magnification for Revealing Subtle Changes in the
+World", read 10 Oct 2026). Google Patents also lists US 9,324,005
+"Complex-valued phase-based eulerian motion modulation" and US 9,805,475
+"Eulerian motion modulation" (titles only; status not checked). Whether a
+public demo needs a licence is a team decision, not a coding one. The shake map
+already shows where the machine moves, from the same measurement, without it.
+
+## To run once Gemini is available
+
+Written, never run (no Google Cloud access as of 10 Oct 2026):
+
+1. `ticket.camera.GeminiInspector`: Gemini 3 Flash (`gemini-3-flash-preview`)
+   with code execution. Check that one request with both images, code execution
+   and the JSON schema is accepted; if not, that the two-step path works; record
+   how many code steps (`CameraLook.zooms`) a look takes and how long it runs.
+2. Score it: `GOOGLE_API_KEY=… uv run python scripts/photo_eval.py`, then again
+   with `GEMINI_AGENTIC_VISION=0`, beside the Gemma 4 run, on the same photos.
+   The difference is what Agentic Vision adds on our photos (Google's claim is
+   5 to 10% on its benchmarks). Temperature stays at 1.0, so run each twice and
+   report both.
+3. `lens.look.identify` on Gemini Robotics-ER 2 (`GEMINI_LENS_MODEL`): the box and
+   the nameplate reading, against the Gemma 4 results above.
+4. A labelled photo set of real machines is what makes any of these numbers mean
+   something; until it exists, the scores are on the stand-ins listed here.
