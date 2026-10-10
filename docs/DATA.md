@@ -26,9 +26,18 @@ that they are acknowledged as the source. We do not redistribute it: `.gitignore
 excludes `data/cwru/*`, and each person fetches their own copy. Any slide, README
 or pitch that quotes a benchmark number must name CWRU as the source of the data.
 
-We use the **12 kHz drive-end** subset only. The 48 kHz recordings exist, and our
-loader would silently label them 12 kHz, so `scripts/fetch_cwru.py` does not
-fetch them.
+We use the **12 kHz drive-end** fault recordings and the four healthy baselines.
+The baselines were recorded at **48 kHz**, not 12: Smith & Randall, "Rolling
+element bearing diagnostics using the Case Western Reserve University data: A
+benchmark study", Mechanical Systems and Signal Processing 64-65 (2015)
+100-131, Table A1 ("48 k normal baseline data; fs = 48 kHz"). The CWRU download
+page gives no rate for them. Read at 12 kHz, every line of a healthy recording
+sits at a quarter of its frequency, so the loader brings a baseline down to
+12 kHz and says so in the capture's `source`. It also checks the rate against
+the file: the shaft line must sit where the file's own speed puts it. If it
+does not, and it does at the other rate, the file is believed over the
+document (some mirrors publish baselines already at 12 kHz). The 48 kHz *fault*
+recordings are not fetched.
 
 ## The naming convention
 
@@ -77,6 +86,7 @@ than crashing or, worse, quietly producing a wrong answer:
 | Neither channel present | `ValueError` naming the variables it did find |
 | Ball defect (`B***`) | Refused. This engine has no ball hypothesis, so mapping one onto a race fault would manufacture a right answer |
 | Bare number other than 97–100 | Refused: it carries no ground truth |
+| A healthy baseline (48 kHz) | Brought down to 12 kHz; `source` says so. If its shaft line fits 12 kHz and not 48, it is read as 12 kHz and `source` says that instead |
 
 Refusals are counted and printed by the benchmark, never silently dropped.
 
@@ -86,28 +96,68 @@ For each file: load the real capture, run a full `Investigation` — virtual
 experiments against all six hypotheses, then a requested measurement if
 simulation cannot separate the survivors — and record what it cost.
 
-The printout leads with three numbers and puts accuracy last, on purpose:
+**Each load's healthy recording is that machine's normal.** A real machine does
+not run like the textbook one, and a case scored against the textbook can be
+stopped, or misled, by the machine's own quirks (ADR-0015). So the first 40% of
+the healthy recording at a load is cut into four captures and kept as the
+normal for every recording at that load, and each case is scored on the change
+from it. The rest of that healthy recording is the healthy case itself, so
+nothing is both a case and its own normal. A load with no healthy recording
+falls back to the textbook machine, and the row says so. Forty percent and four
+are design choices: four captures show how far the normal wanders, and most of
+the recording is left for the case.
+
+`uv run hypengine benchmark --textbook` scores every case against the textbook
+machine instead, for the comparison.
+
+**The run is written to a file**: `data/results/cwru-own-normal.json` or
+`cwru-textbook.json` (`--out` moves it), with every case, the counts, the
+settings, the time, and the commit that produced it. Quote a number from that
+file, with the commit. The folder is not committed.
+
+The printout leads with what each case cost and how it ended, and puts accuracy
+last, on purpose:
 
 1. **Settled by simulation alone.** The physics decided; nobody was sent to the
    machine. This is the cheapest possible outcome.
-2. **Needed a requested measurement.** The engine could not separate the
+2. **Settled after a requested measurement.** The engine could not separate the
    survivors, named the cheapest deciding test, and that test settled it.
-3. **Mean technician-minutes per case.** The sum of `effort_min` for the tests
+3. **Said it could not tell (unresolved).** The evidence never reached the 80 %
+   bar, or the capture held a periodic impact no hypothesis explains. The case
+   closes with the reason instead of a guess (ADR-0009).
+4. **Mean technician-minutes per case.** The sum of `effort_min` for the tests
    that were actually performed, averaged over cases.
+5. **Wrong verdicts**, then **accuracy of the verdicts given**. Accuracy is over
+   the cases that ended in a verdict, so read it beside line 3: together they are
+   the coverage and the risk of a system that may abstain.
 
-Accuracy comes fourth because **a classifier wins accuracy and tells you nothing
-about what it costs to trust it**. A classifier is 100% confident on every case
-and sends a technician either always or never. The claim this project makes is
-narrower and more useful: it asks for a human measurement only when the physics
-genuinely cannot decide, and it can tell you in advance which measurement and
-how many minutes. Minutes avoided is the number a maintenance manager buys.
+Accuracy comes last because **a classifier wins accuracy and tells you nothing
+about what it costs to trust it**. A classifier answers every case and sends a
+technician either always or never. The claim this project makes is narrower and
+more useful: it asks for a human measurement only when the physics genuinely
+cannot decide, it can tell you in advance which measurement and how many minutes,
+and it says so when it cannot tell. Minutes avoided and wrong verdicts are the
+numbers a maintenance manager buys.
 
-A fourth line, **requested a test no recording can answer**, is reported
+A further line, **requested a test no recording can answer**, is reported
 separately and never faked. CWRU recordings contain a waveform and a speed, so a
 coast-down (`speed_sensitivity`) or a housing temperature (`temp_rise_c`) has no
 answer in the file. When the engine asks for one, the benchmark records the
-request, answers nothing and lets the investigation conclude on what it has.
-Inventing a plausible value for those would make every number above meaningless.
+request, answers nothing, and the case closes on what it has, which below the
+bar means unresolved. Inventing a plausible value for those would make every
+number above meaningless.
+
+## What has and has not been run
+
+No number has been produced: the recordings are not on the machine this was
+written on. The loader, the split of the healthy recording, both scoring modes
+and the result file are tested on made-up files in the dataset's shape, from a
+simulated machine whose normal is not the textbook's (a healthy baseline at
+48 kHz, an outer-race and an inner-race fault at 12 kHz). On those three,
+scoring against the machine's own normal gives three right verdicts; against
+the textbook it gives none, each case stopped by a line its leader does not
+explain. That is a check of the plumbing and of the reason for the default, not
+a result on CWRU.
 
 ## What this dataset cannot show
 
@@ -126,16 +176,23 @@ Be blunt about this in the pitch; it is a limit of the data, not of the engine.
 - **One bearing, one rig, one speed range.** Roughly 1730–1797 rpm under
   steady load. Nothing here shows variable-speed or variable-load behaviour,
   which is exactly what ADR-0001 says the analytical model cannot extrapolate to.
-- **The requested measurement is re-read from the same recording.** In the field
-  the engine asks for a *fresh* 30 s capture; here `measure_from_capture` takes a
-  different feature out of the ten seconds we already have. That is a genuinely
-  different analysis, but its noise is not independent of the first look, so the
-  measurement looks slightly more decisive on this benchmark than it would on a
-  live machine.
-- **The benchmark uses the first 4 seconds** of each recording (`--seconds`).
-  At 12 kHz that is 48 000 samples and 0.25 Hz of frequency resolution, far finer
-  than the ±3 Hz peak search needs, and it keeps a full sweep to a few seconds.
-  Nothing in the result depends on the trim; raise it if you want to check.
+- **The requested measurement is the next stretch of the same recording.** In
+  the field the engine asks for a fresh 30 s capture; a CWRU file is about ten
+  seconds long. The case is opened on the first 4 seconds (`--seconds`) and a
+  requested capture is answered by the 4 seconds after them, scored against
+  simulations of that length. Its noise is independent of the first look, but it
+  is the same sensor in the same place seconds later, and far shorter than the
+  test asks for, so it adds less than a real 30 s capture would.
+- **A healthy recording has to serve twice**, as the normal and as a case. Its
+  length sets what is left: 40% is the normal, the rest is the case, and a
+  requested capture needs a further stretch of the same length. Where the
+  recording runs out, the request counts as one the recording could not answer.
+  How long each baseline is has not been checked here: the files are not on
+  this machine.
+- **Four seconds at 12 kHz** is 48 000 samples and 0.25 Hz of frequency
+  resolution, far finer than the peak search needs, and it keeps a full sweep to
+  a few seconds. A recording too short for a second stretch counts the request
+  as one the recording could not answer.
 
 ## If the download breaks
 

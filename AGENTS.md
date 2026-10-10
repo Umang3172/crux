@@ -19,9 +19,11 @@ dashboard). One submission, Theme 3.
    fault frequency by hand from `docs/DOMAIN.md`.
 2. **A language model never moves a belief.** `agents/` may explain, translate,
    draft or classify a camera frame. Posterior updates happen only in
-   `investigation/engine.py`, through spectral correlation and measured evidence.
-3. **The offline path must keep working.** No API keys in CI. If `get_narrator()`
-   or `get_gate()` falls back, every test still passes.
+   `investigation/engine.py`, through simulated likelihoods and measured evidence.
+   A model reaches a case only through `tools/`, whose functions never take a
+   probability, a score or a reading (ADR-0007).
+3. **The offline path must keep working.** No API keys in CI. If a model call
+   site or `get_gate()` falls back, every test still passes.
 4. **Every number has a source.** New constants go in `physics/signatures.py` or
    `investigation/catalog.py`, with a row in `docs/DOMAIN.md` explaining where
    they come from. Never tune a constant to make a demo pass — change the model
@@ -48,11 +50,17 @@ src/hypothesis_engine/
   physics/frequencies.py    BPFO/BPFI/BSF/FTF from geometry — verified against CWRU
   physics/signatures.py     what each hypothesis predicts (tones + impact trains)
   physics/synth.py          Signature -> waveform (the virtual experiment)
-  physics/compare.py        simulated vs real, log peak-hold spectral correlation
+  physics/likelihood.py     how well each hypothesis explains a capture, by simulation
+  physics/normal.py         the machine's own healthy captures: a case scored on the change from them
+  physics/compare.py        simulated vs real correlation, for the picture only
   signals/features.py       waveform -> named observations, envelope analysis
   investigation/catalog.py  the measurements the agent can ask for, and their costs
   investigation/engine.py   the loop: observe, experiment, choose a test, conclude
-  agents/                   optional model adapters + offline fallbacks
+  investigation/recorded.py a recorded run as a case: its early recordings are its normal, later ones answer checks
+  tools/                    what a model may call on a case, and the door readings come in by
+  agents/investigator.py    the investigator loop: Gemini drives the tools, code ends it
+  agents/scripted.py        the offline stand-in the loop runs on without credentials
+  agents/                   other optional model adapters + offline fallbacks
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
   api/app.py                FastAPI, including /replay
@@ -60,17 +68,32 @@ src/hypothesis_engine/
 
 ## Common tasks
 
-**Add a fault hypothesis**: `FaultKind` → `predicted_signature()` →
-predictions for it in every test in `catalog.py` → a row in `docs/DOMAIN.md` →
-a case in `tests/test_investigation.py`.
+**Add a fault hypothesis**: `FaultKind` → `predicted_signature()` (the running
+tones plus what the fault adds) → a prediction for it in the two tests a person
+reports in `catalog.py` → a row in `docs/DOMAIN.md` → a case in
+`tests/test_investigation.py`. A suspect for one case only does not
+need any of that: write it as an `OrderSuspect` and pass it to
+`Investigation.add_hypothesis`, which simulates and scores it (ADR-0010).
 
 **Add a measurement the agent can request**: an `EvidenceTest` in `catalog.py`
-with its predictions, `sigma`, `effort_min`, and the coaching `procedure`; then
-teach `measure_from_capture()` or the rig oracle how to answer it.
+with `sigma`, `effort_min` and the coaching `procedure`. If a capture answers it,
+give it `capture_s` and a feature `physics.likelihood.capture_features` returns:
+the engine simulates what every hypothesis reads, and no table is typed
+(ADR-0013). If a person reports the value, give it a prediction table and teach
+the rig oracle to answer it.
 
-**Change how beliefs move**: only in `engine.py`, and say why in
-`docs/DECISIONS.md`. `LIKELIHOOD_SHARPNESS` is a calibration constant, not a
+**Change how beliefs move**: only in `engine.py` (`_recompute` is the one
+writer) and `physics/likelihood.py`, and say why in `docs/DECISIONS.md`.
+`MODEL_MISMATCH` is an assumption awaiting calibration on recordings, not a
 tuning knob for demos.
+
+**Run the investigator**: `uv sync --extra dev --extra llm`, then
+`uv run hypengine investigate --fault inner_race --severity 0.5 --noise 0.45`.
+With no credentials it runs the scripted investigator; with Google Cloud's login
+(`GOOGLE_GENAI_USE_ENTERPRISE=true`, `GOOGLE_CLOUD_PROJECT`) or `GOOGLE_API_KEY`
+it runs Gemini. The first line it prints says which (ADR-0011).
+`--fault rolling_element` or `--fault unlisted_impact` induces a fault the
+catalogue does not list, to watch the investigator notice it (ADR-0012).
 
 ## What to check before you push
 

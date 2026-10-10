@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -103,19 +103,33 @@ class Evidence:
 
 @dataclass
 class Hypothesis:
-    """A candidate physical explanation, with the belief attached to it."""
+    """A candidate physical explanation, with the belief attached to it.
 
-    kind: FaultKind
+    Catalogue hypotheses have a `kind`. A suspect written during the case (by a
+    person or a model) has `kind=None`, a `name`, and is simulated from the
+    vibration it was written to predict.
+    """
+
+    kind: FaultKind | None
     prior: float
     posterior: float
     rejected: bool = False
     correlation: float | None = None
     supports: list[str] = field(default_factory=list)  # evidence ids
     tensions: list[str] = field(default_factory=list)  # evidence ids that do not fit
+    name: str = ""
+    origin: Literal["catalogue", "written"] = "catalogue"
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            if self.kind is None:
+                raise ValueError("a hypothesis needs a kind or a name")
+            self.name = self.kind.value
 
     @property
     def label(self) -> str:
-        return self.kind.value.replace("_", " ")
+        return self.name.replace("_", " ")
 
 
 @dataclass
@@ -131,12 +145,38 @@ class TestOutcome:
 
 @dataclass
 class Conclusion:
-    root_cause: FaultKind
+    root_cause: FaultKind | None  # None when the cause is a written suspect
     confidence: float
     reasoning: str
     recommended_action: str
     what_would_change_my_mind: str
     evidence_ids: list[str]
+    cause: str = ""  # the hypothesis' name, set for every conclusion
+    #: What a healthy verdict could not have seen: the mild faults that fit this
+    #: evidence as well. It is also the last sentence of `reasoning`. Empty otherwise.
+    limit: str = ""
+    #: The same as data: (hypothesis name, the severity it cannot be excluded at).
+    unseen: list[tuple[str, float]] = field(default_factory=list)
+    #: Set when the evidence includes a reading a person reported. What each
+    #: suspect predicts for such a reading is a typed first-pass table, not a
+    #: simulation and not measured on a machine (docs/DOMAIN.md). Empty otherwise.
+    caveat: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.cause and self.root_cause is not None:
+            self.cause = self.root_cause.value
+
+
+@dataclass
+class Note:
+    """Something a person typed about the machine. Kept with the case and shown;
+    never scored, so it moves no belief (`investigation.notes`)."""
+
+    id: str  # N1, N2, ... in the order they were added
+    text: str
+    by: str
+    hazards: list[str] = field(default_factory=list)  # hazards its words describe
+    at: datetime = field(default_factory=_now)
 
 
 @dataclass
@@ -151,14 +191,28 @@ class InvestigationState:
     requested_tests: list[str] = field(default_factory=list)
     outcomes: list[TestOutcome] = field(default_factory=list)
     conclusion: Conclusion | None = None
+    # "unresolved" is an answer, not a failure: the evidence did not reach the bar,
+    # or something in it is explained by none of the hypotheses.
+    outcome: Literal["open", "concluded", "unresolved"] = "open"
+    unresolved_reason: str | None = None
     transcript: list[str] = field(default_factory=list)
+    #: What people typed about the machine. Apart from the ledger: not evidence.
+    notes: list[Note] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def belief(self) -> dict[FaultKind, float]:
-        return {h.kind: h.posterior for h in self.hypotheses}
+        """Beliefs of the catalogue hypotheses. `beliefs()` includes written ones."""
+        return {h.kind: h.posterior for h in self.hypotheses if h.kind is not None}
+
+    def beliefs(self) -> dict[str, float]:
+        return {h.name: h.posterior for h in self.hypotheses}
 
     def leader(self) -> Hypothesis:
         return max(self.hypotheses, key=lambda h: h.posterior)
 
-    def surviving(self, floor: float = 0.05) -> list[Hypothesis]:
-        return [h for h in self.hypotheses if not h.rejected and h.posterior >= floor]
+    def ranked(self) -> list[Hypothesis]:
+        return sorted(self.hypotheses, key=lambda h: h.posterior, reverse=True)
+
+    def surviving(self, floor: float) -> list[Hypothesis]:
+        """Hypotheses at or above `floor`. The engine passes its one threshold."""
+        return [h for h in self.hypotheses if h.posterior >= floor]

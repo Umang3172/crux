@@ -3,8 +3,9 @@
 This is the heart of active diagnosis. Each test declares:
 
 * the single feature it returns,
-* what each hypothesis predicts for that feature (physics, see docs/DOMAIN.md),
-* how noisy the measurement is,
+* how long a capture it needs, or a table of what each hypothesis predicts when
+  a person reports the value instead (see docs/DOMAIN.md),
+* how much the reading may be off,
 * what it costs in technician-minutes and downtime,
 * the procedure the phone coach walks a person through.
 
@@ -25,20 +26,27 @@ class EvidenceTest:
     id: str
     name: str
     feature: str
-    sigma: float  # measurement noise, same units as the predictions
+    sigma: float  # allowance for measurement and model error, in the feature's units
     effort_min: float
     downtime: str
     procedure: tuple[str, ...]
     predictions: dict[FaultKind, float] = field(default_factory=dict)
     coach_prompt: str = ""
+    #: Seconds of vibration the procedure asks for. Set for a test answered by a
+    #: capture: what each hypothesis predicts it reads is then simulated at that
+    #: length, never typed here. None for a value a person reads off.
+    capture_s: float | None = None
 
     def predict(self, kind: FaultKind) -> float | None:
+        """The typed prediction, for a value a person reports. A capture test has none."""
         return self.predictions.get(kind)
 
 
-# Predicted feature values are relative amplitudes (to 1x) or ratios. They are
-# first-pass priors from standard vibration diagnosis and are recalibrated
-# against the rig in week 2 — see docs/TASKS.md.
+# A test answered by a capture carries no prediction table: the engine simulates
+# each hypothesis at the capture's length and reads the feature from the
+# simulation. The two a person reports (temperature, coast-down) keep a table of
+# first-pass values from standard vibration diagnosis, not yet calibrated against
+# a machine; see docs/DOMAIN.md.
 CATALOG: tuple[EvidenceTest, ...] = (
     EvidenceTest(
         id="vib_10s",
@@ -53,14 +61,7 @@ CATALOG: tuple[EvidenceTest, ...] = (
             "Wait for the speed to settle at the normal running point",
             "Hold still for ten seconds while it records",
         ),
-        predictions={
-            FaultKind.IMBALANCE: 0.12,
-            FaultKind.MISALIGNMENT: 1.60,
-            FaultKind.LOOSENESS: 0.65,
-            FaultKind.OUTER_RACE: 0.30,
-            FaultKind.INNER_RACE: 0.30,
-            FaultKind.HEALTHY: 0.25,
-        },
+        capture_s=10.0,
     ),
     EvidenceTest(
         id="envelope",
@@ -78,14 +79,7 @@ CATALOG: tuple[EvidenceTest, ...] = (
             "Record for thirty seconds without moving it",
             "Note the speed at the start and the end",
         ),
-        predictions={
-            FaultKind.IMBALANCE: 0.00,
-            FaultKind.MISALIGNMENT: 0.00,
-            FaultKind.LOOSENESS: 0.05,
-            FaultKind.OUTER_RACE: 1.20,
-            FaultKind.INNER_RACE: -0.90,
-            FaultKind.HEALTHY: 0.00,
-        },
+        capture_s=30.0,
     ),
     EvidenceTest(
         id="half_order",
@@ -99,14 +93,7 @@ CATALOG: tuple[EvidenceTest, ...] = (
             "Move the sensor to the mounting foot, on bare metal",
             "Record for ten seconds at the same speed",
         ),
-        predictions={
-            FaultKind.IMBALANCE: 0.03,
-            FaultKind.MISALIGNMENT: 0.05,
-            FaultKind.LOOSENESS: 0.34,
-            FaultKind.OUTER_RACE: 0.06,
-            FaultKind.INNER_RACE: 0.07,
-            FaultKind.HEALTHY: 0.02,
-        },
+        capture_s=10.0,
     ),
     EvidenceTest(
         id="temperature",

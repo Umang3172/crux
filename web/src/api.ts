@@ -46,10 +46,58 @@ export type Conclusion = {
   reasoning: string;
   recommended_action: string;
   what_would_change_my_mind: string;
+  /** What a healthy verdict could not have seen. Empty otherwise. */
+  limit: string;
+  /** The same as data: the suspects a healthy verdict cannot exclude when mild. */
+  cannot_exclude: { kind: string; severity: number }[];
+  /** Set when the evidence includes a reading scored against an unmeasured table. */
+  caveat: string;
   evidence_ids: string[];
 };
 
 export type Outcome = { test_id: string; feature: string; value: number };
+
+/** What a person typed about the machine. Shown, never scored (`investigation/notes.py`). */
+export type Note = { id: string; text: string; by: string; hazards: string[]; at: string };
+
+/** One measurement on the menu, as the engine weighed it (`engine.Considered`). */
+export type Considered = {
+  test_id: string;
+  name: string;
+  minutes: number;
+  downtime: string;
+  /** Expected information in nats, and per technician-minute. Null if it was not weighed. */
+  gain: number | null;
+  gain_per_minute: number | null;
+  /** The chance its answer brings some suspect to the bar. */
+  settle_chance: number | null;
+  /** How far apart the two leading suspects are expected to read, in sigmas. */
+  apart_sigma: number | null;
+  fate:
+    | "chosen"
+    | "less_per_minute"
+    | "cannot_settle"
+    | "leaders_too_close"
+    | "already_taken"
+    | "no_prediction";
+  /** Why it won or lost, in the engine's words. */
+  why: string;
+};
+
+/** Why the engine asked for a measurement, in its own numbers (`engine.request`). */
+export type RequestNumbers = {
+  test_id: string;
+  /** What each suspect is expected to read, by hypothesis id. */
+  expected_readings: Record<string, number>;
+  sigma: number;
+  /** The two leading suspects the check is meant to tell apart. */
+  separates: string[];
+  chance_of_settling: number;
+  expected_info_gain: number;
+  gain_per_minute: number;
+  /** Everything on the menu as it was weighed, the chosen one included. */
+  considered?: Considered[];
+};
 
 export type Investigation = {
   id: string;
@@ -60,7 +108,18 @@ export type Investigation = {
   requested_tests: string[];
   outcomes: Outcome[];
   transcript: string[];
+  /** "unresolved" is a result, not an error: the engine names no cause below its bar. */
+  outcome: "open" | "concluded" | "unresolved";
+  unresolved_reason: string | null;
+  /** The numbers behind the latest requested measurement, if one was requested. */
+  request: RequestNumbers | null;
+  /** Set when the engine weighed the menu and asked for nothing, with the menu. */
+  no_test?: { reason: string; considered: Considered[] } | null;
   conclusion: Conclusion | null;
+  /** Notes from people. Not evidence: apart from the ledger. */
+  notes: Note[];
+  /** Set by the server when a note describes a hazard: a flag for a person. */
+  hazard: string | null;
 };
 
 /** One row of `GET /tests`: a measurement the agent is allowed to ask for. */
@@ -87,10 +146,23 @@ export type Spectra = {
   simulated: number[];
 };
 
+/** The sensor reading behind a case, for gauges and the live trace. See `deploy/server.py`. */
+export type Capture = {
+  rpm: number;
+  temperature_c: number | null;
+  rms: number;
+  baseline_rms: number;
+  sample_rate_hz: number;
+  waveform: number[];
+  source: string;
+};
+
 export type RunParams = {
   fault: string;
   severity: number;
   seed: number;
+  /** Extra sensor noise on the capture. Left out, the API's default applies. */
+  extra_noise?: number;
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -117,8 +189,15 @@ export const startInvestigation = (p: RunParams) => post<Investigation>("/invest
 export const submitEvidence = (id: string, testId: string, value: number) =>
   post<Investigation>(`/investigations/${id}/evidence`, { test_id: testId, value });
 
+/** Puts a person's note on the case. Nothing in the case moves; a hazard is flagged. */
+export const addNote = (id: string, text: string) =>
+  post<Investigation>(`/investigations/${id}/notes`, { text });
+
 /** Runs a whole case answered by the rig fixture. The judge's one-click path. */
 export const replay = (p: RunParams) => post<Investigation>("/replay", p);
+
+/** The reading a case starts from. Served by the container entrypoint, like `/spectrum`. */
+export const capture = (p: RunParams) => post<Capture>("/capture", p);
 
 /**
  * Optional: the container entrypoint serves this, `hypengine serve` does not.

@@ -34,7 +34,8 @@ modelling fixes that.
 
 The MPU6050 tops out around 1 kHz usable bandwidth, so:
 
-- sample at **2 kHz**, low-pass at 800 Hz,
+- sample at **2 kHz**, low-pass at 184 Hz (the MPU6050's DLPF setting in
+  `firmware/esp32_rig/esp32_rig.ino`),
 - expect shaft orders (1×…5× ≈ 30–150 Hz) to be clean,
 - expect **bearing resonances not to be visible** — that band is 2–5 kHz.
 

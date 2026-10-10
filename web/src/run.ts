@@ -123,7 +123,11 @@ export function toSteps(states: Investigation[]): Step[] {
       }),
     );
   }
-  if (head.ledger.length > experimented) {
+  if (head.outcome !== "open") {
+    // A clear case closes on the first look, with no measurement asked for.
+    // Without this step the playback ended before its own answer.
+    steps.push(step("conclusion", head, head.ledger.length, { key: "conclusion-first-look" }));
+  } else if (head.ledger.length > experimented) {
     steps.push(step("request", head, head.ledger.length, { requestIndex: 0, key: "request-0" }));
   }
 
@@ -143,7 +147,8 @@ export function toSteps(states: Investigation[]): Step[] {
       }),
     );
 
-    if (inv.conclusion) {
+    if (inv.outcome !== "open") {
+      // Closed with a verdict or as unresolved: both are an answer to show.
       steps.push(step("conclusion", inv, inv.ledger.length, { key: `conclusion-${round}` }));
     } else if (inv.ledger.length > upTo) {
       steps.push(
@@ -166,14 +171,15 @@ export async function investigate(params: RunParams): Promise<Step[]> {
     const states: Investigation[] = [await startInvestigation(params)];
     for (const outcome of settled.outcomes) {
       const current = states[states.length - 1];
-      if (current.conclusion) break;
+      // Closed with a verdict or as unresolved: either way it takes no more evidence.
+      if (current.conclusion || current.outcome !== "open") break;
       states.push(await submitEvidence(current.id, outcome.test_id, outcome.value));
     }
     const steps = toSteps(states);
-    const last = states[states.length - 1];
-    if (last.conclusion) return steps;
-    // The stepped run stopped short of a verdict (no measurement was needed, or
-    // a round was refused). Close on the replay, which always concludes.
+    if (steps[steps.length - 1]?.phase === "conclusion") return steps;
+    // The stepped run is still open (a round was refused, or the rig had no
+    // answer). Close on the replay, which ends with a verdict or, when the
+    // evidence does not support one, as unresolved with its reason.
     return [...steps, step("conclusion", settled, settled.ledger.length, { key: "conclusion" })];
   } catch {
     return toSteps([settled]).concat(

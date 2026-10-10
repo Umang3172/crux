@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EvidenceTest, catalogue, health } from "./api";
 import { Beliefs } from "./components/Beliefs";
 import { ConclusionCard } from "./components/Conclusion";
+import { CaseReportPanel } from "./report/Report";
 import { Ledger } from "./components/Ledger";
 import { RequestCard } from "./components/RequestCard";
 import { Spectrum } from "./components/Spectrum";
@@ -51,7 +52,8 @@ const CAPTIONS: Record<Phase, string> = {
   conclusion: "settled",
 };
 
-export default function App() {
+/** The engineer's view: every engine state, the ledger and the spectra. */
+export default function App({ embedded = false }: { embedded?: boolean }) {
   const [models, setModels] = useState<Record<string, string>>({});
   const [online, setOnline] = useState<boolean | null>(null);
   const [tests, setTests] = useState<EvidenceTest[]>([]);
@@ -125,17 +127,26 @@ export default function App() {
   }, [playing, cursor, step, steps.length]);
 
   const inv = step?.inv ?? null;
-  const leader = useMemo(() => {
-    if (!inv || step?.prior) return null;
-    return inv.hypotheses.reduce((a, b) => (a.posterior >= b.posterior ? a : b)).kind;
+  // While a measurement is outstanding the story is the tie, so draw the two
+  // leading live suspects; otherwise the leader alone. Ranked by the engine's
+  // own posteriors. Once choose_next_test names the pair it separates, use that.
+  const suspects = useMemo<string[]>(() => {
+    if (!inv || step?.prior) return [];
+    const live = [...inv.hypotheses]
+      .filter((h) => !h.rejected)
+      .sort((a, b) => b.posterior - a.posterior);
+    const ranked = live.length > 0 ? live : [...inv.hypotheses].sort((a, b) => b.posterior - a.posterior);
+    const tied = step?.phase === "request" && !step.answered && ranked.length > 1;
+    return ranked.slice(0, tied ? 2 : 1).map((h) => h.kind);
   }, [inv, step]);
 
   return (
-    <div className="shell">
+    <div className={embedded ? "g-engineer" : "shell"}>
+      {!embedded && (
       <header className="topbar">
-        <span className="wordmark">Hypothesis Engine</span>
+        <span className="wordmark">Crux</span>
         <span className="tagline">
-          MechNova · it argues with itself, then asks you for one measurement
+          MechNova · the one measurement that decides
         </span>
         <span className="models">
           <span className={`dot${online === false ? " down" : ""}`} />
@@ -146,6 +157,7 @@ export default function App() {
                 .join("  ") || "…"}
         </span>
       </header>
+      )}
 
       <div className="controls">
         <div className="field">
@@ -228,10 +240,27 @@ export default function App() {
           )}
 
           {inv?.conclusion && step?.phase === "conclusion" && (
-            <ConclusionCard conclusion={inv.conclusion} />
+            <>
+              <ConclusionCard conclusion={inv.conclusion} />
+              <section className="panel">
+                <header>
+                  <h2>In plain words, and the check on them</h2>
+                </header>
+                <CaseReportPanel id={inv.id} parts={["plain"]} />
+              </section>
+            </>
           )}
 
-          <Spectrum params={params} hypothesis={leader} />
+          {inv && !inv.conclusion && inv.outcome === "unresolved" && step?.phase === "conclusion" && (
+            <section className="conclusion">
+              <header>
+                <h2>Unresolved</h2>
+              </header>
+              <p className="reason">{inv.unresolved_reason}</p>
+            </section>
+          )}
+
+          <Spectrum params={params} suspects={suspects} />
 
           {inv && step && (
             <section className="panel">

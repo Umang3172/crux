@@ -1,18 +1,69 @@
-# Hypothesis Engine
+# Crux
 
-**An AI investigator that uses your technician as its best sensor.**
+**The one measurement that decides.** An investigator for faults in rotating machines.
 
 Team **MechNova** · Google Cloud AI Builder Cup 2026 · Theme 3, Manufacturing
 
-Most machine-health tools tell you a machine is abnormal. Hypothesis Engine works
-out *why*: it forms competing physical explanations, runs virtual experiments
-against a physics model, kills the explanations that do not match the real
-signal, and — when simulation cannot decide — asks a person for the single
-cheapest measurement that would, coaching them through taking it correctly.
+Most machine-health tools say a machine is abnormal. Crux works out *why*. It
+holds competing physical explanations, simulates the vibration each one would
+produce on this machine at this speed, and scores the real capture against all
+of them. When the capture cannot decide, it asks a person for the single
+measurement worth the most per minute of their time, and says what each
+suspect expects it to read. Below 80% belief, or while the signal holds
+something no suspect explains, it names no cause: it says "unresolved", and why.
+
+It is not a classifier. There is no path from features to a label.
 
 ```
-observe → hypothesise → virtual experiment → ask for evidence → conclude → verify → learn
+watch → alarm → simulate every suspect → ask for one check → verdict, or "unresolved" → ticket → a person approves
 ```
+
+---
+
+## What a language model does here, and what it cannot
+
+Gemini works a case through eleven tools, in a loop built on the Agent
+Development Kit. It reads the evidence, asks the physics which measurement to
+request, narrates for the maintenance team, and, when the list is missing a
+cause, writes a new suspect as the vibration it would make. The physics
+simulates that suspect and scores it on all the evidence, like any other.
+
+No tool takes a probability, a score or a reading from the model, so it cannot
+set a belief. Plain code ends the loop. If the model cannot be reached, an
+offline stand-in finishes the case with the same tools and the screen says so.
+The Investigator tab shows every step as two voices: what the model asked, and
+what the physics answered.
+
+A closed case is written up the same way. The verdict, the reason, the action
+and what would change it are the engine's own lines. A model may add an
+explanation, and each of its sentences is kept only if every number and every
+named cause in it is in the evidence it cites; a sentence that fails is shown
+with the reason. "See the check at work" on the answer runs a test writer that
+makes false claims on purpose, so the check can be watched removing them. The
+check cannot tell whether a sentence that passes is a fair reading, which is
+why a model never writes the verdict or the action.
+
+A technician can add a note to a case: what they see, hear or smell. It is
+kept and shown, and it is not evidence, so it moves no belief whatever it
+says; an order typed into it does nothing. If its words describe a hazard,
+such as smoke or a leak, the case carries a plain flag above the verdict: stop
+and call a supervisor.
+
+Elsewhere a vision model looks at a camera still or a phone video
+(`ticket/camera.py`, `lens/look.py`). What it sees is shown as unconfirmed and
+never reaches the investigation.
+
+---
+
+## The five tabs
+
+| Tab | What it shows |
+|---|---|
+| **Guided** | One case on a cooling pump in plain words: the reading, every suspect tested on a virtual copy, the one check, the answer, and the check after the repair |
+| **Investigator** | A language model working a case through the tools, step by step, including a fault that is not on the list |
+| **Engineer view** | The same engine with every number: beliefs, spectra, the evidence ledger |
+| **Predictive maintenance** | A bearing's life replayed: health, the alarm, time left as a range, the investigation at any moment, a repair ticket a person approves |
+| **Lens** | A phone video of a machine: its motion at shaft speed through the same physics |
 
 ---
 
@@ -20,26 +71,60 @@ observe → hypothesise → virtual experiment → ask for evidence → conclude
 
 ```bash
 # one-time
-brew install uv            # or: pipx install uv
-uv venv --python 3.11
-uv pip install -e ".[dev]"
+brew install uv                        # or: pipx install uv
+uv sync --extra dev --extra llm        # the llm group is the investigator agent
 
-# see the whole loop, no API keys and no hardware needed
+# the whole loop in a terminal: no keys, no hardware
 uv run hypengine demo --fault outer_race
-uv run hypengine frequencies --rpm 1798
+uv run hypengine investigate --fault rolling_element   # a fault the list lacks
+uv run hypengine evaluate --quick                      # how often is it wrong?
 
-# the API a judge would open
-uv run hypengine serve       # http://localhost:8080/docs
-curl -s localhost:8080/replay -X POST -H 'content-type: application/json' \
-  -d '{"fault":"looseness"}' | python -m json.tool | head -40
+# the app: all five tabs on http://localhost:8080
+make web-build
+make serve-app
 
 # tests
 uv run pytest
 ```
 
-**No keys are required.** Gemini and Jev are optional accelerators; without them
-the system falls back to deterministic implementations and everything still runs
-(`GET /health` tells you which are live).
+**No keys are required.** With none, the investigator runs its offline
+stand-in and every number is the same; `GET /health` and the page header say
+which models are live. Gemini is reached through Google Cloud's own login or an
+API key (`.env.example`).
+
+---
+
+## What is measured, and what is not
+
+**Synthetic, and labelled as such.** The demo rig and the pump life on the
+maintenance tab are made by the same signal model the engine simulates with.
+They show the decision rule working. They prove nothing about a real machine.
+
+`uv run hypengine evaluate` runs 180 hard cases (three faults, three strengths,
+four noise levels, five seeds), answered honestly: a requested measurement is a
+new capture of the same machine in the same state.
+
+| | Right | Says it cannot tell | Wrong |
+|---|---|---|---|
+| Crux | 130 | 50 | 0 |
+| Naming the best spectral match | 140 | never | 40 |
+
+The second row is the simplest thing that always answers. Crux gives up ten
+right answers and forty wrong ones for fifty times it says it cannot tell.
+
+**Real recordings.** The watcher and the time-left forecast are evaluated on
+two public run-to-failure sets ([`docs/FORECAST.md`](docs/FORECAST.md)). The
+investigation has a loader and a benchmark for CWRU bearing recordings, which
+scores each recording against the healthy one at its load, and a path from a
+recorded alarm to a case; no result is reported here for it yet. No dataset
+ships in this repository or in the image
+([`docs/DATA.md`](docs/DATA.md)).
+
+**The machine's own normal.** A real machine's normal spectrum is not the
+textbook's, and against a textbook machine its quirks read as a fault. Given
+healthy captures of the same machine, a case is scored on the change from them
+([`docs/DOMAIN.md`](docs/DOMAIN.md)). Tested on a synthetic rig built to have
+that problem; not yet on recorded bearings.
 
 ---
 
@@ -47,42 +132,61 @@ the system falls back to deterministic implementations and everything still runs
 
 | Path | What it is |
 |---|---|
-| `src/hypothesis_engine/physics/` | Fault frequencies, predicted signatures, the synthesiser, the comparator |
-| `src/hypothesis_engine/signals/` | Waveform → named physical observations (no anomaly scores) |
-| `src/hypothesis_engine/investigation/` | The loop, the belief update, the test catalogue, the ledger |
-| `src/hypothesis_engine/agents/` | Gemini (narration) and Jev (typed per-second checks), both optional |
-| `src/hypothesis_engine/data/` | Bench-rig captures (synthetic for now) and the CWRU loader |
-| `src/hypothesis_engine/api/` | FastAPI surface, including `/replay` for judges |
-| `firmware/esp32_rig/` | ESP32 + accelerometer sketch that streams the real rig |
-| `web/` | Investigation UI (Vite + React) |
-| `docs/` | Architecture, the physics domain notes, decisions, tasks, hardware, demo script |
+| `src/hypothesis_engine/physics/` | Fault frequencies, what each fault looks like, the synthesiser, the likelihood built by simulation, the machine's own normal |
+| `src/hypothesis_engine/signals/` | Waveform to named physical observations; speed read from the signal |
+| `src/hypothesis_engine/investigation/` | The loop, the one writer of beliefs, the measurement menu, the ledger, recorded runs as cases |
+| `src/hypothesis_engine/tools/` | What a model may call on a case, and the one door a reading comes in by |
+| `src/hypothesis_engine/agents/` | The investigator loop, its offline stand-in, the run told in plain words; the report and the check on a model's sentences; the Gemini preflight |
+| `src/hypothesis_engine/forecast/` | The watcher, the health percent, time left as a range |
+| `src/hypothesis_engine/ticket/` | The repair ticket, every sentence checked against its evidence; the camera look |
+| `src/hypothesis_engine/fleet/` | Lessons from closed cases, and signed updates a person installs |
+| `src/hypothesis_engine/lens/` | A phone video read as motion and sound |
+| `src/hypothesis_engine/data/` | The synthetic rig and pump life, loaders for recorded sets, the live sensor's buffer |
+| `src/hypothesis_engine/api/` | The HTTP surface; it serialises engine state and decides nothing |
+| `firmware/esp32_rig/` | The sensor sketch that posts to `/ingest` |
+| `web/` | The five tabs (Vite + React) |
+| `docs/` | Architecture, the physics, decisions with their reasons, data, deploy |
 
 Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
-[`docs/DOMAIN.md`](docs/DOMAIN.md) if you are touching the physics.
+[`docs/DOMAIN.md`](docs/DOMAIN.md) for the physics and
+[`docs/DECISIONS.md`](docs/DECISIONS.md) for why each rule is there.
 
 ---
 
 ## The rules that keep this honest
 
-1. **Physics decides, the model explains.** Beliefs move only through spectral
-   comparison and measured evidence. A language model never edits a posterior.
-2. **Every claim cites evidence.** If it is not in the ledger, it does not go in
-   the conclusion.
-3. **No invented numbers.** Prediction tables live in `investigation/catalog.py`
-   and `physics/signatures.py`, are documented in `docs/DOMAIN.md`, and get
-   recalibrated against the rig — they are never tuned to make a demo pass.
-4. **Safety stays human.** The agent recommends; a person approves every
-   physical action. Nothing here touches machine control.
-5. **It runs with no keys.** CI has no secrets; if a change breaks the offline
+1. **Physics decides, the model explains.** Beliefs move only through simulated
+   likelihoods and measured evidence, in one function. A language model never
+   edits one, and no tool would let it.
+2. **"Unresolved" is an answer.** No verdict below 80%, and none while the
+   capture holds something the leading suspect cannot explain. A machine whose
+   vibration has doubled over its own normal is never called healthy.
+3. **Every claim cites evidence.** If it is not in the ledger, it does not go in
+   the conclusion or on the ticket.
+4. **No invented numbers.** The constants that move a belief are listed in
+   `docs/DOMAIN.md` with where each comes from, and marked when one is a
+   judgement call or not yet calibrated.
+5. **Safety stays human.** Crux recommends; a named person approves the ticket.
+   Nothing here touches machine control.
+6. **It runs with no keys.** CI has no secrets; if a change breaks the offline
    path, it breaks the build.
 
 ---
 
-## Status
+## Status, 10 October 2026
 
-Week 1 of four. Working today: the physics core, the investigation loop, active
-test selection, the evidence ledger, repair verification, the API and the replay
-mode. Next: the real rig stream, the phone measurement coach, and the UI. See
+Working: the engine and its tests, the investigator loop with its offline
+stand-in, the five tabs, the path from alarm to investigation to ticket, the
+live-sensor route, the result written up with a checked explanation, the check
+after a repair, a technician's note with a hazard flag, and the menu a
+measurement was chosen from.
+
+Not done: a run against the Gemini service (the loop, the report's explanation
+and the other model call sites have only met stand-ins); a result for the
+investigation on recorded bearings (the benchmark is ready and has not been
+run on the real files); the hardware rig end to end; a phone coach for taking
+the measurement (the written steps in `investigation/catalog.py` stand in); a
+store that survives a restart. The open list is in
 [`docs/TASKS.md`](docs/TASKS.md).
 
 ## Licence

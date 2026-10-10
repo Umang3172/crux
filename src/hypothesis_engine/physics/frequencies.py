@@ -76,3 +76,56 @@ def fault_frequencies(geometry: BearingGeometry, rpm: float) -> FaultFrequencies
         bpfi=m["bpfi"] * fr,
         bsf=m["bsf"] * fr,
     )
+
+
+#: The bearing frequencies an unexplained periodic impact is compared against, and
+#: the part each points to. A rolling-element defect strikes both races once per
+#: spin, so it shows at twice the ball-spin frequency (docs/DOMAIN.md).
+KINEMATIC_PARTS: dict[str, str] = {
+    "ftf": "cage",
+    "bsf": "rolling element",
+    "2xbsf": "rolling element",
+    "bpfo": "outer race",
+    "bpfi": "inner race",
+}
+
+
+@dataclass(frozen=True)
+class KinematicMatch:
+    """A bearing frequency, or one of its harmonics, that an observed line sits on."""
+
+    frequency: str  # a key of KINEMATIC_PARTS
+    harmonic: int  # 1 is the frequency itself
+    order: float  # the frequency, as a multiple of shaft speed
+    deviation: float  # observed / predicted - 1
+
+    @property
+    def part(self) -> str:
+        return KINEMATIC_PARTS[self.frequency]
+
+
+def kinematic_matches(
+    order: float, geometry: BearingGeometry, tolerance: float, max_harmonic: int = 3
+) -> list[KinematicMatch]:
+    """Which bearing frequencies an observed line, in shaft orders, could be.
+
+    Closest first. `tolerance` is fractional: rolling elements slip, so real
+    lines sit a percent or two off the formula. Twice the ball-spin frequency is
+    listed as its own entry rather than as the second harmonic of the spin.
+    """
+    m = bearing_multipliers(geometry)
+    bases = {
+        "ftf": (m["ftf"], max_harmonic),
+        "bsf": (m["bsf"], 1),
+        "2xbsf": (2.0 * m["bsf"], max_harmonic),
+        "bpfo": (m["bpfo"], max_harmonic),
+        "bpfi": (m["bpfi"], max_harmonic),
+    }
+    found = []
+    for name, (base, harmonics) in bases.items():
+        for k in range(1, harmonics + 1):
+            target = k * base
+            deviation = order / target - 1.0
+            if abs(deviation) <= tolerance:
+                found.append(KinematicMatch(name, k, round(target, 4), round(deviation, 4)))
+    return sorted(found, key=lambda match: abs(match.deviation))

@@ -5,8 +5,8 @@ Why a second model at all: the coach has to decide something every second
 Those are classifications, not prose, and calling a large model for each one is
 slow and expensive. Jev returns a typed answer with a probability.
 
-We measure the difference rather than asserting it — see scripts/bench_gate.py
-in docs/TASKS.md, week 3.
+That difference has not been measured here, and nothing in the product calls
+this adapter yet: both are open work in docs/TASKS.md.
 
 Install with the `jev` extra:  uv pip install -e ".[jev]"
 """

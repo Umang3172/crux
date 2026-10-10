@@ -31,15 +31,20 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
+# Every tab of the UI has to work from the deployed link, so the image carries
+# each optional group a tab needs: `llm` for the investigator, `lens` to read a
+# phone video, `forecast` for the learned time-left model.
+ARG EXTRAS="--extra llm --extra jev --extra lens --extra forecast"
+
 # Dependencies first, so editing src/ does not re-resolve or re-download them.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project --extra llm --extra jev
+RUN uv sync --frozen --no-dev --no-install-project ${EXTRAS}
 
 # Then the project itself, installed as a built wheel rather than an editable
 # link so the runtime stage needs no source tree.
 COPY README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --no-editable --extra llm --extra jev
+RUN uv sync --frozen --no-dev --no-editable ${EXTRAS}
 
 # ------------------------------------------------------------- 3 · runtime
 FROM python:3.11-slim-bookworm AS runtime
@@ -60,11 +65,16 @@ ENV PYTHONUNBUFFERED=1 \
     NUMEXPR_NUM_THREADS=1 \
     MALLOC_ARENA_MAX=2 \
     WEB_DIST=/app/web/dist \
+    CRUX_DATA=/app/data \
     PORT=8080
 
 RUN useradd --system --create-home --uid 10001 app
 
 WORKDIR /app
+# What the app saves while it runs (lens scans, lessons) goes under CRUX_DATA.
+# No dataset ships in the image; on Cloud Run this folder is memory and is
+# gone with the instance.
+RUN mkdir -p /app/data && chown app /app/data
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=web /web/dist /app/web/dist
 COPY deploy/server.py deploy/healthcheck.py /app/deploy/

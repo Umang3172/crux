@@ -26,16 +26,17 @@ from pydantic import BaseModel, Field
 
 from hypothesis_engine.api.app import app
 from hypothesis_engine.data.rig import BENCH_RIG, synthetic_capture
+from hypothesis_engine.investigation.engine import PICTURE_SEED_OFFSET
 from hypothesis_engine.models import FaultKind
 from hypothesis_engine.physics.signatures import predicted_signature
 from hypothesis_engine.physics.synth import synthesize
 from hypothesis_engine.signals.features import envelope_spectrum, magnitude_spectrum
 
-#: `investigation.engine` synthesises each hypothesis at `self.seed + 101`. The
-#: plot has to show the waveform the correlation was actually computed from, so
-#: the offset is repeated rather than approximated. If engine.py changes it,
-#: change it here too — a mismatched picture is worse than no picture.
-SIM_SEED = 7 + 101
+#: The engine draws its picture of each hypothesis from one simulation at
+#: `seed + PICTURE_SEED_OFFSET` (the investigation's default seed is 7). The plot
+#: shows that same waveform, so the correlation beside it matches. Beliefs come
+#: from the simulated likelihood, not from this picture (ADR-0008).
+SIM_SEED = 7 + PICTURE_SEED_OFFSET
 
 #: Bin width for the plotted spectra, matching `physics.compare`.
 BIN_HZ = 2.0
@@ -53,6 +54,7 @@ class SpectrumRequest(BaseModel):
     rpm: float | None = None
     severity: float = 1.0
     seed: int = 1234
+    extra_noise: float = Field(default=0.05, ge=0.0, description="As in `/replay`.")
 
 
 def _peak_hold(freqs: np.ndarray, mag: np.ndarray, f_max: float) -> tuple[list[float], list[float]]:
@@ -81,7 +83,12 @@ if "/spectrum" not in {getattr(route, "path", None) for route in app.routes}:
     def spectrum(req: SpectrumRequest) -> dict[str, Any]:
         """The virtual experiment, drawn: the real capture against one hypothesis."""
         observation = synthetic_capture(
-            req.fault, BENCH_RIG, rpm=req.rpm, severity=req.severity, seed=req.seed
+            req.fault,
+            BENCH_RIG,
+            rpm=req.rpm,
+            severity=req.severity,
+            seed=req.seed,
+            extra_noise=req.extra_noise,
         )
         fs = observation.sample_rate_hz
         signature = predicted_signature(req.hypothesis, BENCH_RIG, observation.rpm)
@@ -106,6 +113,63 @@ if "/spectrum" not in {getattr(route, "path", None) for route in app.routes}:
             "freq_hz": centres,
             "real": real_bins,
             "simulated": sim_bins,
+        }
+
+
+class CaptureRequest(BaseModel):
+    fault: FaultKind = Field(default=FaultKind.OUTER_RACE, description="Fault induced on the rig.")
+    rpm: float | None = None
+    severity: float = 1.0
+    seed: int = 1234
+    extra_noise: float = Field(default=0.05, ge=0.0, description="As in `/replay`.")
+
+
+#: Points in the waveform preview. Enough to draw a trace that looks like vibration
+#: on a phone or a projector; the full capture never leaves the server.
+PREVIEW_POINTS = 600
+
+#: The healthy baseline is rendered at its own fixed seed, so the "times normal"
+#: figure compares against one reference machine, not against a moving target.
+BASELINE_SEED = 4242
+
+
+if "/capture" not in {getattr(route, "path", None) for route in app.routes}:
+
+    @app.post("/capture")
+    def capture(req: CaptureRequest) -> dict[str, Any]:
+        """The sensor reading behind a case, for the gauges and the live trace.
+
+        The same capture `/investigations` and `/replay` diagnose, reduced to what
+        a person reads off a handheld meter: vibration level against a healthy
+        machine of the same type, housing temperature, speed, and a short slice of
+        the waveform. Presentation only; nothing here moves a belief.
+        """
+        observation = synthetic_capture(
+            req.fault,
+            BENCH_RIG,
+            rpm=req.rpm,
+            severity=req.severity,
+            seed=req.seed,
+            extra_noise=req.extra_noise,
+        )
+        baseline = synthetic_capture(FaultKind.HEALTHY, BENCH_RIG, rpm=req.rpm, seed=BASELINE_SEED)
+        x = np.asarray(observation.waveform, dtype=float)
+        rms = float(np.sqrt(np.mean(x**2)))
+        baseline_rms = float(np.sqrt(np.mean(np.asarray(baseline.waveform) ** 2)))
+        # A quarter of a second shows several shaft turns at ~30 Hz.
+        window = x[: int(0.25 * observation.sample_rate_hz)]
+        step = max(1, len(window) // PREVIEW_POINTS)
+        preview = window[::step][:PREVIEW_POINTS]
+        return {
+            "rpm": round(observation.rpm, 1),
+            "temperature_c": None
+            if observation.temperature_c is None
+            else round(observation.temperature_c, 1),
+            "rms": round(rms, 4),
+            "baseline_rms": round(baseline_rms, 4),
+            "sample_rate_hz": observation.sample_rate_hz / step,
+            "waveform": [round(float(v), 4) for v in preview],
+            "source": observation.source,
         }
 
 

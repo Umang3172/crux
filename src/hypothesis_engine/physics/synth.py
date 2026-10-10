@@ -66,5 +66,25 @@ def synthesize(
     for train in signature.impacts:
         x += _impacts(t, train, sample_rate_hz, rng)
     if signature.noise > 0:
-        x += rng.normal(0.0, signature.noise, n)
+        x += _noise(n, sample_rate_hz, signature, rng)
     return x
+
+
+#: Octaves over which the noise climbs from its level near the shaft lines to
+#: its level in the resonance band, when a signature gives both.
+NOISE_RAMP_OCTAVES = 2.0
+
+
+def _noise(n: int, fs: float, signature: Signature, rng: np.random.Generator) -> np.ndarray:
+    """White noise at `signature.noise`, tilted when the signature gives a
+    different level near the shaft lines (`Signature.noise_low`)."""
+    white = rng.normal(0.0, signature.noise, n)
+    if signature.noise_low is None:
+        return white
+    level, up_to = signature.noise_low
+    freqs = np.fft.rfftfreq(n, d=1.0 / fs)
+    # `level` up to `up_to`, `noise` from NOISE_RAMP_OCTAVES above it, and a
+    # straight line between them on log axes.
+    climb = np.log2(np.maximum(freqs, 1e-9) / up_to) / NOISE_RAMP_OCTAVES
+    gain = (level / signature.noise) ** (1.0 - np.clip(climb, 0.0, 1.0))
+    return np.fft.irfft(np.fft.rfft(white) * gain, n)

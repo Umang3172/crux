@@ -1,35 +1,12 @@
-"""Deterministic stand-ins for the model layer.
+"""A deterministic stand-in for the measurement gate.
 
-These keep the product demonstrable with no network: same interfaces, templated
-language, no invention. When a key is present the real adapters take over.
+It keeps the coach demonstrable with no network: the same interface, fixed
+rules, no invention. When a key is present the real adapter takes over.
 """
 
 from __future__ import annotations
 
 from .protocols import GateVerdict
-
-
-class TemplateNarrator:
-    name = "offline-template"
-
-    def explain(self, prompt: str, context: dict) -> str:
-        leader = context.get("leader")
-        corr = context.get("correlation")
-        rival = context.get("runner_up")
-        if prompt == "why_this_hypothesis" and leader:
-            bits = [f"{leader} reproduces the measured spectrum"]
-            if corr is not None:
-                bits.append(f"at a correlation of {corr:.2f}")
-            if rival:
-                bits.append(f"and beats {rival}, which predicts a different shape")
-            return " ".join(bits) + "."
-        if prompt == "why_this_test":
-            return (
-                f"{context.get('test', 'The next measurement')} separates the survivors "
-                f"by {context.get('spread', 0):.1f} sigma for "
-                f"{context.get('effort_min', 0):.0f} technician-minutes and no downtime."
-            )
-        return context.get("fallback", "")
 
 
 class RuleGate:

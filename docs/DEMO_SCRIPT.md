@@ -9,7 +9,7 @@ The judging video. Every beat should be something the system really did.
 | 0:50–1:25 | **Virtual experiments** | Real against simulated, the correlation for each, two hypotheses greyed out |
 | 1:25–2:05 | **The request** | "I cannot separate imbalance from looseness. Cheapest test: 10 s at the drive end, 2 minutes, no shutdown." A phone coaches the measurement, chips turn green, the value posts back |
 | 2:05–2:30 | **Root cause** | The conclusion, the ledger open beside it, "what would change my mind" visible |
-| 2:30–3:00 | **Repair and proof** | Coin removed, re-run, vibration drops, predicted against actual — then one line on who pays |
+| 2:30–3:00 | **Repair and proof** | Coin removed, the rig captured again and investigated from scratch: "repair verified", with the fault's own line before and after. Then one line on who pays |
 
 ## Rules for the recording
 
@@ -38,5 +38,5 @@ curl -s $DEPLOYED_URL/replay -X POST -H 'content-type: application/json' \
   -d '{"fault":"looseness","severity":0.35}'
 ```
 
-`/replay` runs the whole case on a recorded capture and returns the transcript,
+`/replay` runs the whole case on a synthetic capture and returns the transcript,
 the ledger and the conclusion. Have this open in a second tab, always.
