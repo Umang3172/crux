@@ -118,6 +118,54 @@ Models, in order: Gemini Robotics-ER 2 (`GEMINI_LENS_MODEL`, default
 model through Ollama when `OLLAMA_MODEL` is set (tested with Gemma 4); otherwise
 none, and the person draws the box. Nothing here moves a belief.
 
+### The photo check (`ticket/camera.py`, `ticket/photo.py`)
+
+The same check serves a Lens scan and the CCTV still on a repair ticket. It
+answers a fixed checklist instead of an open question: crack; leak (oil, water,
+coolant); corrosion or rust; belt damage or a thrown belt; discolouration or heat
+marks; loose or missing fasteners or guards; smoke. For each item the model gives
+a status (present, absent, unsure, cannot see), a severity when present, a box,
+one sentence of visible evidence, and, beside a reference photo, whether it is
+new since then. Boxes are `[ymin, xmin, ymax, xmax]` in 0 to 1000 of the image,
+Gemini's convention, for every model. The reply is constrained by a JSON schema
+(Gemini structured output; Ollama's `format`). Smoke, or anything graded high, is
+marked a hazard.
+
+1. **Quality gate, before any model.** A still that is too small, too dark, blown
+   out or blurred is turned back with the measured reason and no model sees it;
+   the ticket then says, truly, that nobody has looked at it. A model answering
+   "cannot see" for every item counts the same.
+2. **Reference photo.** In Lens, the middle still of the scan a person marked as
+   the machine's normal one. For CCTV, an optional `normal` still per machine in
+   `data/cameras.json`. Both photos go in one request, labelled reference
+   (normal) and now.
+3. **First look**, the whole checklist.
+4. **Second look on a crop.** Each item reported present is cut out around its
+   box with margin and asked about again as a yes or no, with the same region of
+   the reference. Only what this confirms is kept; the number dropped is recorded.
+   The crop is the deterministic stand-in for Agentic Vision's zoom when the model
+   cannot run code, and it is used for every model so their scores compare.
+
+Models: **Gemini 3 Flash with code execution** ("Agentic Vision", blog.google,
+27 Jan 2026: the model crops and zooms in Python; Google reports "a consistent
+5-10% quality boost across most vision benchmarks") when a Gemini key is set:
+`GEMINI_VISION_MODEL` (default `gemini-3-flash-preview`), `GEMINI_AGENTIC_VISION=0`
+to run it without code execution. Gemini 3 accepts structured output together
+with code execution (ai.google.dev, Gemini 3 guide, read 10 Oct 2026); if a model
+refuses the pair, the look is taken in two steps, then written into the schema.
+Temperature stays at 1.0, as that guide asks. **Not run: no Google Cloud access
+yet.** A local model through Ollama when `OLLAMA_MODEL` is set: tested with Gemma
+4 8B, 27 s for one first look on a 1280 x 1211 photo. Otherwise nobody looks, and
+the screen says so.
+
+Everything the check keeps is shown as unconfirmed, boxed on the photo, for a
+person to check before acting. It never reaches the investigation, and a test
+asserts that a camera finding leaves every belief and the ledger unchanged.
+
+Limits: the same region of the reference is only the same part of the machine
+when the framing matches (a fixed CCTV camera; a phone held roughly where the
+normal scan was taken). The gate's blur and exposure bars are provisional (below).
+
 ## Numbers and where they come from
 
 | Constant | Value | Why |
@@ -131,6 +179,11 @@ none, and the person draws the box. Nothing here moves a belief.
 | `experiments.CAMERA_BIN_HZ` | 1 Hz | absorbs a few percent of speed error at 20 to 50 Hz lines |
 | `experiments.TIE` | 0.05 | right and wrong faults differ by more on clean tests (`tests/test_lens.py`) |
 | `experiments.GROWN` | 2 x | the watcher's doubling rule |
+| `photo.MIN_SHORT_SIDE_PX` | 224 px | smallest input common vision encoders were trained at (CLIP ViT-B/32, Radford et al. 2021); below it a model only enlarges the photo |
+| `photo.MEASURE_LONG_SIDE_PX` | 1024 px | stills are measured at the Lens still size, downscaled only |
+| `photo.MIN_SHARPNESS` | 100 | **provisional**: variance of the Laplacian (Pech-Pacheco et al., ICPR 2000) with a published rule-of-thumb bar (Rosebrock, PyImageSearch, 2015); replaced by `photo_eval.py --calibrate` |
+| `photo.DARK_P99`, `photo.BRIGHT_P1` | 32, 223 of 255 | **provisional**: the brightest 1% in the bottom eighth, or the darkest 1% in the top eighth, is a near-black or near-white frame |
+| `photo.CROP_MARGIN`, `photo.CROP_MIN_FRACTION` | half the box each side; a quarter of the short side at least | design choice: the second look sees a leak's source and the floor under it; not fitted |
 
 ## Known limits (7 Oct 2026)
 

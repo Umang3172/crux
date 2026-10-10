@@ -482,3 +482,29 @@ def test_api_upload_analyse_and_mark_normal(lens_dir):
     assert client.get(f"/lens/scans/{sid}/still/0").headers["content-type"] == "image/jpeg"
     assert client.post("/lens/scans", content=b"").status_code == 400
     assert client.post("/lens/scans?look=false", content=b"not a video").status_code == 422
+
+
+def test_a_new_scan_is_looked_at_beside_the_machines_normal_scan(lens_dir, monkeypatch):
+    from hypothesis_engine.lens import scan
+    from hypothesis_engine.ticket import camera
+
+    shown = []
+
+    class Fake:
+        name = "fake"
+
+        def look(self, still, context, reference=None):
+            shown.append(reference)
+            return []
+
+    monkeypatch.setattr(camera, "get_inspector", lambda: Fake())
+    # The test video's stills are 320 x 180, which the gate rightly turns back
+    # (tests/test_ticket.py); here only the plumbing of the reference is checked.
+    monkeypatch.setattr(camera.photo, "quality", lambda image: camera.photo.Quality(True, ""))
+    first = scan.new_scan(_video(seed=4), "a.mp4", "Fan")
+    scan.analyse(first.id, RPM, box=INSIDE)
+    scan.mark_normal(first.id)
+    later = scan.new_scan(_video(seed=5), "b.mp4", "Fan")
+    assert shown[0] is None  # the first scan had nothing to compare with
+    assert shown[1].image == scan.still(first.id, first.stills // 2)
+    assert later.look["reference"].startswith(f"normal scan {first.id}")

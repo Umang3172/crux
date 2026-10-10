@@ -150,18 +150,28 @@ def new_scan(
         (folder / f"still_{i}.jpg").write_bytes(jpg)
     middle = c.stills[len(c.stills) // 2]
 
+    # The machine's normal scan, when a person has marked one: its box measures the
+    # same spot again, and its still is the look's reference photo.
+    normal = _normal_for_machine(machine, root)
+    reference, reference_label = None, ""
+    if normal is not None and normal.stills:
+        try:
+            reference = still(normal.id, normal.stills // 2, root)
+            reference_label = f"normal scan {normal.id} of {normal.created[:10]}"
+        except FileNotFoundError:
+            reference = None
     identity = looks.identify(middle) if look else looks.Identity(note="look skipped")
     seen = (
         looks.visible(
-            middle, f"a technician's phone video of a {identity.machine_type or 'machine'}"
+            middle,
+            f"a technician's phone video of a {identity.machine_type or 'machine'}",
+            reference,
+            reference_label,
         )
         if look
         else None
     )
     notes = list(c.notes)
-    # The box a person confirmed on this machine's normal scan measures the same
-    # spot again, which is what makes the two scans comparable.
-    normal = _normal_for_machine(machine, root)
     shaking = shake_map(c.frames, c.times, c.fps)
     if normal is not None:
         box, source = Box(**normal.box), "the normal scan of this machine"
@@ -347,9 +357,11 @@ def summary(
     if findings:
         out.append(
             "Seen in the video (unconfirmed, check by eye): "
-            + "; ".join(f"{f['what']} at {f['where']}" for f in findings)
+            + "; ".join(f"{f['what']}: {f['where']}" for f in findings)
             + "."
         )
+    elif scan.look.get("retake"):
+        out.append(f"The photo check needs a new photo: {scan.look['retake']}.")
     one = next(ln for ln in seen_lines if ln.order == 1.0)
     if blind:
         out.append(
