@@ -622,7 +622,11 @@ function StepText({
       <p>
         <b>What to do:</b> {text.fix}
       </p>
-      <CaseReportPanel id={inv.id} parts={["why", "plain", "limit"]} plain={plainSentence} />
+      <CaseReportPanel
+        id={inv.id}
+        parts={["why", "plain", "limit", "caveat"]}
+        plain={plainSentence}
+      />
       {inv.conclusion?.what_would_change_my_mind && (
         <p className="g-muted">
           What would change Crux's mind: {plainSentence(inv.conclusion.what_would_change_my_mind)}

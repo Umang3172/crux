@@ -50,7 +50,7 @@ from .factory import gemini_model_id, gemini_route, not_live, switched_off
 VERDICT, WHY, LIMIT = "verdict", "why", "limit"
 #: The parts of a report, in the order they are read. A hazard a person
 #: reported comes before the verdict: it is the first thing to act on.
-ORDER = ("hazard", VERDICT, WHY, "plain", LIMIT, "action", "change")
+ORDER = ("hazard", VERDICT, WHY, "plain", LIMIT, "caveat", "action", "change")
 
 ENGINE = "engine"
 
@@ -136,7 +136,7 @@ def _plain(text: str) -> str:
 
 @dataclass(frozen=True)
 class Line:
-    part: str  # hazard | verdict | why | plain | limit | action | change
+    part: str  # hazard | verdict | why | plain | limit | caveat | action | change
     text: str
     cites: tuple[str, ...]
     by: str  # "engine", or the model that wrote it
@@ -211,6 +211,8 @@ def _result_lines(state: InvestigationState) -> list[Line]:
         ]
         if c.limit:
             lines.append(Line(LIMIT, c.limit, (), ENGINE))
+        if c.caveat:
+            lines.append(Line("caveat", c.caveat, (), ENGINE))
         lines.append(Line("action", c.recommended_action, (), ENGINE))
         lines.append(Line("change", c.what_would_change_my_mind, (), ENGINE))
         return lines

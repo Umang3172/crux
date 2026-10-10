@@ -292,7 +292,9 @@ as a documented guess. The table gives a full-strength fault. A milder one is
 assumed to read proportionally closer to a healthy machine's value (linear in
 severity up to 1), so a small reading does not count against a small fault. The
 replay rig answers these two from a fixture built the same way, which makes
-them circular on synthetic data; on recordings they are never answered.
+them circular on synthetic data; on recordings they are never answered. A
+verdict with one of them in its evidence carries a sentence saying so
+(`Conclusion.caveat`), shown beside the verdict.
 
 `sigma` on each test is the allowance on a reading, in the feature's units: how
 far a real reading may sit from the simulated or tabled one. It is typed, not

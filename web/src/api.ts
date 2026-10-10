@@ -50,6 +50,8 @@ export type Conclusion = {
   limit: string;
   /** The same as data: the suspects a healthy verdict cannot exclude when mild. */
   cannot_exclude: { kind: string; severity: number }[];
+  /** Set when the evidence includes a reading scored against an unmeasured table. */
+  caveat: string;
   evidence_ids: string[];
 };
 

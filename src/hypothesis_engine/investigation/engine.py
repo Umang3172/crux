@@ -1564,6 +1564,18 @@ class Investigation:
                     + " cannot be excluded."
                 )
                 reasoning += f" {limit}"
+        # A reading a person reported is scored against a typed table. A verdict
+        # that has one in its evidence says so, where it is read.
+        reported = list(
+            dict.fromkeys(r.test.name for r in self._readings if r.test.capture_s is None)
+        )
+        caveat = ""
+        if reported:
+            caveat = (
+                f"Part of the evidence is a reading a person reported ({', '.join(reported)}). "
+                "What each suspect predicts for it is a first-pass table that has not been "
+                "measured on a machine."
+            )
         if leader.kind is not None:
             action = ACTIONS[leader.kind]
         else:
@@ -1581,6 +1593,7 @@ class Investigation:
             cause=leader.name,
             limit=limit,
             unseen=[(h.name, severity) for h, severity in unseen],
+            caveat=caveat,
         )
         self.state.conclusion = conclusion
         self.state.outcome = "concluded"

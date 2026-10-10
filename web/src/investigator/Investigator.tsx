@@ -128,7 +128,7 @@ function Outcome({ run }: { run: AgentRun }) {
       {c.status === "concluded" && (
         <CaseReportPanel
           id={c.case_id}
-          parts={["why", "plain", "limit", "action", "change"]}
+          parts={["why", "plain", "limit", "caveat", "action", "change"]}
           plain={plainSentence}
         />
       )}

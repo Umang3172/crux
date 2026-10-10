@@ -9,7 +9,15 @@ const BASE =
   (import.meta.env.VITE_API_BASE as string | undefined) ??
   (import.meta.env.DEV ? "http://localhost:8080" : "");
 
-export type Part = "hazard" | "verdict" | "why" | "plain" | "limit" | "action" | "change";
+export type Part =
+  | "hazard"
+  | "verdict"
+  | "why"
+  | "plain"
+  | "limit"
+  | "caveat"
+  | "action"
+  | "change";
 
 export type ReportLine = {
   part: Part;

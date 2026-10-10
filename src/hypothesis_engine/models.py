@@ -157,6 +157,10 @@ class Conclusion:
     limit: str = ""
     #: The same as data: (hypothesis name, the severity it cannot be excluded at).
     unseen: list[tuple[str, float]] = field(default_factory=list)
+    #: Set when the evidence includes a reading a person reported. What each
+    #: suspect predicts for such a reading is a typed first-pass table, not a
+    #: simulation and not measured on a machine (docs/DOMAIN.md). Empty otherwise.
+    caveat: str = ""
 
     def __post_init__(self) -> None:
         if not self.cause and self.root_cause is not None:

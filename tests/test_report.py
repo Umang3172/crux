@@ -139,6 +139,25 @@ def test_a_healthy_verdict_keeps_what_it_could_not_have_seen_as_its_own_line(hea
     assert "no fault found" in by_part["verdict"].text
 
 
+def test_a_verdict_that_leans_on_a_reported_reading_says_what_that_rests_on(outer):
+    # What each suspect predicts for a temperature a person reads off is a typed
+    # table, not a simulation, and it has not been measured on a machine. A
+    # verdict with such a reading in its evidence says so where it is read.
+    asked = _closed("inner_race", severity=0.5, extra_noise=0.45)
+    assert asked.conclusion is not None, "the premise: this case is settled by its readings"
+    reported = [o.test_id for o in asked.outcomes if o.test_id in ("temperature", "coast_down")]
+    assert reported == ["temperature"], "the premise: one of them was a temperature"
+
+    lines = {line.part: line for line in write_report(asked, look_for_model=False).lines}
+
+    assert "Housing temperature above baseline" in asked.conclusion.caveat
+    assert lines["caveat"].text == asked.conclusion.caveat and lines["caveat"].by == "engine"
+    assert "has not been measured on a machine" in lines["caveat"].text
+    # A verdict from captures alone has nothing to say here.
+    assert outer.conclusion.caveat == ""
+    assert "caveat" not in {line.part for line in engine_lines(outer)}
+
+
 def test_no_verdict_is_reported_as_no_verdict_and_is_not_given_to_a_model(unresolved):
     model = _Says(("The inner race is probably failing.", ["why"]))
     written = write_report(unresolved, model)

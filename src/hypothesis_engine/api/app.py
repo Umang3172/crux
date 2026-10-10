@@ -114,6 +114,7 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
             "recommended_action": state.conclusion.recommended_action,
             "what_would_change_my_mind": state.conclusion.what_would_change_my_mind,
             "limit": state.conclusion.limit,
+            "caveat": state.conclusion.caveat,
             "cannot_exclude": [
                 {"kind": name, "severity": severity} for name, severity in state.conclusion.unseen
             ],

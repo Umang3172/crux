@@ -18,6 +18,7 @@ const HEADINGS: Partial<Record<Part, string>> = {
   hazard: "Hazard reported",
   why: "Why",
   limit: "What this could not have seen",
+  caveat: "What part of this rests on",
   action: "What to do",
   change: "What would change it",
 };

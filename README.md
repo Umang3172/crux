@@ -114,9 +114,10 @@ right answers and forty wrong ones for fifty times it says it cannot tell.
 
 **Real recordings.** The watcher and the time-left forecast are evaluated on
 two public run-to-failure sets ([`docs/FORECAST.md`](docs/FORECAST.md)). The
-investigation has a loader and a benchmark for CWRU bearing recordings and a
-path from a recorded alarm to a case; no result is reported here for it yet with
-the current scoring. No dataset ships in this repository or in the image
+investigation has a loader and a benchmark for CWRU bearing recordings, which
+scores each recording against the healthy one at its load, and a path from a
+recorded alarm to a case; no result is reported here for it yet. No dataset
+ships in this repository or in the image
 ([`docs/DATA.md`](docs/DATA.md)).
 
 **The machine's own normal.** A real machine's normal spectrum is not the
@@ -172,16 +173,21 @@ Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
 
 ---
 
-## Status, 8 October 2026
+## Status, 10 October 2026
 
 Working: the engine and its tests, the investigator loop with its offline
 stand-in, the five tabs, the path from alarm to investigation to ticket, the
-live-sensor route.
+live-sensor route, the result written up with a checked explanation, the check
+after a repair, a technician's note with a hazard flag, and the menu a
+measurement was chosen from.
 
-Not done: a run against the Gemini service (the loop has only met its
-stand-in); a result for the investigation on recorded bearings; the hardware
-rig end to end; a phone coach for taking the measurement (the written steps in
-`investigation/catalog.py` stand in); a store that survives a restart.
+Not done: a run against the Gemini service (the loop, the report's explanation
+and the other model call sites have only met stand-ins); a result for the
+investigation on recorded bearings (the benchmark is ready and has not been
+run on the real files); the hardware rig end to end; a phone coach for taking
+the measurement (the written steps in `investigation/catalog.py` stand in); a
+store that survives a restart. The open list is in
+[`docs/TASKS.md`](docs/TASKS.md).
 
 ## Licence
 
