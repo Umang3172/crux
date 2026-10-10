@@ -33,7 +33,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from functools import cached_property
 
 import numpy as np
@@ -308,6 +308,28 @@ class _Taken:
     wander: float = 0.0  # how far the machine's own normal moves, in the feature's units
 
 
+@dataclass(frozen=True)
+class Considered:
+    """One measurement on the menu, as `choose_next_test` weighed it. Every
+    figure is the one the choice was made on; none is set by hand."""
+
+    test_id: str
+    name: str
+    minutes: float
+    downtime: str
+    #: Expected information, in nats, and per technician-minute. None when no
+    #: reading is predicted for it, or it was already asked for.
+    gain: float | None
+    gain_per_minute: float | None
+    #: The chance its answer brings some hypothesis to the bar.
+    settle_chance: float | None
+    #: How far apart the two leading hypotheses are expected to read, in sigmas.
+    apart_sigma: float | None
+    #: chosen | less_per_minute | cannot_settle | leaders_too_close | already_taken | no_prediction
+    fate: str
+    why: str
+
+
 @dataclass
 class TestChoice:
     test: EvidenceTest
@@ -386,6 +408,8 @@ class Investigation:
         self._look: tuple[tuple[Line, ...], np.ndarray, dict[str, Prediction]] | None = None
         #: Why the last `choose_next_test` offered nothing, in words.
         self.no_useful_test = ""
+        #: Every measurement the last `choose_next_test` weighed, and what became of it.
+        self.menu: list[Considered] = []
         #: Requested readings nobody could take, by test name.
         self._untaken: list[str] = []
 
@@ -1082,6 +1106,7 @@ class Investigation:
         of each other. When nothing is offered, `no_useful_test` says why.
         """
         self.no_useful_test = ""
+        self.menu = []
         live = self.state.surviving(REJECT_BELOW)
         if len(live) < 2:
             return None
@@ -1093,11 +1118,15 @@ class Investigation:
 
         best: TestChoice | None = None
         cannot_settle: TestChoice | None = None
+        # Each test with what it was weighed at, to say afterwards why it won or lost.
+        weighed: list[tuple[EvidenceTest, TestChoice | None, float | None, str]] = []
         for test in CATALOG:
             if test.id in self.state.requested_tests:
+                weighed.append((test, None, None, "already_taken"))
                 continue
             model = self._reading_model(test, live)
             if not model.known:
+                weighed.append((test, None, None, "no_prediction"))
                 continue
             expected_h, settle = _imagine(model, p, weights)
             gain = h_before - expected_h
@@ -1122,11 +1151,21 @@ class Investigation:
             )
             # Not worth a technician's time: no answer would settle the case, or
             # the two leaders are expected to read within a sigma of each other.
-            if settle <= 0.0 or (apart is not None and apart < DISTINCT_SIGMA):
-                if cannot_settle is None or gain > cannot_settle.expected_info_gain:
-                    cannot_settle = choice
-            elif best is None or per_min > best.gain_per_minute:
-                best = choice
+            if settle <= 0.0:
+                weighed.append((test, choice, apart, "cannot_settle"))
+            elif apart is not None and apart < DISTINCT_SIGMA:
+                weighed.append((test, choice, apart, "leaders_too_close"))
+            else:
+                weighed.append((test, choice, apart, "less_per_minute"))
+                if best is None or per_min > best.gain_per_minute:
+                    best = choice
+                continue
+            if cannot_settle is None or gain > cannot_settle.expected_info_gain:
+                cannot_settle = choice
+        self.menu = [
+            self._considered(test, choice, apart, fate, best, (first, second))
+            for test, choice, apart, fate in weighed
+        ]
 
         if best is None:
             if cannot_settle is None:
@@ -1150,6 +1189,53 @@ class Investigation:
         )
         return best
 
+    @staticmethod
+    def _considered(
+        test: EvidenceTest,
+        choice: TestChoice | None,
+        apart: float | None,
+        fate: str,
+        best: TestChoice | None,
+        leaders: tuple[Hypothesis, Hypothesis],
+    ) -> Considered:
+        """One row of the menu, with why the test won or lost, in the engine's words."""
+        first, second = leaders
+        if best is not None and choice is best:
+            fate = "chosen"
+        if fate == "chosen":
+            why = (
+                "Chosen: the most information per minute of the measurements that can "
+                "settle the case."
+            )
+        elif fate == "less_per_minute":
+            why = (
+                f"Can settle the case, but gives {choice.gain_per_minute:.3f} nats a minute "
+                f"against {best.gain_per_minute:.3f} for the one chosen."
+            )
+        elif fate == "cannot_settle":
+            why = f"Not offered: no answer to it would bring any suspect to {CONCLUDE_ABOVE:.0%}."
+        elif fate == "leaders_too_close":
+            why = (
+                f"Not offered: {first.label} and {second.label} are expected to read "
+                f"{apart:.2f} sigma apart, less than {DISTINCT_SIGMA:g}."
+            )
+        elif fate == "already_taken":
+            why = "Already asked for in this case."
+        else:
+            why = "Not offered: no reading is predicted for it."
+        return Considered(
+            test_id=test.id,
+            name=test.name,
+            minutes=test.effort_min,
+            downtime=test.downtime,
+            gain=None if choice is None else round(choice.expected_info_gain, 4),
+            gain_per_minute=None if choice is None else round(choice.gain_per_minute, 4),
+            settle_chance=None if choice is None else round(choice.settle_chance, 3),
+            apart_sigma=None if apart is None else round(apart, 2),
+            fate=fate,
+            why=why,
+        )
+
     def request(self, choice: TestChoice) -> None:
         self.state.requested_tests.append(choice.test.id)
         self.ledger.add(
@@ -1167,6 +1253,8 @@ class Investigation:
             "chance_of_settling": round(choice.settle_chance, 3),
             "expected_info_gain": round(choice.expected_info_gain, 4),
             "gain_per_minute": round(choice.gain_per_minute, 4),
+            # Everything else on the menu, as it was weighed, and why it lost.
+            "considered": [asdict(row) for row in self.menu],
         }
 
     # ------------------------------------------------------ incorporate evidence
@@ -1599,7 +1687,13 @@ class Investigation:
             return None
         choice = self.choose_next_test()
         if choice is None:
-            self.finish(self.no_useful_test or "No measurement on the menu separates them.")
+            why = self.no_useful_test or "No measurement on the menu separates them."
+            # Nothing was asked for: keep the menu, to show why not.
+            self.state.extra["no_test"] = {
+                "reason": why,
+                "considered": [asdict(row) for row in self.menu],
+            }
+            self.finish(why)
             return None
         self.request(choice)
         return choice

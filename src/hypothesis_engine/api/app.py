@@ -87,6 +87,8 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
         ],
         "requested_tests": state.requested_tests,
         "request": state.extra.get("request"),
+        # Set when the engine weighed the menu and asked for nothing, with the menu.
+        "no_test": state.extra.get("no_test"),
         "outcomes": [
             {"test_id": o.test_id, "feature": o.feature, "value": round(o.value, 4)}
             for o in state.outcomes

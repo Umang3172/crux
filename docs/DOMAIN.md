@@ -313,6 +313,16 @@ those with some chance of settling the case and with the two leading hypotheses
 expected to read at least `DISTINCT_SIGMA` apart. If none qualifies, the case
 ends unresolved with that as the reason.
 
+The whole weighing is kept, not only the winner (`engine.Considered`): for every
+test on the menu its expected gain, its minutes, its chance of settling the
+case, how far apart the two leaders are expected to read, and why it won or
+lost. It travels with the request, or with the case when nothing was asked
+for, and the Guided screen shows it. The test asked for is the most information
+per minute, which is not always the one most likely to settle the case: for the
+inner-race capture `tests/test_menu.py` uses (severity 0.5, noise 0.45) the thirty-second envelope
+capture is chosen at 0.069 nats a minute with a 12% chance of settling, ahead
+of the temperature reading at 0.053 with 27%.
+
 ## Faults we deliberately do not induce on the bench
 
 A real race spall cannot be faked on a desk rig without destroying a bearing and
