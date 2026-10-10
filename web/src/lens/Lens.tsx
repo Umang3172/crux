@@ -13,6 +13,7 @@ import {
   analyse,
   type Analysis,
   type Box,
+  type Finding,
   markNormal,
   type Scan,
   type ScanRow,
@@ -216,6 +217,7 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
           >
             <span>measuring here</span>
           </div>
+          {!showMap && <Seen findings={findings} />}
           {drawing && (
             <div
               className="l-dot"
@@ -253,9 +255,12 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
           <p className="l-ai-head">
             What the model saw{" "}
             <span className="l-dim">
-              ({id.by === "nobody" ? "no model on" : id.by}, unconfirmed)
+              ({id.by === "nobody" ? "no model on" : id.by}; unconfirmed: check before acting)
             </span>
           </p>
+          {scan.look.retake && (
+            <p className="l-warn">Take the photo again: {scan.look.retake}.</p>
+          )}
           {id.by === "nobody" ? (
             <p>{id.note}</p>
           ) : (
@@ -273,15 +278,18 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
                   {findings.map((f, i) => (
                     <li key={i} className={f.hazard ? "hazard" : ""}>
                       {f.hazard && "Hazard: "}
-                      {f.what}, {f.where}
+                      {f.what}: {f.evidence || f.where}
+                      {f.severity && f.severity !== "none" && ` (${f.severity})`}
+                      {f.new_since_reference === "yes" && ", new since the normal scan"}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p>
-                  Nothing plainly wrong in view.
-                  {scan.look.note ? ` ${scan.look.note}` : ""}
-                </p>
+                !scan.look.retake && <p>Nothing plainly wrong in view.</p>
+              )}
+              {scan.look.note && !scan.look.retake && <p className="l-dim">{scan.look.note}</p>}
+              {scan.look.reference && (
+                <p className="l-dim">Looked at beside the {scan.look.reference}.</p>
               )}
             </>
           )}
@@ -330,6 +338,33 @@ function ScanView({ scan, onChange }: { scan: Scan; onChange: (s: Scan) => void 
       </section>
 
       {result && <Result scan={scan} a={result} onNormal={onChange} />}
+    </>
+  );
+}
+
+/** Boxes around what the photo check kept, on the still it looked at. */
+function Seen({ findings }: { findings: Finding[] }) {
+  return (
+    <>
+      {findings
+        .filter((f) => f.box)
+        .map((f, i) => {
+          const [y0, x0, y1, x1] = f.box as [number, number, number, number];
+          return (
+            <div
+              key={`${f.item ?? f.what}-${i}`}
+              className={`l-find${f.hazard ? " hazard" : ""}`}
+              style={{
+                left: `${x0 / 10}%`,
+                top: `${y0 / 10}%`,
+                width: `${(x1 - x0) / 10}%`,
+                height: `${(y1 - y0) / 10}%`,
+              }}
+            >
+              <span>{f.what}?</span>
+            </div>
+          );
+        })}
     </>
   );
 }
