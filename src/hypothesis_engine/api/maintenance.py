@@ -135,8 +135,7 @@ def _statement(st: InvestigationState) -> str:
             f"normally (belief {_belief(lead.posterior)})."
         )
         # A healthy verdict states its own limit; pass that on rather than drop it.
-        limit = c.reasoning.partition(" A mild fault would look the same")[2]
-        return said + (f" A mild fault would look the same{limit}" if limit else "")
+        return said + (f" {c.limit}" if c.limit else "")
     return (
         f"Crux's investigation points to {lead.label.lower()} (belief {_belief(lead.posterior)})."
     )

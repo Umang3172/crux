@@ -118,6 +118,26 @@ def test_the_investigator_writes_the_suspect_the_bearing_points_to():
     assert run.case.leader == "rolling_element_defect"
 
 
+def test_a_rolling_element_is_found_when_its_cage_rate_line_is_the_strongest():
+    # A damaged rolling element is carried in and out of the load zone once per
+    # cage turn, so the capture has a line at the cage rate too, and in about one
+    # capture in ten it is the strongest thing no suspect predicts. Reading that
+    # line as a cage fault ended those cases unresolved; this is one of them.
+    store = InMemoryCaseStore()
+    capture = synthetic_capture("rolling_element", BENCH_RIG, seed=11, extra_noise=0.45)
+    case_id = open_case(store, BENCH_RIG, capture).id
+    tools = InvestigatorTools(store)
+    tools.run_virtual_experiments(case_id)
+    first = tools.bearing_frequency_matches(case_id)
+    assert [m.part for m in first.matches] == ["cage"], "the premise: the cage line leads"
+
+    run = investigate(store, case_id, model=ScriptedInvestigator())
+
+    assert run.case.status == "concluded"
+    assert run.case.leader == "rolling_element_defect"
+    assert run.case.blockers == []
+
+
 def test_impacts_on_no_bearing_frequency_end_unresolved_with_the_clue():
     store = InMemoryCaseStore()
     case_id = open_case(store, BENCH_RIG, synthetic_capture("unlisted_impact", BENCH_RIG)).id
@@ -127,7 +147,11 @@ def test_impacts_on_no_bearing_frequency_end_unresolved_with_the_clue():
     assert "propose_suspect" not in names, "nothing in the kinematics supports a suspect"
     assert "request_measurement" not in names
     assert run.case.status == "unresolved"
-    assert "match no frequency of this bearing" in run.case.unresolved_reason
+    # Two voices. The case's reason is the physics' own; the clue the
+    # investigator passed on is kept as the investigator's.
+    assert "no hypothesis on the list predicts" in run.case.unresolved_reason
+    assert "match no frequency of this bearing" not in run.case.unresolved_reason
+    assert "match no frequency of this bearing" in run.case.investigator_reason
 
 
 def test_the_loop_is_ended_by_code_not_by_the_model():

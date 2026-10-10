@@ -23,6 +23,7 @@ from hypothesis_engine.investigation.engine import (
 )
 from hypothesis_engine.models import FaultKind, Observation
 from hypothesis_engine.physics.frequencies import fault_frequencies, shaft_hz
+from hypothesis_engine.physics.likelihood import explained_lines, predicted_lines
 from hypothesis_engine.physics.signatures import (
     ImpactTrain,
     OrderSuspect,
@@ -201,6 +202,54 @@ def test_a_suspect_that_predicts_the_impacts_lifts_the_block():
     assert not inv.blockers()
 
 
+def test_a_suspect_accounts_for_the_rate_its_impacts_rise_and_fall_at():
+    # A damaged rolling element strikes at twice its spin rate, harder each time
+    # the cage carries it through the load zone. The envelope then has a line at
+    # the cage rate itself. The suspect that writes that modulation has predicted
+    # the line: it must not be told the line is unexplained.
+    capture = synthetic_capture("rolling_element", BENCH_RIG, seed=11, extra_noise=0.45)
+    inv = Investigation(BENCH_RIG, capture)
+    inv.observe()
+    inv.run_virtual_experiments()
+    orders = fault_frequencies(BENCH_RIG.bearing, inv.rpm).as_dict()
+    fr = shaft_hz(inv.rpm)
+    cage, spin = orders["ftf"] / fr, orders["2xbsf"] / fr
+    gap, missed_by = inv.blocking_gap()
+    assert missed_by is None and gap.order == pytest.approx(cage, rel=0.02), "the premise"
+
+    accepted, why = inv.add_hypothesis(
+        OrderSuspect("ball", "A damaged rolling element.", impacts=((spin, 4.0, cage, None),))
+    )
+
+    assert accepted, why
+    assert inv.blocking_gap() is None, "the cage-rate line is the suspect's own"
+    assert inv.state.leader().name == "ball" and not inv.blockers()
+    # It is not scored on that line: the scored lines are unchanged.
+    signature = inv._signature_builder(inv.hypothesis("ball"))(None)
+    scored = {round(line.order, 2) for line in predicted_lines(signature, fr)}
+    assert round(cage, 2) not in scored
+    assert round(cage, 2) in {round(line.order, 2) for line in explained_lines(signature, fr)}
+
+
+def test_a_modulation_does_not_excuse_a_line_somewhere_else():
+    # The rub at 7.6 times a turn is still nobody's, whatever the cage does.
+    inv = Investigation(BENCH_RIG, synthetic_capture("unlisted_impact", BENCH_RIG))
+    inv.observe()
+    inv.run_virtual_experiments()
+    orders = fault_frequencies(BENCH_RIG.bearing, inv.rpm).as_dict()
+    fr = shaft_hz(inv.rpm)
+    inv.add_hypothesis(
+        OrderSuspect(
+            "ball",
+            "A damaged rolling element.",
+            impacts=((orders["2xbsf"] / fr, 4.0, orders["ftf"] / fr, None),),
+        )
+    )
+
+    gap, _ = inv.blocking_gap()
+    assert gap.order == pytest.approx(UNLISTED_IMPACT_ORDER, rel=0.02)
+
+
 def test_a_clean_fault_leaves_nothing_unexplained():
     for fault in (FaultKind.OUTER_RACE, FaultKind.INNER_RACE, FaultKind.IMBALANCE):
         inv = _first_look(fault)
@@ -349,6 +398,9 @@ def test_a_healthy_verdict_says_what_it_could_not_have_seen():
     assert "imbalance at severity 0.25" in conclusion.reasoning
     assert "cannot be excluded" in conclusion.reasoning
     assert "outer_race" not in [h.name for h, _ in clear.cannot_exclude()]
+    # The limit is also its own sentence and its own data, for a screen to use.
+    assert conclusion.reasoning.endswith(conclusion.limit) and conclusion.limit
+    assert ("imbalance", 0.25) in conclusion.unseen
 
     # A faint outer-race fault in a noisier capture leads with healthy, and
     # there the bearing faults are among those it could not have seen.

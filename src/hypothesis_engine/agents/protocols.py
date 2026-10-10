@@ -1,10 +1,7 @@
-"""The two places a model is allowed to touch the investigation.
+"""The typed check used while a person takes a measurement.
 
-`Narrator`  — explains, in words, what the engine just did and why.
-`Gate`      — the per-second typed check used while a person takes a measurement.
-
-Both are Protocols with offline implementations, so the whole system runs with
-no API keys at all. That is a deliberate constraint: keys are a hackathon
+`Gate` is a Protocol with an offline implementation, so the whole system runs
+with no API keys at all. That is a deliberate constraint: keys are a hackathon
 liability, and CI must never need one.
 """
 
@@ -22,15 +19,6 @@ class GateVerdict:
     confidence: float
     say: str
     escalate: bool = False
-
-
-@runtime_checkable
-class Narrator(Protocol):
-    """Turns engine state into an explanation a maintenance engineer would accept."""
-
-    name: str
-
-    def explain(self, prompt: str, context: dict) -> str: ...
 
 
 @runtime_checkable

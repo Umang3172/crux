@@ -53,6 +53,10 @@ class Case:
     requests: list[MeasurementRequest] = field(default_factory=list)
     written_suspects: list[WrittenSuspect] = field(default_factory=list)
     narration: list[str] = field(default_factory=list)
+    # What the investigator gave as its reason when it closed the case without a
+    # verdict. Its own words, like the narration: the engine's reason is the
+    # state's `unresolved_reason`.
+    investigator_reason: str = ""
     # The physics' latest pick, and the engine's own words for it. A request must
     # name this test; the words go into the transcript once, when it is made.
     chosen: TestChoice | None = None

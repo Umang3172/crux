@@ -61,6 +61,7 @@ from ..physics.likelihood import (
     accounts_for,
     capture_features,
     evidence_lines,
+    explained_lines,
     log_likelihood_by_severity,
     logmeanexp,
     measure_lines,
@@ -1240,7 +1241,7 @@ class Investigation:
         (default: the leader) does not predict, if it clears the false-alarm
         threshold."""
         h = self.hypothesis(name) if name else self.state.leader()
-        explained = predicted_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
+        explained = explained_lines(self._signature_builder(h)(None), shaft_hz(self.rpm))
         return self._gap(h.name, f"{h.label} does not predict", explained | self._normal_lines)
 
     def unexplained_by_any(self) -> Unexplained | None:
@@ -1248,7 +1249,7 @@ class Investigation:
         fr = shaft_hz(self.rpm)
         explained: set[Line] = set()
         for h in self.state.hypotheses:
-            explained |= predicted_lines(self._signature_builder(h)(None), fr)
+            explained |= explained_lines(self._signature_builder(h)(None), fr)
         return self._gap(None, "no hypothesis predicts", explained | self._normal_lines)
 
     def misfit(self, name: str | None = None) -> tuple[Line, float] | None:
@@ -1315,7 +1316,7 @@ class Investigation:
         for h in self.state.ranked():
             if h.name == besides.name:
                 continue
-            lines = predicted_lines(self._signature_builder(h)(None), fr)
+            lines = explained_lines(self._signature_builder(h)(None), fr)
             if accounts_for(gap.order, {line for line in lines if line.band == "envelope"}):
                 return h
         return None
@@ -1329,7 +1330,8 @@ class Investigation:
         if leader.posterior < CONCLUDE_ABOVE:
             runner = self.state.ranked()[1]
             reasons.append(
-                f"{leader.label} leads at {_pct(leader.posterior)} and {runner.label} follows "
+                f"{leader.label.capitalize()} leads at {_pct(leader.posterior)} and "
+                f"{runner.label} follows "
                 f"at {_pct(runner.posterior)}; a verdict needs {CONCLUDE_ABOVE:.0%}."
             )
         blocking = self.blocking_gap()
@@ -1397,14 +1399,17 @@ class Investigation:
                 )
 
         reasoning = self._reasoning(leader)
+        limit = ""
+        unseen: list[tuple[Hypothesis, float]] = []
         if leader.kind is FaultKind.HEALTHY:
             unseen = self.cannot_exclude()
             if unseen:
-                reasoning += (
-                    " A mild fault would look the same in this evidence: "
+                limit = (
+                    "A mild fault would look the same in this evidence: "
                     + ", ".join(f"{h.label} at severity {severity:g}" for h, severity in unseen)
                     + " cannot be excluded."
                 )
+                reasoning += f" {limit}"
         if leader.kind is not None:
             action = ACTIONS[leader.kind]
         else:
@@ -1420,6 +1425,8 @@ class Investigation:
             what_would_change_my_mind=change_my_mind,
             evidence_ids=self.ledger.ids(),
             cause=leader.name,
+            limit=limit,
+            unseen=[(h.name, severity) for h, severity in unseen],
         )
         self.state.conclusion = conclusion
         self.state.outcome = "concluded"

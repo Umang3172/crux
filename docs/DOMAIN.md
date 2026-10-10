@@ -190,7 +190,11 @@ before, with the two limits above.
 
 Before a verdict the engine looks for the strongest envelope line the hypotheses
 do not explain. Harmonics up to 6x of an explained line, its 1x sidebands, and
-shaft harmonics up to 12x all count as explained. Such a line blocks a verdict
+shaft harmonics up to 12x all count as explained. So does the rate a
+hypothesis's impacts are modulated at (`explained_lines`): impacts that rise and
+fall put a line at that rate itself in the envelope, and the simulator produces
+it. The modulation rate is not a scored line; for the catalogue it sits on a
+shaft harmonic. Such a line blocks a verdict
 only when it clears the false-alarm threshold above and is stronger than every
 line the same hypotheses do explain. A line the whole list leaves out blocks at
 any belief, because it would block whichever of those hypotheses came to lead.
@@ -205,12 +209,17 @@ frequencies:
 | harmonics | up to 3x of FTF, 2xBSF, BPFO and BPFI; BSF once | An impact train's envelope spectrum carries the first few harmonics of its rate. BSF itself is for a defect that strikes only one race hard. Above 3x the candidates crowd together: on the 6205, 3x BPFO and 2x BPFI are already 0.7 % apart, so both are reported when both fit. A design choice. |
 
 A match points to the part that strikes: FTF to the cage, BSF or 2xBSF to a
-rolling element, BPFO and BPFI to the races. The offline investigator writes a
-suspect only for a rolling element or the cage. It writes it at the catalogue's
-bearing-fault strength: impacts of 1.0 at severity 1, which is 4x `BASELINE_1X`.
-A rolling element is modulated at FTF, because the cage carries the defect in
-and out of the load zone. Anything else it leaves unresolved, with the line as
-the clue.
+rolling element, BPFO and BPFI to the races. The offline investigator writes one
+suspect, a rolling element, for a match on BSF, 2xBSF or FTF. It writes it at
+the catalogue's bearing-fault strength: impacts of 1.0 at severity 1, which is
+4x `BASELINE_1X`, at 2xBSF and modulated at FTF, because the cage carries the
+defect in and out of the load zone. A line at FTF alone is read the same way: on
+the replay rig's rolling-element fault at noise 0.45, the FTF line was the
+strongest unexplained line in 1 of 12 captures tried (seeds in
+`tests/test_agent_loop.py`), and a suspect of impacts at FTF only was refused
+there as indistinguishable. The physics still decides: a capture without strikes
+at 2xBSF leaves the suspect low. Anything else is left unresolved, with the line
+as the clue. A cage fault of its own is not on the rig and has not been tried.
 
 The replay rig's off-catalogue faults (`data/rig.py`) are demonstrations, not
 physics constants. `rolling_element` is impacts at 2xBSF, modulated at FTF.
@@ -218,6 +227,20 @@ physics constants. `rolling_element` is impacts at 2xBSF, modulated at FTF.
 frequency of the 6205 (the nearest is 2x BPFO at 7.17x) and on no shaft
 harmonic. Both ring the same resonance, at the same strength, as the
 catalogue's bearing faults.
+
+## The result in words
+
+`agents/report.py` holds a model's explanation of a verdict to the evidence it
+cites. These are bounds on a language model, not physics, and every one is a
+judgement call.
+
+| Constant | Value | Where it comes from |
+|---|---|---|
+| `MAX_CITES` | 3 entries per sentence | A sentence that cites a dozen entries rests on none in particular, and nearly any number then passes the check. A local 7B model cited 7 to 12 entries per sentence when only told the limit; the reply's schema now carries it too, and the check holds whatever arrives. |
+| `MAX_SENTENCES` | 6 | The model is asked for 2 to 4. The rest are dropped unread. |
+| `TIMEOUT_S`, `MAX_TOKENS` | 30 s, 500 tokens | A local model held to the reply's schema ran past 3 minutes on one case until its reply was capped. A reply cut off by either bound is not valid JSON and is treated as a failure. |
+| judgement words | normal, acceptable, expected, typical, nominal, limit(s), range(s) | The same local model called readings "within acceptable limits" and "normal" with no entry saying so. The ledger holds readings; what counts as normal is the engine's to state. A sentence may use one of these words only where the evidence it cites does. A short list from one model's failures, not a complete one. |
+| rounding | a written number matches a value that rounds to it as written | From `ticket/draft.py`, the same rule the repair ticket uses. |
 
 ## What a requested measurement will read
 

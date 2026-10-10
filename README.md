@@ -34,6 +34,15 @@ offline stand-in finishes the case with the same tools and the screen says so.
 The Investigator tab shows every step as two voices: what the model asked, and
 what the physics answered.
 
+A closed case is written up the same way. The verdict, the reason, the action
+and what would change it are the engine's own lines. A model may add an
+explanation, and each of its sentences is kept only if every number and every
+named cause in it is in the evidence it cites; a sentence that fails is shown
+with the reason. "See the check at work" on the answer runs a test writer that
+makes false claims on purpose, so the check can be watched removing them. The
+check cannot tell whether a sentence that passes is a fair reading, which is
+why a model never writes the verdict or the action.
+
 Elsewhere a vision model looks at a camera still or a phone video
 (`ticket/camera.py`, `lens/look.py`). What it sees is shown as unconfirmed and
 never reaches the investigation.
@@ -120,7 +129,7 @@ that problem; not yet on recorded bearings.
 | `src/hypothesis_engine/signals/` | Waveform to named physical observations; speed read from the signal |
 | `src/hypothesis_engine/investigation/` | The loop, the one writer of beliefs, the measurement menu, the ledger, recorded runs as cases |
 | `src/hypothesis_engine/tools/` | What a model may call on a case, and the one door a reading comes in by |
-| `src/hypothesis_engine/agents/` | The investigator loop, its offline stand-in, the run told in plain words; optional narration |
+| `src/hypothesis_engine/agents/` | The investigator loop, its offline stand-in, the run told in plain words; the report and the check on a model's sentences; the Gemini preflight |
 | `src/hypothesis_engine/forecast/` | The watcher, the health percent, time left as a range |
 | `src/hypothesis_engine/ticket/` | The repair ticket, every sentence checked against its evidence; the camera look |
 | `src/hypothesis_engine/fleet/` | Lessons from closed cases, and signed updates a person installs |

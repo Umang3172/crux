@@ -2,8 +2,9 @@
 
 Five call sites used to decide for themselves whether Gemini was on, each from
 its own reading of the environment, and four of them fell back without a word.
-With the login `.env.example` recommends, only one of the five turned on. No
-test here calls a model: the adapters are stubbed where they would reach out.
+With the login `.env.example` recommends, only one of the five turned on. The
+verdict's explanation is a sixth, built on the switch from the start. No test
+here calls a model: the adapters are stubbed where they would reach out.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import importlib
 import pytest
 from typer.testing import CliRunner
 
-from hypothesis_engine.agents import factory, preflight
+from hypothesis_engine.agents import factory, preflight, report
 from hypothesis_engine.cli import app
 from hypothesis_engine.fleet import learn
 from hypothesis_engine.lens import look
@@ -32,6 +33,7 @@ _SETTINGS = (
     "GEMINI_VISION_MODEL",
     "GEMINI_LENS_MODEL",
     "OLLAMA_MODEL",
+    "CRUX_REPORT_MODEL",
 )
 
 
@@ -62,6 +64,7 @@ def test_with_no_credentials_every_call_site_is_off_and_none_is_tried(monkeypatc
     assert isinstance(draft.get_writer(), draft.TemplateWriter)
     assert isinstance(camera.get_inspector(), camera.NoInspector)
     assert look.identify(b"not a picture").by == "nobody"
+    assert report.get_explainer() is None
     assert not any(key.endswith("_not_live") for key in factory.describe())
 
 
@@ -83,8 +86,9 @@ def test_one_login_turns_every_call_site_on_and_a_failure_is_not_silent(monkeypa
     assert isinstance(camera.get_inspector(), camera.NoInspector)
     assert "Gemini failed" in look.identify(b"not a picture").note
     assert learn._worded({"situation": "s", "said": "a", "found": "b"}) is None
+    assert report.get_explainer() is None
     said = factory.describe()
-    for role in ("ticket_writer", "camera_look", "lens_look", "lesson_writer"):
+    for role in factory.OTHER_ROLES:
         assert "no network in tests" in said[f"{role}_not_live"], role
 
 
@@ -117,16 +121,16 @@ def test_the_preflight_reports_each_site_and_survives_one_that_fails(monkeypatch
 
     checks = (
         ("investigator", lambda: "did its job"),
-        ("narrator", _refuse),
+        ("report_writer", _refuse),
         ("camera_look", missing),
     )
     monkeypatch.setattr(preflight, "CHECKS", checks)
     by_role = {r.role: r for r in preflight.run()}
     assert (by_role["investigator"].status, by_role["investigator"].detail) == ("ok", "did its job")
-    assert by_role["narrator"].status == "failed"
-    assert "no network in tests" in by_role["narrator"].detail
+    assert by_role["report_writer"].status == "failed"
+    assert "no network in tests" in by_role["report_writer"].detail
     assert by_role["camera_look"].status == "skipped"
-    assert [r.role for r in preflight.run(only=("narrator",))] == ["narrator"]
+    assert [r.role for r in preflight.run(only=("report_writer",))] == ["report_writer"]
 
 
 def test_the_command_exits_cleanly_when_off_and_with_an_error_when_a_site_fails(monkeypatch):
@@ -135,6 +139,6 @@ def test_the_command_exits_cleanly_when_off_and_with_an_error_when_a_site_fails(
     assert "GOOGLE_CLOUD_PROJECT" in off.output, "it says what to set"
 
     monkeypatch.setenv("GOOGLE_API_KEY", "a-key")
-    monkeypatch.setattr(preflight, "CHECKS", (("narrator", _refuse),))
+    monkeypatch.setattr(preflight, "CHECKS", (("report_writer", _refuse),))
     failed = CliRunner().invoke(app, ["gemini-check"])
     assert failed.exit_code == 1 and "failed" in failed.output

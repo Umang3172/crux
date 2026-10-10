@@ -152,6 +152,11 @@ class Conclusion:
     what_would_change_my_mind: str
     evidence_ids: list[str]
     cause: str = ""  # the hypothesis' name, set for every conclusion
+    #: What a healthy verdict could not have seen: the mild faults that fit this
+    #: evidence as well. It is also the last sentence of `reasoning`. Empty otherwise.
+    limit: str = ""
+    #: The same as data: (hypothesis name, the severity it cannot be excluded at).
+    unseen: list[tuple[str, float]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.cause and self.root_cause is not None:

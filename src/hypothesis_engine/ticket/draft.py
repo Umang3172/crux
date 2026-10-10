@@ -96,6 +96,21 @@ def _matches(written: str, values: tuple[float, ...]) -> bool:
     return any(abs(v - x) <= tol for v in values)
 
 
+def unbacked(sentence: Sentence, by_id: dict[str, Evidence]) -> str | None:
+    """Why the evidence does not back a sentence, or None when it does: it must
+    cite evidence that exists, and every number in it must be in what it cites."""
+    if not sentence.cites:
+        return "it cites no evidence"
+    unknown = [c for c in sentence.cites if c not in by_id]
+    if unknown:
+        return f"it cites {', '.join(unknown)}, which is not in the evidence"
+    values = tuple(v for c in sentence.cites for v in by_id[c].numbers)
+    stray = [n for n in _NUMBER.findall(sentence.text) if not _matches(n, values)]
+    if stray:
+        return f"{', '.join(stray)} is not in the evidence it cites"
+    return None
+
+
 def check(
     sentences: list[Sentence], evidence: list[Evidence]
 ) -> tuple[list[Sentence], list[Sentence]]:
@@ -103,15 +118,7 @@ def check(
     by_id = {e.id: e for e in evidence}
     kept, removed = [], []
     for s in sentences:
-        cited = [by_id[c] for c in s.cites if c in by_id]
-        if not cited or len(cited) != len(s.cites):
-            removed.append(s)
-            continue
-        values = tuple(v for e in cited for v in e.numbers)
-        if all(_matches(n, values) for n in _NUMBER.findall(s.text)):
-            kept.append(s)
-        else:
-            removed.append(s)
+        (kept if unbacked(s, by_id) is None else removed).append(s)
     return kept, removed
 
 

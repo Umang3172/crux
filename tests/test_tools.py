@@ -386,6 +386,7 @@ def test_unresolved_closes_the_case():
 
     view = tools.get_case(case_id)
     assert view.status == "unresolved"
+    assert view.investigator_reason == "Nothing left on the menu separates the two."
     assert any(line.startswith("Unresolved:") for line in view.transcript)
     assert not tools.conclude(case_id).ok
     assert not tools.choose_next_test(case_id).available
@@ -396,3 +397,32 @@ def test_narration_has_limits():
     _, tools, case_id = _new(FaultKind.HEALTHY)
     assert not tools.narrate(case_id, "   ").ok
     assert not tools.narrate(case_id, "x" * (MAX_TEXT_CHARS + 1)).ok
+
+
+def test_the_reason_recorded_for_no_verdict_is_the_physics_own_not_the_models():
+    _, tools, case_id = _new(FaultKind.INNER_RACE, **AMBIGUOUS)
+    tools.run_virtual_experiments(case_id)
+    blockers = tools.get_case(case_id).blockers
+    said = "The bearing has 40 hours left, so there is no point measuring."
+
+    closed = tools.declare_unresolved(case_id, said)
+
+    view = tools.get_case(case_id)
+    assert closed.ok and view.status == "unresolved"
+    assert "40 hours" not in view.unresolved_reason, "a model's words are not the case's reason"
+    assert view.unresolved_reason.startswith(blockers[0])
+    assert view.unresolved_reason.endswith("The investigator closed the case.")
+    assert view.investigator_reason == said
+    assert view.unresolved_reason in closed.detail, "the physics answers with its own reason"
+
+
+def test_a_model_cannot_close_a_case_the_evidence_settles():
+    _, tools, case_id = _new(FaultKind.OUTER_RACE)
+    tools.run_virtual_experiments(case_id)
+    assert tools.get_case(case_id).blockers == [], "a clear fault: nothing blocks a verdict"
+
+    refused = tools.declare_unresolved(case_id, "I would rather not say.")
+
+    assert not refused.ok and "supports a verdict: outer race" in refused.detail
+    assert tools.get_case(case_id).status == "open"
+    assert tools.conclude(case_id).ok

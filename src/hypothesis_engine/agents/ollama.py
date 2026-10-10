@@ -44,10 +44,14 @@ def chat(
     images: list[bytes] | None = None,
     system: str | None = None,
     temperature: float | None = None,
+    max_tokens: int | None = None,
+    timeout_s: float | None = None,
 ) -> str:
     """One non-streaming chat turn; returns the reply text (JSON text when `schema` is given).
 
     `temperature` 0 makes a reading repeatable (the same photo gives the same box).
+    `max_tokens` and `timeout_s` bound a reply: a small model held to a schema
+    can go on filling it until it is stopped.
     """
     name = model()
     if not name:
@@ -62,27 +66,17 @@ def chat(
     body: dict = {"model": name, "messages": messages, "stream": False, "think": False}
     if schema is not None:
         body["format"] = schema
+    options: dict = {}
     if temperature is not None:
-        body["options"] = {"temperature": temperature}
+        options["temperature"] = temperature
+    if max_tokens is not None:
+        options["num_predict"] = max_tokens
+    if options:
+        body["options"] = options
     req = urllib.request.Request(
         f"{HOST}/api/chat",
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+    with urllib.request.urlopen(req, timeout=timeout_s or TIMEOUT_S) as r:
         return json.load(r)["message"]["content"]
-
-
-class OllamaNarrator:
-    """Explains the case in maintenance language, like the Gemini narrator."""
-
-    def __init__(self) -> None:
-        if not available():
-            raise RuntimeError("no local model")
-        self.name = f"ollama:{model()}"
-
-    def explain(self, prompt: str, context: dict) -> str:
-        from .gemini import SYSTEM
-
-        case = json.dumps(context, default=str, indent=2)
-        return chat(f"Task: {prompt}\nCase:\n{case}", system=SYSTEM).strip()

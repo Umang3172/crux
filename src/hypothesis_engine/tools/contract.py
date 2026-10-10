@@ -138,7 +138,13 @@ class CaseView(BaseModel):
     blockers: list[str] = Field(
         default_factory=list, description="Why the case cannot conclude yet, from the physics"
     )
-    unresolved_reason: str | None = None
+    unresolved_reason: str | None = Field(
+        default=None, description="Why there is no verdict, in the physics' own words"
+    )
+    investigator_reason: str | None = Field(
+        default=None,
+        description="What the investigator gave as its reason for closing without a verdict",
+    )
     unexplained: UnexplainedView | None = None
     suspects: list[SuspectView]
     evidence: list[EvidenceView]

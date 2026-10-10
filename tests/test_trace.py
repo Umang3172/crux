@@ -27,8 +27,8 @@ def test_a_refused_suspect_is_told_as_refused_with_the_reason():
 
 
 def test_a_verdict_that_is_not_yet_supported_says_why():
-    line = describe("conclude", {}, {"ok": False, "detail": "healthy leads at 60%."})
-    assert line.answered == "Not yet. healthy leads at 60%."
+    line = describe("conclude", {}, {"ok": False, "detail": "Healthy leads at 60%."})
+    assert line.answered == "Not yet. Healthy leads at 60%."
 
 
 def test_a_reading_is_quoted_from_the_tool_never_made_up():

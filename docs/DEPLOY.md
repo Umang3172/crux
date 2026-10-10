@@ -18,9 +18,11 @@ Everything below is copy-paste. A teammate with a fresh Google Cloud project and
   `gcloud auth login`
 - A Google Cloud project **with billing enabled**. Cloud Build and Artifact
   Registry both refuse to work without it, with errors that do not say so.
-- A Gemini API key from <https://aistudio.google.com/apikey>, if you want live
-  narration. **It is optional.** With no key the system runs its offline path and
-  every diagnosis is identical — only the prose changes (ADR-0002).
+- A Gemini API key from <https://aistudio.google.com/apikey>, or Google Cloud's
+  own login (below), if you want the live model. **It is optional.** With
+  neither, an offline investigator works each case with the same tools. The
+  engine decides either way (ADR-0002); a live model adds suspects the list
+  lacks, which the physics then tests, and the wording.
 
 ---
 
@@ -93,7 +95,7 @@ gcloud secrets add-iam-policy-binding gemini-api-key \
 
 > The secret is called `gemini-api-key`, and Cloud Run mounts it as the
 > environment variable **`GOOGLE_API_KEY`**, because that is the name
-> `agents/factory.py` checks to decide whether Gemini narration is live. Renaming
+> `agents/factory.py` checks to decide whether Gemini is on. Renaming
 > either one means changing `_SECRETS` in `cloudbuild.yaml`.
 
 Rotating the key later is one command, no redeploy:
@@ -146,7 +148,8 @@ or `make url`. Then check it is really serving:
 URL="$(gcloud run services describe hypothesis-engine --region "$REGION" --format 'value(status.url)')"
 
 curl -s "$URL/health"
-# {"status":"ok","models":{"narrator":"gemini-3.1-pro","gate":"offline-rules"}}
+# {"status":"ok","models":{"investigator":"gemini:... via Google Cloud login (...)",
+#   "gate":"offline-rules","report_writer":"gemini:...","ticket_writer":"gemini:...", ...}}
 
 curl -s "$URL/replay" -X POST -H 'content-type: application/json' \
   -d '{"fault":"looseness","severity":0.35}' | head -c 400
@@ -167,8 +170,9 @@ implementation behind each role. Show it once in the demo video (DEMO_SCRIPT.md)
   the app saves goes under `CRUX_DATA` (`/app/data`), which on Cloud Run is
   memory and is gone with the instance.
 - **Run `hypengine gemini-check` with the deploy's settings before deploying.**
-  Six places call a Gemini model (the investigator, the narrator, the ticket
-  writer, the camera look, the lens look, the lesson writer). All of them read
+  Six places call a Gemini model (the investigator, the verdict's explanation,
+  the ticket writer, the camera look, the lens look, the lesson writer). All of
+  them read
   one switch (`agents/factory.py`), and the command makes each do one small
   piece of its own job and prints the model, the time and any error. A model
   id that does not exist shows here as a failed row, not on the day as a

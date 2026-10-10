@@ -6,8 +6,9 @@ nothing blocks a verdict, otherwise request the measurement the physics chose,
 and close the case as unresolved when nothing on the menu can settle it. It
 narrates from tool results only. When a verdict is blocked by impacts no suspect
 predicts, it writes a suspect only where the bearing's own kinematics point to a
-part (a rolling element or the cage); anything else it leaves unresolved with
-the clue. Open-ended suspects are the part only Gemini writes.
+rolling element: strikes at its spin rate, or a line at the cage rate, which a
+damaged rolling element shows too. Anything else it leaves unresolved with the
+clue. Open-ended suspects are the part only Gemini writes.
 
 It is what the investigator runs on without credentials, and what the agent-loop
 tests drive, so the loop is exercised in CI with no network.
@@ -159,26 +160,25 @@ class ScriptedInvestigator(BaseLlm):
         parts = {m["part"]: m for m in report.get("matches") or []}
         if report.get("unexplained") is None:
             return _call(case_id, "get_case")
-        if "propose_suspect" not in called and "rolling element" in parts:
+        if "propose_suspect" not in called and ("rolling element" in parts or "cage" in parts):
+            # A line at the cage rate alone points here too: a damaged rolling
+            # element is carried in and out of the load zone once per cage turn,
+            # and in some captures that line is the strongest one. The physics
+            # refuses the suspect if the strikes it predicts are not there.
+            orders = report["bearing_orders"]
+            rate = (
+                parts["rolling element"]["order"] if "rolling element" in parts else orders["2xbsf"]
+            )
             suspect = {
                 "name": "rolling_element_defect",
                 "description": "A damaged rolling element strikes both races once per spin, so it "
                 "shows at twice the ball-spin frequency, modulated as the cage carries it round.",
                 "impacts": [
                     {
-                        "rate_order": parts["rolling element"]["order"],
+                        "rate_order": rate,
                         "relative_amplitude": _SUSPECT_STRENGTH,
-                        "modulation_order": report["bearing_orders"]["ftf"],
+                        "modulation_order": orders["ftf"],
                     }
-                ],
-            }
-            return _call(case_id, "propose_suspect", suspect=suspect)
-        if "propose_suspect" not in called and "cage" in parts:
-            suspect = {
-                "name": "cage_defect",
-                "description": "A damaged cage strikes once per turn of the cage.",
-                "impacts": [
-                    {"rate_order": parts["cage"]["order"], "relative_amplitude": _SUSPECT_STRENGTH}
                 ],
             }
             return _call(case_id, "propose_suspect", suspect=suspect)

@@ -35,7 +35,7 @@ from ..data.stream import CAPTURE_S, MAX_BATCH_SAMPLES, NotEnoughSignal, Stream,
 from ..investigation.catalog import BY_ID, CATALOG
 from ..investigation.engine import Investigation
 from ..models import FaultKind, InvestigationState
-from ..tools import InMemoryCaseStore, open_case
+from ..tools import CaseNotFound, InMemoryCaseStore, open_case
 
 app = FastAPI(
     title="Crux",
@@ -101,6 +101,10 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
             "reasoning": state.conclusion.reasoning,
             "recommended_action": state.conclusion.recommended_action,
             "what_would_change_my_mind": state.conclusion.what_would_change_my_mind,
+            "limit": state.conclusion.limit,
+            "cannot_exclude": [
+                {"kind": name, "severity": severity} for name, severity in state.conclusion.unseen
+            ],
             "evidence_ids": state.conclusion.evidence_ids,
         },
     }
@@ -420,6 +424,50 @@ def agent_about() -> dict[str, Any]:
         "scenarios": [{"id": kind.value, "on_the_list": True} for kind in FaultKind]
         + [{"id": name, "on_the_list": False} for name in OFF_CATALOGUE],
     }
+
+
+# ------------------------------------------------------------------ the report
+
+#: Reports already written, by case and writer. A closed case does not change.
+_REPORTS: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def _closed_or_open_case(case_id: str) -> InvestigationState:
+    inv = _INVESTIGATIONS.get(case_id)
+    if inv is None:
+        try:
+            inv = _AGENT_CASES.get(case_id).investigation
+        except CaseNotFound:
+            raise HTTPException(404, "no such investigation") from None
+    inv.state.ledger = inv.ledger.items
+    return inv.state
+
+
+@app.get("/investigations/{investigation_id}/report")
+def report(investigation_id: str, writer: str = "") -> dict[str, Any]:
+    """The case's result in words: the engine's own lines, and a model's
+    explanation when one is on, each of its sentences kept only if the evidence
+    it cites backs it. Reading a report never changes the case.
+
+    `writer=careless` uses a test writer that makes false claims on purpose, so
+    the check can be seen removing them. `writer=engine` asks for no model.
+    """
+    from ..agents import report as reports
+
+    if writer not in ("", "careless", "engine"):
+        raise HTTPException(400, "writer is one of: careless, engine")
+    state = _closed_or_open_case(investigation_id)
+    key = (state.id, writer)
+    if key in _REPORTS:
+        return _REPORTS[key]
+    if writer == "careless":
+        written = reports.write_report(state, reports.CarelessWriter())
+    else:
+        written = reports.write_report(state, look_for_model=writer != "engine")
+    out = written.to_dict()
+    if state.outcome != "open":
+        _REPORTS[key] = out
+    return out
 
 
 # Predictive maintenance: replays of recorded bearing lives. Its own module, and

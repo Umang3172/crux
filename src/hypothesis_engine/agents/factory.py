@@ -3,7 +3,7 @@
 Order of preference, per role:
 
     Investigator : Gemini (Google Cloud login, or an API key) -> scripted offline policy
-    Narrator     : Gemini -> local model (OLLAMA_MODEL)        -> template
+    Report       : Gemini -> local model (OLLAMA_MODEL)        -> the engine's own lines
     Gate         : Jev (TYPESAFE_API_KEY)                      -> rules
 
 Never raises because a credential is missing, and never hides why an adapter
@@ -20,8 +20,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .offline import RuleGate, TemplateNarrator
-from .protocols import Gate, Narrator
+from .offline import RuleGate
+from .protocols import Gate
 
 #: The Gemini model used when `GEMINI_MODEL` is not set. Stable, supports function
 #: calling, structured output and thinking, with a free tier (ai.google.dev model
@@ -42,9 +42,18 @@ DEFAULT_LENS_MODEL = "gemini-robotics-er-2-preview"
 #: The camera look falls back to `GEMINI_MODEL`; Lens to the robotics model.
 _ROLE_SETTING = {"camera_look": "GEMINI_VISION_MODEL", "lens_look": "GEMINI_LENS_MODEL"}
 
-#: Every place a model is called besides the investigator, the narrator and the
-#: gate, by the name `describe()` and the preflight show it under.
+#: Every place a model is called besides the investigator and the gate, by the
+#: name `describe()` and the preflight show it under.
 OTHER_ROLES = ("report_writer", "ticket_writer", "camera_look", "lens_look", "lesson_writer")
+
+#: Call sites a deploy can switch off by setting, and the setting. The verdict's
+#: explanation is one: the report is then the engine's own lines.
+_SWITCH = {"report_writer": "CRUX_REPORT_MODEL"}
+
+
+def switched_off(role: str) -> bool:
+    """Whether a call site has been turned off by its own setting (`off`)."""
+    return os.getenv(_SWITCH.get(role, ""), "").strip().lower() == "off"
 
 
 def gemini_model_id(role: str | None = None) -> str:
@@ -67,6 +76,8 @@ def not_live(role: str, exc: BaseException) -> None:
 def provider(role: str) -> str:
     """What a call site would run on as things are configured: Gemini, a local
     model, or neither. Whether it answers is only known once it is used."""
+    if switched_off(role):
+        return f"off ({_SWITCH[role]}=off)"
     if gemini_route() is not None:
         return f"gemini:{gemini_model_id(role)}"
     if os.getenv("OLLAMA_MODEL"):
@@ -106,24 +117,6 @@ def investigator_model() -> tuple[Any, str]:
     return ScriptedInvestigator(), f"offline scripted investigator ({why})"
 
 
-def get_narrator() -> Narrator:
-    if gemini_route() is not None:
-        try:
-            from .gemini import GeminiNarrator
-
-            return GeminiNarrator()
-        except Exception as exc:  # the adapter is optional; record why it is not live
-            _FAILURES["narrator"] = f"{type(exc).__name__}: {exc}"
-    if os.getenv("OLLAMA_MODEL"):
-        try:
-            from .ollama import OllamaNarrator
-
-            return OllamaNarrator()
-        except Exception as exc:  # server down or model missing; record why it is not live
-            _FAILURES["local_narrator"] = f"{type(exc).__name__}: {exc}"
-    return TemplateNarrator()
-
-
 def get_gate() -> Gate:
     if os.getenv("TYPESAFE_API_KEY"):
         try:
@@ -145,7 +138,6 @@ def _investigator_name() -> str:
 def describe() -> dict[str, str]:
     out = {
         "investigator": _investigator_name(),
-        "narrator": get_narrator().name,
         "gate": get_gate().name,
     }
     out |= {role: provider(role) for role in OTHER_ROLES}

@@ -352,7 +352,9 @@ class InvestigatorTools:
 
     def declare_unresolved(self, case_id: str, reason: str) -> Ack:
         """Close the case without a cause: the honest answer when nothing on the
-        list explains the evidence, or nothing left can separate the suspects."""
+        list explains the evidence, or nothing left can separate the suspects.
+        Refused while the evidence supports a verdict. Your reason is kept as
+        yours; the case records the physics' own reason."""
         case = self._store.get(case_id)
         inv = case.investigation
         if case.status != "open":
@@ -360,9 +362,21 @@ class InvestigatorTools:
         problem = _text_problem(reason)
         if problem:
             return Ack(ok=False, detail=problem)
-        inv.declare_unresolved(reason.strip())
+        if not inv.blockers():
+            # Whether there is a verdict is the engine's call, in both directions.
+            leader = inv.state.leader()
+            return Ack(
+                ok=False,
+                detail=f"The evidence supports a verdict: {leader.label} at "
+                f"{leader.posterior:.0%}, with nothing left unexplained. Call conclude.",
+            )
+        case.investigator_reason = reason.strip()
+        inv.finish("The investigator closed the case.")
         self._store.put(case)
-        return Ack(ok=True, detail="The case is closed as unresolved.")
+        return Ack(
+            ok=True,
+            detail=f"The case is closed as unresolved. {inv.state.unresolved_reason}",
+        )
 
 
 # ------------------------------------------------------------------ helpers
@@ -479,6 +493,7 @@ def _view(case: Case) -> CaseView:
         conclude_at=CONCLUDE_ABOVE,
         blockers=inv.blockers() if case.status == "open" and inv.experiments_run else [],
         unresolved_reason=inv.state.unresolved_reason,
+        investigator_reason=case.investigator_reason or None,
         unexplained=_blocking_view(inv) if case.status == "open" else None,
         suspects=suspects,
         evidence=[

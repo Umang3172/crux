@@ -71,6 +71,11 @@ investigator runs the same loop over the same tools, so CI runs with no keys and
 a laptop with no network still demos. Jev gives typed verdicts while somebody
 takes a measurement, with a rule-based fallback.
 
+A closed case is written up by `agents/report.py` (ADR-0021). The verdict, the
+reason, the action and what would change it are the engine's own lines. A model
+may add an explanation of a verdict, and each of its sentences is kept only if
+the evidence it cites backs it; the ones that fail are listed with the reason.
+
 **`api/`** serialises state. `/replay` runs a whole case end to end for anyone
 without the rig, which is how a judge sees this working from the deployed link.
 
@@ -135,7 +140,10 @@ What stays outside, by design:
   writer, never evidence.
 - **A language model** (`agents/`) calls tools that read the case and ask the
   physics for the next step. No tool takes a probability, a score or a reading
-  from it (ADR-0007).
+  from it (ADR-0007). It cannot close a case the evidence settles, and when it
+  closes one without a verdict the reason on record is the engine's (ADR-0022).
+- **The report** (`agents/report.py`) reads a closed case and changes nothing
+  in it.
 
 The callers that used to reach into the engine (`api/maintenance.py`,
 `scripts/diagnose_runs.py`) go through `investigation/recorded.py`, so a

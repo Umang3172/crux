@@ -70,16 +70,21 @@ def _investigator() -> str:
     )
 
 
-def _narrator() -> str:
-    from .gemini import GeminiNarrator
+def _report_writer() -> str:
+    from ..data.rig import BENCH_RIG, rig_oracle, synthetic_capture
+    from ..investigation.engine import Investigation
+    from . import report
 
-    said = GeminiNarrator().explain(
-        "why_this_hypothesis",
-        {"leader": "outer race", "correlation": 0.91, "runner_up": "healthy", "evidence": "E5"},
-    )
-    if not said:
-        raise RuntimeError("the model returned nothing")
-    return f"{len(said.split())} words"
+    if factory.switched_off("report_writer"):
+        raise RuntimeError("switched off by CRUX_REPORT_MODEL=off")
+    # A case the engine closes by itself, so only the explanation is the model's.
+    capture = synthetic_capture("outer_race", BENCH_RIG, seed=1)
+    state = Investigation(BENCH_RIG, capture).run(oracle=rig_oracle("outer_race", BENCH_RIG))
+    written = report.write_report(state, report.GeminiExplainer())
+    kept = [line for line in written.lines if line.part == "plain"]
+    if not kept and not written.removed:
+        raise RuntimeError(" ".join(written.notes) or "the model wrote no sentence")
+    return f"{len(kept)} of {len(kept) + len(written.removed)} sentences passed the evidence check"
 
 
 def _ticket_writer() -> str:
@@ -130,7 +135,7 @@ def _lesson_writer() -> str:
 #: Each call site, the model it would use, and one small piece of its own job.
 CHECKS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("investigator", _investigator),
-    ("narrator", _narrator),
+    ("report_writer", _report_writer),
     ("ticket_writer", _ticket_writer),
     ("camera_look", _camera_look),
     ("lens_look", _lens_look),
@@ -145,7 +150,7 @@ def run(only: tuple[str, ...] = ()) -> list[Result]:
     for role, check in CHECKS:
         if only and role not in only:
             continue
-        model = factory.gemini_model_id(None if role in ("investigator", "narrator") else role)
+        model = factory.gemini_model_id(None if role == "investigator" else role)
         if route is None:
             why = factory._FAILURES.get("gemini", "no Gemini credentials")
             results.append(Result(role, model, "off", why))

@@ -15,7 +15,9 @@ def test_health_reports_which_models_are_live():
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
-    assert "narrator" in r.json()["models"]
+    models = r.json()["models"]
+    assert {"investigator", "report_writer", "ticket_writer"} <= set(models)
+    assert "narrator" not in models, "a role nothing calls is not listed as running"
 
 
 def test_tests_endpoint_exposes_coaching_steps():
@@ -81,3 +83,19 @@ def test_replay_runs_a_whole_case():
     assert body["conclusion"]["root_cause"] == "outer_race"
     assert len(body["ledger"]) > 5
     assert body["transcript"]
+
+
+def test_a_healthy_verdict_carries_what_it_could_not_have_seen_as_data():
+    body = client.post("/replay", json={"fault": "healthy", "seed": 1234}).json()
+    verdict = body["conclusion"]
+    assert verdict["root_cause"] == "healthy"
+
+    unseen = verdict["cannot_exclude"]
+    assert unseen, "this capture cannot rule a mild imbalance out"
+    for item in unseen:
+        named = f"{item['kind'].replace('_', ' ')} at severity {item['severity']:g}"
+        assert named in verdict["limit"], "the sentence and the data say the same thing"
+    # The screen must not call one of these ruled out: it is marked rejected here,
+    # which is a statement about the suspect at every strength, not about a mild one.
+    rejected = {h["kind"] for h in body["hypotheses"] if h["rejected"]}
+    assert {item["kind"] for item in unseen} & rejected

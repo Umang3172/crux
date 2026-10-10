@@ -543,3 +543,99 @@ they answer that ingestion is off.
 **Consequence.** The hardware path has its server side and a test that posts
 what the firmware posts. Not run with the hardware. Memory only: a restart
 forgets the signal and the normal.
+
+## ADR-0021 · The engine states the result; a model may explain a verdict, and each sentence it writes is held to its evidence
+
+**Context.** The verdict's wording was fixed text. A narrator adapter existed
+for Gemini, a local model and templates, `/health` listed it as running, and no
+code path called it. The repair ticket already had a rule for model-written
+text: a sentence is kept only if every number in it is in the evidence it cites.
+
+**Decision.** `agents/report.py` writes a case's result as two voices.
+
+The engine's lines are the result: the verdict, why, what a healthy verdict
+could not have seen, what to do, and what would change it. They come from the
+closed case and no model writes, rewords or reorders them. A reworded action
+("at the next window" becoming "now") is a different instruction, and no check
+on numbers could tell.
+
+A model (Gemini, else a local model, else none) may add an explanation of a
+verdict. Each sentence must cite what it rests on and is kept only if: it cites
+at most three entries and each exists; every number in it is in what it cites;
+every suspect it names is named in what it cites; and it calls nothing normal,
+acceptable or within range unless what it cites does. A measurement names no
+cause, so a sentence that names one has to cite the engine's verdict or that
+suspect's own simulation. It may cite the ledger and the engine's verdict,
+reasoning and limit, not the action or what would change the verdict. A sentence
+that fails is listed with the reason. A reply is bounded in time and length, and
+a failed, cut-off or malformed reply leaves the engine's lines alone, with the
+reason recorded. `CRUX_REPORT_MODEL=off` turns the explanation off.
+
+A case with no verdict is not given to a model. There the reason is the whole
+result, and it is the part a paraphrase gets wrong most easily.
+
+`GET /investigations/{id}/report` serves it. `writer=careless` runs a test
+writer that makes three false claims and one true one on purpose, so the check
+can be watched; the screen labels it as that. The narrator adapters are removed:
+`/health` lists only call sites that something calls.
+
+**Consequence.** The check holds numbers, names and a short list of judgement
+words. It cannot tell whether a sentence that passes is a fair reading of its
+evidence, and the screen says so. Tried with fake writers in the tests and with
+a local 7B model (Mistral through Ollama) on synthetic cases, which is where
+three of the rules came from: it cited a dozen entries per sentence, called
+readings "within acceptable limits", ran past three minutes on one reply, and on
+a case with no verdict wrote that a reading could not be taken "because the
+housing temperature was too high", which no entry says and which passed every
+rule then in place. Under the rules as they stand it wrote 10 sentences on five
+verdicts: 6 were kept and 4 removed, each for naming a cause its evidence did
+not name. One kept sentence calls a crest factor "high" with nothing in the
+evidence to say what high is; that is the limit above, seen. Not run with
+Gemini: there were no credentials. The numbers in the constants table
+(docs/DOMAIN.md) are judgement calls made on that one small model.
+
+## ADR-0022 · Whether a case has a verdict is the engine's call, and so is the reason when it has none
+
+**Context.** The investigator closes a case without a verdict through a tool
+that took its reason as text, and the case stored that text as its own reason.
+With the offline investigator the text was assembled from tool results. With a
+live model it would be whatever the model wrote, shown on the Investigator tab
+and quoted on the repair ticket as the case's reason. The same tool also let a
+model close a case the evidence had settled.
+
+**Decision.** The tool refuses while nothing blocks a verdict, and says to
+conclude. Otherwise the engine closes the case by its own rule and records its
+own reason: what blocks a verdict, any reading nobody could take, and that the
+investigator closed the case. The model's reason is kept beside it as the
+investigator's (`Case.investigator_reason`) and the screen shows it as that.
+
+**Consequence.** `unresolved_reason` is always the engine's words, wherever it
+is shown. The clue the offline investigator used to pass on in it ("match no
+frequency of this bearing; look for a rub, a loose part or a gear mesh") is now
+under the investigator's name, and in the step where the physics reported it.
+
+## ADR-0023 · A suspect accounts for the rate its impacts rise and fall at
+
+**Context.** A damaged rolling element strikes at twice its spin rate, harder
+each time the cage carries it through the load zone. The simulator models that
+as amplitude modulation, which puts a line at the cage rate itself in the
+envelope. The check for impacts no suspect predicts counted the sidebands of a
+modulated suspect and not that line. On the replay rig's rolling-element fault
+at noise 0.45 the cage-rate line was the strongest unexplained line in 1 of 12
+captures tried. There the offline investigator wrote a cage suspect, the
+physics refused it as indistinguishable, and the case ended unresolved; with the
+rolling-element suspect written by hand the belief reached 99% and the verdict
+stayed blocked by the suspect's own line.
+
+**Decision.** `explained_lines` adds the modulation rate to what a suspect
+accounts for. It is used only by the unexplained-impact check; the scored lines
+are unchanged, so no belief moves. The offline investigator writes the
+rolling-element suspect for a match on the cage rate as well, and no longer
+writes a suspect of impacts at the cage rate alone.
+
+**Consequence.** The rig's rolling-element fault concluded in 24 of 24 captures
+tried (11 of 12 before). For the catalogue nothing changes: its one modulated
+hypothesis is modulated at shaft speed, which every suspect already has. A real
+cage fault has not been tried; the expectation, untested, is an unresolved case
+with the rolling-element suspect tested and low.
+

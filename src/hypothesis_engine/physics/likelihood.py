@@ -115,6 +115,24 @@ def predicted_lines(signature: Signature, shaft_hz: float) -> set[Line]:
     return lines
 
 
+def explained_lines(signature: Signature, shaft_hz: float) -> set[Line]:
+    """The lines one suspect accounts for: the ones it is scored on, and the rate
+    its impacts rise and fall at.
+
+    An impact train whose strength is modulated shows the modulation rate itself
+    in the envelope, beside the sidebands: a damaged rolling element, carried in
+    and out of the load zone, puts a line at the cage rate. The simulator
+    produces that line, so a suspect that writes the modulation has predicted
+    it. It is left out of the scored lines: for the catalogue it sits on a shaft
+    harmonic, which every suspect already has.
+    """
+    lines = predicted_lines(signature, shaft_hz)
+    for train in signature.impacts:
+        if train.modulation_hz:
+            lines.add(Line("envelope", round(train.modulation_hz / shaft_hz, 4)))
+    return lines
+
+
 def evidence_lines(signatures: Iterable[Signature], shaft_hz: float) -> tuple[Line, ...]:
     """Every line any live suspect predicts: the features the case is scored on."""
     union: set[Line] = set()

@@ -142,7 +142,7 @@ With `GOOGLE_API_KEY` set, Gemini looks at the still and returns typed
 findings, marked unconfirmed on the ticket. Until then a local model can do the
 same on this machine: `OLLAMA_MODEL=gemma4:latest uv run hypengine serve` uses
 Gemma 4 through Ollama (`agents/ollama.py`) for the ticket writer, the camera
-look and the narrator. Without either, the still is attached and the ticket says
+look and the verdict's explanation. Without either, the still is attached and the ticket says
 nobody has looked at it.
 
 Two guards hold whichever model writes: a sentence whose numbers are not in the
