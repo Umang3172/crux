@@ -56,10 +56,52 @@ over a healthy machine in its signature: imbalance adds 1x, misalignment 2x and
 A phone microphone records at audio rates, so with the bearing's geometry every
 hypothesis, impacts included, is synthesised and compared with the sound by the
 investigation's raw-plus-envelope correlation (`experiments.sound_experiments`).
-Geometry is on file only for bearings in `KNOWN_BEARINGS` (now the 6205); any
+The bearing's fault frequencies must be on file (`lens/bearings.py`, below); any
 other bearing is TBD and the sound is not used. Phone microphones hear little
 below about 200 Hz (IEEE 7449545), so the sound speaks mainly to bearings,
 while the video speaks to shaft faults: the two split the spectrum.
+
+### Bearings on file
+
+Each entry is copied from a source that states it; nothing is estimated. Where
+a maker publishes fault frequencies but not the geometry (NTN-SNR's data sheets),
+the entry keeps what they fix: the ball count (BPFO + BPFI) and (d/D)·cos α. The
+derived ball spin then matches the maker's published spin within 0.1%, which
+confirms a 0° contact angle (`tests/test_lens.py`).
+
+| Bearing | Balls | BPFO | BPFI | Source |
+|---|---|---|---|---|
+| SKF 6205-2RS JEM | 9 | 3.585 | 5.415 | CWRU bearing page: 7.94 mm balls, 39.04 mm pitch |
+| NSK 6205 DDU | 9 | 3.577 | 5.423 | Jung et al., Data in Brief 48:109049 (2023): 7.90 mm, 38.5 mm |
+| SKF 6203-2RS JEM | 8 | 3.053 | 4.947 | CWRU bearing page: 0.2656 in, 1.122 in |
+| LDK UER204 | 8 | 3.083 | 4.917 | XJTU-SY authors' bearing table: 7.92 mm, 34.55 mm |
+| Rexnord ZA-2115 | 16 per row | 7.092 | 8.908 | Sacerdoti et al., Applied Sciences 13:5977 (2023): 0.331 in, 2.815 in, 15.17° |
+| MaFaulDa rig bearing | 8 | 2.998 | 5.002 | MaFaulDa page: 0.7145 cm, 2.8519 cm; model not named |
+| SNR 6204NREE, 6204HVZZ, 6204G15C4 | 8 | 3.052 | 4.948 | NTN Europe data sheets (maker's frequencies) |
+| SNR 6204C3 | 7 | 2.595 | 4.405 | NTN Europe data sheet |
+| SNR 62204EE, 62204EEC3 | 8 | 3.052 | 4.948 | NTN Europe data sheets |
+| SNR 6206NREE, C4, F600, NRZZ, SEE | 9 | 3.568 | 5.432 | NTN Europe data sheets |
+| SNR 6305NREE, 6305F600; 62305EE | 7 | 2.542 | 4.458 | NTN Europe data sheets |
+| SNR 6305ZZ | 7 | 2.574 | 4.426 | NTN Europe data sheet |
+| SNR 6306NR, 6306NRC3; 62306EE | 8 | 3.054 | 4.946 | NTN Europe data sheets |
+| SNR 6306C3 | 8 | 3.084 | 4.916 | NTN Europe data sheet |
+
+Multiples of shaft speed. Sheet addresses and read dates are in the code.
+
+**A part number is not always one design.** NTN-SNR's sheets give the 6204C3
+seven balls and the 6204NREE eight: their outer-race lines differ by 15%, far
+beyond the 1 to 2% bearings slip (Randall and Antoni 2011). So a label is read
+only when every design on file for that number agrees within the slip window
+(`BEARING_SLIP_FRACTION`, 2%). "6204" alone is refused with both designs named;
+"SNR 6204 C3" is read. A maker with nothing on file is not assumed from another
+maker ("SKF 6206" is refused), unless two makers already agree for that number:
+the 6205s from SKF (CWRU) and NSK (Jung et al.) differ by 0.2%, so "FAG 6205"
+reads as the SKF one, and the note says so. Numbers that only contain a bearing
+number ("62050", "16205") are not read as one.
+
+Still TBD: SKF, NSK, FAG and other makers' 6204, 6206, 6305 and 6306 (their
+public pages give ball counts at most, never the pitch diameter: NSK's 6206 page
+gives 9 balls of 9.525 mm and no pitch diameter, so it is not used).
 
 ## The look, and why it is checked twice
 

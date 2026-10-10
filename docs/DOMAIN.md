@@ -105,3 +105,14 @@ A real race spall cannot be faked on a desk rig without destroying a bearing and
 still would not be repeatable. Bearing faults therefore come from CWRU
 recordings, and the rig covers imbalance, misalignment, looseness and rub. Say
 this plainly in the pitch; it is a strength, not a gap.
+
+## Bearings the lens can hear (appended 10 Oct 2026)
+
+`lens/bearings.py` holds every bearing whose fault frequencies the sound check
+may use, each with its source in the code; docs/LENS.md has the full table.
+
+| Rule | Value | Source |
+|---|---|---|
+| Geometry or frequencies only from a source that states them | none estimated; anything else is TBD | maker data sheets (NTN Europe), CWRU, dataset papers |
+| Published BPFO and BPFI alone define an entry | balls = BPFO + BPFI; (d/D)·cos α = (BPFI − BPFO) / balls | the formulas above; the maker's spin frequency is reproduced within 0.1% |
+| A part number is read only if its designs on file agree | within `BEARING_SLIP_FRACTION` (2%) | SNR 6204C3 (7 balls) and 6204NREE (8 balls) differ by 15% |

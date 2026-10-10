@@ -32,6 +32,7 @@ from ..physics.compare import raw_spectrum_correlation, spectral_correlation
 from ..physics.signatures import DEFAULT_HYPOTHESES, Signature, predicted_signature
 from ..physics.synth import synthesize
 from ..signals.features import estimate_rpm, magnitude_spectrum, peak_near
+from . import bearings
 from .motion import HIGHPASS_HZ
 
 #: The faults a camera can tell apart by shape: they live at shaft orders.
@@ -193,31 +194,28 @@ def against_normal(
     return Change(growth, sorted(out, key=lambda x: -x.score))
 
 
-#: Bearings whose geometry is on file, by the part number a nameplate or label shows.
-#: A generic 6205 is read with the SKF 6205-2RS JEM geometry (9 balls of 7.94 mm),
-#: the CWRU reference; other makers' 6205s differ slightly, which the 2% slip
-#: window absorbs. Anything else is TBD until its geometry is entered.
-KNOWN_BEARINGS = {"6205": SKF_6205_2RS_JEM}
+#: Bearings whose fault frequencies are on file (`bearings.TABLE`, each with its
+#: source), by name. Anything else is TBD until a sourced entry is added there.
+KNOWN_BEARINGS = {b.name: b.geometry for b in bearings.TABLE}
 
 
 def bearing_for(text: str) -> MachineSpec | None:
-    for code, geometry in KNOWN_BEARINGS.items():
-        if code in text.replace(" ", ""):
-            return MachineSpec("lens", "scanned machine", geometry, 0.0)
-    return None
+    """The bearing a label or typed part number names, when it can be read unambiguously."""
+    found = bearings.lookup(text).bearing
+    return MachineSpec("lens", "scanned machine", found.geometry, 0.0) if found else None
 
 
 def sound_experiments(
     audio: np.ndarray, fs: float, rpm: float, bearing_text: str = ""
 ) -> tuple[list[Agreement], str]:
     """Every hypothesis against the sound, when the bearing is known; else why not."""
-    spec = bearing_for(bearing_text)
-    if spec is None:
+    reading = bearings.lookup(bearing_text)
+    if reading.bearing is None:
         return [], (
-            "bearing model not known: the sound cannot be checked for bearing faults "
-            "until it is entered"
+            f"bearing model not known: {reading.note}. The sound cannot be checked for "
+            "bearing faults until it is entered"
         )
-    machine = MachineSpec("lens", "scanned machine", spec.bearing, rpm, fs)
+    machine = MachineSpec("lens", "scanned machine", reading.bearing.geometry, rpm, fs)
     x = np.asarray(audio, dtype=float)[: int(fs * SOUND_SECONDS)]
     duration = len(x) / fs
     out = []
@@ -225,8 +223,8 @@ def sound_experiments(
         sim = synthesize(predicted_signature(kind, machine, rpm), fs, duration, SEED)
         out.append(Agreement(kind, spectral_correlation(x, sim, fs)))
     note = (
-        f"bearing read as {spec.bearing.label}. Phone microphones hear little below "
-        "about 200 Hz, so the sound speaks mainly to bearing faults"
+        f"bearing {reading.note}. Phone microphones hear little below about 200 Hz, "
+        "so the sound speaks mainly to bearing faults"
     )
     return sorted(out, key=lambda a: -a.score), note
 

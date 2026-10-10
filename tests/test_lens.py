@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 from scipy.ndimage import fourier_shift, gaussian_filter
 
+from hypothesis_engine.lens import bearings, look
 from hypothesis_engine.lens import experiments as ex
-from hypothesis_engine.lens import look
 from hypothesis_engine.lens.motion import Box, measure, shake_map
 from hypothesis_engine.models import SKF_6205_2RS_JEM, FaultKind, MachineSpec
 from hypothesis_engine.physics.signatures import predicted_signature
@@ -160,6 +160,95 @@ def test_sound_names_bearing_damage_when_the_bearing_is_known():
     assert scores[0].kind is FaultKind.OUTER_RACE
     none, why = ex.sound_experiments(x, fs, RPM, "")
     assert none == [] and "bearing model not known" in why
+
+
+# ---------------------------------------------------------------- bearings
+
+
+def test_a_generic_6205_still_reads_with_the_cwru_reference_values():
+    from test_frequencies import CWRU_PUBLISHED  # tests/ is on the path
+
+    found = bearings.lookup("6205").bearing
+    assert found is not None and found.geometry is SKF_6205_2RS_JEM
+    m = found.multipliers()
+    assert m["bpfo"] == pytest.approx(CWRU_PUBLISHED["bpfo"], abs=1e-3)
+    assert m["bpfi"] == pytest.approx(CWRU_PUBLISHED["bpfi"], abs=1e-3)
+
+
+#: Tolerance per source: values published to 3 or 4 decimals, except the IMS
+#: paper, which rounds to whole Hz at 33.3 Hz (half a Hz is 0.015 x shaft speed).
+_TOL = {"Rexnord ZA-2115": 0.5 / (2000 / 60)}
+
+
+@pytest.mark.parametrize("b", bearings.TABLE, ids=lambda b: b.name)
+def test_every_bearing_reproduces_what_its_source_publishes(b):
+    m = b.multipliers()
+    for key in ("bpfo", "bpfi", "ftf"):
+        if key in b.published:
+            assert m[key] == pytest.approx(b.published[key], abs=_TOL.get(b.name, 1e-3)), key
+    if b.ratio_only:
+        # The ratio form carries no contact angle; the maker's own spin frequency,
+        # rounded to 3 decimals like BPFO and BPFI, confirms 0 deg holds.
+        assert 2 * m["bsf"] == pytest.approx(b.published["bsf_2x"], rel=2e-3)
+
+
+def test_published_race_frequencies_must_add_up_to_whole_balls():
+    with pytest.raises(ValueError, match="whole ball count"):
+        bearings._ratio_only("X", "1", "1", "test", bpfo=3.0, bpfi=4.5)
+
+
+def test_xjtu_bearing_is_the_authors_table():
+    b = bearings.lookup("LDK UER204").bearing
+    assert b is not None
+    g = b.geometry
+    assert (g.n_rolling_elements, g.ball_diameter_mm, g.pitch_diameter_mm) == (8, 7.92, 34.55)
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("SKF 6205-2RS", "SKF 6205-2RS JEM"),
+        ("6205 2Z", "SKF 6205-2RS JEM"),
+        ("NSK6205", "NSK 6205 DDU"),
+        ("nsk 6205 ddu", "NSK 6205 DDU"),
+        ("SNR 6204NREE", "SNR 6204NREE"),
+        ("SNR 6204 C3", "SNR 6204C3"),
+        ("62204EEC3", "SNR 62204EE"),
+        ("UER 204", "LDK UER204"),
+        ("Rexnord ZA-2115", "Rexnord ZA-2115"),
+        ("6306-2RS", "SNR 6306NR"),
+    ],
+)
+def test_nameplate_text_is_read_as_the_bearing_it_names(text, name):
+    found = bearings.lookup(text).bearing
+    assert found is not None and found.name == name
+    assert ex.bearing_for(text) is not None
+
+
+@pytest.mark.parametrize("text", ["62050", "16205", "UER2040", "", "motor 1450 rpm 2.2 kW"])
+def test_numbers_that_only_contain_a_bearing_number_are_not_read_as_one(text):
+    assert bearings.lookup(text).bearing is None and ex.bearing_for(text) is None
+
+
+def test_a_number_made_in_two_designs_asks_for_the_full_designation():
+    # NTN-SNR's sheets: 6204C3 has 7 balls, 6204NREE has 8; BPFO differs by 15%.
+    r = bearings.lookup("6204")
+    assert r.bearing is None and "more than one design" in r.note
+    assert "7 balls" in r.note and "8 balls" in r.note
+
+
+def test_a_maker_with_nothing_on_file_is_not_assumed_from_another():
+    r = bearings.lookup("SKF 6206")
+    assert r.bearing is None and "no SKF 6206 on file" in r.note
+    # Two makers' 6205s agree within the slip window, so a third maker's reads as them.
+    assert bearings.lookup("FAG 6205").bearing is not None
+
+
+def test_sound_says_why_when_the_bearing_cannot_be_read():
+    fs = 48_000.0
+    x = np.random.default_rng(0).normal(0, 1, int(fs))
+    scores, why = ex.sound_experiments(x, fs, RPM, "6204")
+    assert scores == [] and "enter the full designation" in why
 
 
 def test_next_check_separates_what_is_left():
