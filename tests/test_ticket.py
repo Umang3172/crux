@@ -483,3 +483,75 @@ def test_a_camera_finding_never_moves_a_belief() -> None:
             if isinstance(node, ast.ImportFrom | ast.Import)
         ] + [a.name for node in ast.walk(tree) if isinstance(node, ast.Import) for a in node.names]
         assert not any("investigation" in n for n in names), module.__name__
+
+
+def _photo_eval():
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "scripts" / "photo_eval.py"
+    spec = importlib.util.spec_from_file_location("photo_eval", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["photo_eval"] = mod  # its dataclasses resolve names through sys.modules
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _SeesRed(_Checklist):
+    """Reports a leak wherever the photo has a red patch; nothing otherwise."""
+
+    def __init__(self) -> None:
+        super().__init__({})
+
+    def look(self, still, context, reference=None):
+        from io import BytesIO
+
+        import numpy as np
+        from PIL import Image
+
+        a = np.asarray(Image.open(BytesIO(still.image)).convert("RGB")).astype(int)
+        red = (a[:, :, 0] > 180) & (a[:, :, 1] < 80)
+        if red.mean() < 0.01:
+            return camera.findings_from(_answers(), reference is not None)
+        ys, xs = np.nonzero(red)
+        h, w = red.shape
+        box = photo.from_pixels(xs.min(), ys.min(), xs.max(), ys.max(), w, h)
+        return camera.findings_from(_answers(leak=box), reference is not None)
+
+
+def test_photo_eval_scores_hits_and_false_alarms_on_the_rest(tmp_path, monkeypatch, capsys):
+    pe = _photo_eval()
+    for i in range(8):
+        (tmp_path / "normal").mkdir(exist_ok=True)
+        (tmp_path / "normal" / f"n{i}.jpg").write_bytes(_photo(seed=i))
+        (tmp_path / "leak").mkdir(exist_ok=True)
+        (tmp_path / "leak" / f"l{i}.jpg").write_bytes(
+            _photo(seed=20 + i, square=(200, 300, 400, 420))
+        )
+    (tmp_path / "pairs.csv").write_text(
+        "machine,reference,test_image,true_items\npump,normal/n0.jpg,leak/l0.jpg,leak\n"
+    )
+    monkeypatch.setattr(camera, "get_inspector", lambda: _SeesRed())
+    out = tmp_path / "report.md"
+    assert pe.main(["--root", str(tmp_path), "--out", str(out)]) == 0
+    photos = pe.collect(tmp_path)
+    scored = [p for p in photos if not p.calibration]
+    leaks = sum(bool(p.labels) for p in scored)
+    normals = len(scored) - leaks
+    text = out.read_text()
+    # Every leak photo is a hit and no normal photo is a false alarm, counted on the scored photos only.
+    assert f"| Leak (oil, water or coolant) | {leaks} | {leaks}/{leaks} *" in text
+    assert f"| 0/{normals} * |" in text
+    assert (len(photos) - len(scored)) > 0 and "held out for calibration" in text
+
+
+def test_photo_eval_needs_thirty_calibration_photos_before_moving_a_bar(tmp_path, capsys):
+    pe = _photo_eval()
+    (tmp_path / "normal").mkdir()
+    for i in range(10):
+        (tmp_path / "normal" / f"n{i}.jpg").write_bytes(_photo(seed=i))
+    assert pe.main(["--root", str(tmp_path), "--calibrate"]) == 0
+    assert "no recommendation" in capsys.readouterr().out
+    with pytest.raises(ValueError, match="unknown checklist item"):
+        pe.parse_label("leak+dent")
