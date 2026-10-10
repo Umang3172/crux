@@ -14,9 +14,33 @@ from hypothesis_engine.fleet import memory
 from hypothesis_engine.forecast import health, replay
 from hypothesis_engine.forecast.models import Forecast
 from hypothesis_engine.forecast.schedule import risk_before
-from hypothesis_engine.ticket import camera
+from hypothesis_engine.ticket import camera, photo
 from hypothesis_engine.ticket.draft import Evidence, Sentence, check, draft
 from test_forecast import _run  # tests/ is on the path, not a package
+
+
+def _photo(width=640, height=480, seed=0, square=None, level=None) -> bytes:
+    """A sharp, textured JPEG; `square` (left, top, right, bottom) is painted red."""
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+    from scipy.ndimage import gaussian_filter
+
+    if level is not None:
+        rgb = np.full((height, width, 3), float(level))
+    else:
+        rng = np.random.default_rng(seed)
+        scene = gaussian_filter(rng.uniform(0, 255, (height, width)), 1.5)
+        scene = (scene - scene.min()) / np.ptp(scene) * 200 + 25
+        rgb = np.repeat(scene[:, :, None], 3, axis=2)
+    if square is not None:
+        left, top, right, bottom = square
+        rgb[top:bottom, left:right] = (230, 20, 20)
+    out = BytesIO()
+    Image.fromarray(rgb.astype(np.uint8)).save(out, format="JPEG", quality=92)
+    return out.getvalue()
+
 
 # ---------------------------------------------------------------- planned stop
 
@@ -122,12 +146,12 @@ def test_a_still_comes_from_the_registry_and_is_attached_unread_offline(tmp_path
 class _Seer:
     name = "seer"
 
-    def look(self, still, context):
-        return [camera.Finding("oil on the floor", "below the housing", 0.7, hazard=False)]
+    def look(self, still, context, reference=None):
+        return [camera.Finding("oil on the floor", "below the housing", 0.0, hazard=False)]
 
 
 def test_what_the_camera_saw_is_marked_unconfirmed(tmp_path) -> None:
-    still = camera.Still("m", "Bay 2 camera", b"x", "image/jpeg", "now")
+    still = camera.Still("m", "Bay 2 camera", _photo(), "image/jpeg", "now")
     t = _ticket(look=camera.inspect(still, "ctx", _Seer()), has_still=True)
     s = next(s for s in t.sentences if "E5" in s.cites)
     assert "oil on the floor" in s.text and "Not confirmed" in s.text
@@ -215,14 +239,14 @@ def test_citation_marks_a_model_leaves_in_its_text_are_removed() -> None:
 class _Doubter(_Seer):
     name = "doubter"
 
-    def confirm(self, still, finding):
+    def confirm(self, still, finding, reference=None):
         return False
 
 
 def test_a_finding_the_second_look_does_not_confirm_is_left_out() -> None:
-    still = camera.Still("m", "Bay 2 camera", b"x", "image/jpeg", "now")
+    still = camera.Still("m", "Bay 2 camera", _photo(), "image/jpeg", "now")
     look = camera.inspect(still, "ctx", _Doubter())
-    assert look.findings == [] and "not confirmed" in look.note
+    assert look.findings == [] and "not confirmed" in look.note and look.dropped == 1
 
 
 def test_a_sentence_that_drops_the_chance_does_not_count_as_stating_it() -> None:
@@ -235,3 +259,299 @@ def test_a_sentence_that_drops_the_chance_does_not_count_as_stating_it() -> None
     t = _ticket(writer=_Vague())
     e4 = [s.text for s in t.sentences if "E4" in s.cites]
     assert e4 and all("43%" in x for x in e4)
+
+
+# ---------------------------------------------------------------- the photo check
+
+
+def _answers(**present) -> dict:
+    """A checklist reply: every item absent except those given as item=box."""
+    out = {}
+    for item in camera.ITEMS:
+        box = present.get(item)
+        out[item] = {
+            "status": "present" if box else "absent",
+            "severity": "medium" if box else "none",
+            "box": list(box) if box else [],
+            "evidence": f"{item} near the base" if box else "",
+            "new_since_reference": "yes" if box else "no",
+        }
+    return out
+
+
+class _Checklist:
+    """A fake inspector that answers the checklist and records what it was shown."""
+
+    name = "checklist"
+
+    def __init__(self, reply: dict, confirms: bool = True) -> None:
+        self.reply, self.confirms, self.seen = reply, confirms, []
+
+    def look(self, still, context, reference=None):
+        self.seen.append(("look", still, reference))
+        return camera.findings_from(self.reply, reference is not None)
+
+    def confirm(self, crop, finding, reference=None):
+        self.seen.append(("confirm", crop, reference))
+        return camera.Second(self.confirms, "yes" if reference is not None else "no_reference")
+
+
+class _Blind:
+    name = "blind"
+
+    def look(self, still, context, reference=None):
+        raise AssertionError("a model was asked about a photo the gate should turn back")
+
+
+@pytest.mark.parametrize(
+    ("image", "why"),
+    [
+        (_photo(level=4), "too dark"),
+        (_photo(level=252), "blown out"),
+        (_photo(width=200, height=150), "too small"),
+        (b"\xff\xd8not a jpeg", "could not be read"),
+    ],
+)
+def test_the_gate_turns_back_an_unusable_photo_before_any_model(image, why) -> None:
+    look = camera.inspect(camera.Still("m", "Bay 2", image, "image/jpeg", "now"), "ctx", _Blind())
+    assert why in look.retake and look.findings == [] and "Take the photo again" in look.note
+    # The ticket then says, truly, that nobody has looked at the still.
+    assert look.inspected_by == camera.NOBODY
+    t = _ticket(look=look, has_still=True)
+    assert any("nobody has looked at it yet" in s.text for s in t.sentences)
+
+
+def test_the_gate_turns_back_a_blurred_photo() -> None:
+    from io import BytesIO
+
+    from PIL import Image, ImageFilter
+
+    out = BytesIO()
+    Image.open(BytesIO(_photo())).filter(ImageFilter.GaussianBlur(6)).save(out, format="JPEG")
+    assert not photo.quality(out.getvalue()).usable
+    assert photo.quality(_photo()).usable
+
+
+def test_a_present_item_the_cropped_second_look_rejects_is_dropped() -> None:
+    still = camera.Still("m", "Bay 2", _photo(), "image/jpeg", "now")
+    fake = _Checklist(_answers(leak=(600, 300, 800, 500)), confirms=False)
+    look = camera.inspect(still, "ctx", fake)
+    assert look.findings == [] and look.dropped == 1 and "not confirmed" in look.note
+    assert len(look.checklist) == len(camera.ITEMS)
+    # The second look saw a crop around the box, not the whole photo.
+    crop = next(s for kind, s, _ in fake.seen if kind == "confirm")
+    assert len(crop.image) < len(still.image)
+    kept = camera.inspect(still, "ctx", _Checklist(_answers(leak=(600, 300, 800, 500))))
+    assert [f.item for f in kept.findings] == ["leak"] and kept.dropped == 0
+
+
+def test_the_normal_photo_reaches_both_looks(tmp_path, monkeypatch) -> None:
+    (tmp_path / "now.jpg").write_bytes(_photo(seed=1))
+    (tmp_path / "normal.jpg").write_bytes(_photo(seed=2))
+    reg = {
+        "m": {
+            "kind": "file",
+            "path": str(tmp_path / "now.jpg"),
+            "label": "Bay 2",
+            "normal": str(tmp_path / "normal.jpg"),
+        }
+    }
+    monkeypatch.setattr(camera, "REGISTRY", tmp_path / "cameras.json")
+    (tmp_path / "cameras.json").write_text(json.dumps(reg))
+    box = (100, 100, 300, 400)
+    fake = _Checklist(_answers(corrosion=box))
+    look = camera.inspect(camera.snapshot("m"), "ctx", fake)
+    first_ref = next(r for kind, _, r in fake.seen if kind == "look")
+    second_ref = next(r for kind, _, r in fake.seen if kind == "confirm")
+    assert first_ref.image == (tmp_path / "normal.jpg").read_bytes()
+    # The second look gets the same region of the reference as of the new photo.
+    assert second_ref.image == photo.crop(first_ref.image, box)
+    assert look.reference == "Bay 2, normal photo"
+    assert look.findings[0].new_since_reference == "yes"
+    without = camera.inspect(camera.snapshot("m"), "ctx", _Checklist({}), use_registry=False)
+    assert without.reference == ""
+
+
+def test_boxes_keep_one_convention_from_model_to_crop_to_screen() -> None:
+    assert photo.parse_box([800, 600, 200, 100]) == (200, 100, 800, 600)  # corners swapped
+    assert photo.parse_box([-50, 10, 1200, 500]) == (0, 10, 1000, 500)  # clamped
+    assert photo.parse_box([1, 2, 3]) is None and photo.parse_box([10, 10, 12, 12]) is None
+    box = (250, 100, 500, 400)  # ymin, xmin, ymax, xmax
+    px = photo.to_pixels(box, 640, 480)
+    assert px == (64, 120, 256, 240)  # left, top, right, bottom
+    assert photo.from_pixels(*px, 640, 480) == box
+    assert photo.to_fractions(box) == pytest.approx((0.1, 0.25, 0.3, 0.25))
+    # A red square where the box says is inside the crop the second look gets.
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    image = _photo(square=px)
+    crop = np.asarray(Image.open(BytesIO(photo.crop(image, box))))
+    red = (crop[:, :, 0] > 180) & (crop[:, :, 1] < 80)
+    assert red.mean() > 0.2  # the square fills a good part of the crop, margin around it
+    left, top, right, bottom = photo.to_pixels(photo.crop_box(box), 640, 480)
+    assert crop.shape[:2] == (bottom - top, right - left)
+
+
+def test_a_model_that_cannot_see_anything_asks_for_a_retake() -> None:
+    blind = {i: {**_answers()[i], "status": "cannot_see"} for i in camera.ITEMS}
+    look = camera.inspect(
+        camera.Still("m", "Bay 2", _photo(), "image/jpeg", "now"), "ctx", _Checklist(blind)
+    )
+    assert look.findings == [] and "could not see enough" in look.retake
+
+
+def test_checklist_answers_parse_and_malformed_ones_read_as_unsure() -> None:
+    reply = _answers(smoke=(0, 0, 500, 500))
+    reply["leak"] = {"status": "maybe", "box": "x"}
+    del reply["crack"]
+    found = {f.item: f for f in camera.findings_from(reply, with_reference=False)}
+    assert found["leak"].status == "unsure" and found["crack"].status == "unsure"
+    assert found["smoke"].hazard and found["smoke"].box == (0, 0, 500, 500)
+    assert found["smoke"].new_since_reference == "no_reference"  # no reference was shown
+    assert found["corrosion"].status == "absent" and found["corrosion"].box is None
+
+
+def test_the_gemini_reply_is_read_from_its_last_json_part() -> None:
+    from types import SimpleNamespace as NS
+
+    parts = [
+        NS(text="Let me zoom in.", thought=False, executable_code=None),
+        NS(text=None, thought=False, executable_code=NS(code="crop()")),
+        NS(text=json.dumps({"visible": True}), thought=False, executable_code=None),
+    ]
+    response = NS(candidates=[NS(content=NS(parts=parts))], text="")
+    gemini = camera.GeminiInspector.__new__(camera.GeminiInspector)  # no client, no network
+    gemini.zooms = 0
+    assert gemini._json(response) == {"visible": True} and gemini.zooms == 1
+
+
+def test_the_local_model_gets_reference_then_now(monkeypatch) -> None:
+    from hypothesis_engine.agents import ollama
+
+    calls = []
+
+    def chat(prompt, *, schema=None, images=None, system=None, temperature=None):
+        calls.append((prompt, images, schema))
+        if schema is camera.SCHEMA:
+            return json.dumps(_answers(belt=(100, 100, 400, 400)))
+        return json.dumps({"visible": True, "new_since_reference": "yes", "evidence": "torn"})
+
+    monkeypatch.setattr(ollama, "available", lambda timeout_s=1.0: True)
+    monkeypatch.setattr(ollama, "model", lambda: "gemma4:test")
+    monkeypatch.setattr(ollama, "chat", chat)
+    now, ref = _photo(seed=3), _photo(seed=4)
+    look = camera.inspect(
+        camera.Still("m", "Bay 2", now, "image/jpeg", "t"),
+        "ctx",
+        camera.LocalInspector(),
+        reference=camera.Still("m", "normal", ref, "image/jpeg", "t"),
+    )
+    prompt, images, _ = calls[0]
+    assert images == [ref, now] and "REFERENCE" in prompt and "NOW" in prompt
+    assert [f.item for f in look.findings] == ["belt"] and look.inspected_by == "ollama:gemma4:test"
+
+
+def test_a_camera_finding_never_moves_a_belief() -> None:
+    import ast
+    from pathlib import Path
+
+    from hypothesis_engine.data.rig import BENCH_RIG, synthetic_capture
+    from hypothesis_engine.investigation.engine import Investigation
+    from hypothesis_engine.lens import look as lens_look
+    from hypothesis_engine.models import FaultKind
+
+    inv = Investigation(BENCH_RIG, synthetic_capture(FaultKind.IMBALANCE, BENCH_RIG))
+    inv.observe()
+    inv.run_virtual_experiments()
+    before = {h.kind: h.posterior for h in inv.state.hypotheses}
+    ledger = list(inv.ledger.ids())
+    everything = _answers(**{i: (100, 100, 600, 600) for i in camera.ITEMS})
+    still = camera.Still(BENCH_RIG.machine_id, "Bay 2", _photo(), "image/jpeg", "now")
+    seen = camera.inspect(still, "ctx", _Checklist(everything))
+    assert len(seen.findings) == len(camera.ITEMS)  # the camera "saw" everything...
+    assert {h.kind: h.posterior for h in inv.state.hypotheses} == before  # ...and nothing moved
+    assert list(inv.ledger.ids()) == ledger
+    # And no path exists: neither the camera nor the lens look imports the engine.
+    for module in (camera, photo, lens_look):
+        tree = ast.parse(Path(module.__file__).read_text())
+        names = [
+            getattr(node, "module", "") or ""
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom | ast.Import)
+        ] + [a.name for node in ast.walk(tree) if isinstance(node, ast.Import) for a in node.names]
+        assert not any("investigation" in n for n in names), module.__name__
+
+
+def _photo_eval():
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "scripts" / "photo_eval.py"
+    spec = importlib.util.spec_from_file_location("photo_eval", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["photo_eval"] = mod  # its dataclasses resolve names through sys.modules
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _SeesRed(_Checklist):
+    """Reports a leak wherever the photo has a red patch; nothing otherwise."""
+
+    def __init__(self) -> None:
+        super().__init__({})
+
+    def look(self, still, context, reference=None):
+        from io import BytesIO
+
+        import numpy as np
+        from PIL import Image
+
+        a = np.asarray(Image.open(BytesIO(still.image)).convert("RGB")).astype(int)
+        red = (a[:, :, 0] > 180) & (a[:, :, 1] < 80)
+        if red.mean() < 0.01:
+            return camera.findings_from(_answers(), reference is not None)
+        ys, xs = np.nonzero(red)
+        h, w = red.shape
+        box = photo.from_pixels(xs.min(), ys.min(), xs.max(), ys.max(), w, h)
+        return camera.findings_from(_answers(leak=box), reference is not None)
+
+
+def test_photo_eval_scores_hits_and_false_alarms_on_the_rest(tmp_path, monkeypatch, capsys):
+    pe = _photo_eval()
+    for i in range(8):
+        (tmp_path / "normal").mkdir(exist_ok=True)
+        (tmp_path / "normal" / f"n{i}.jpg").write_bytes(_photo(seed=i))
+        (tmp_path / "leak").mkdir(exist_ok=True)
+        (tmp_path / "leak" / f"l{i}.jpg").write_bytes(
+            _photo(seed=20 + i, square=(200, 300, 400, 420))
+        )
+    (tmp_path / "pairs.csv").write_text(
+        "machine,reference,test_image,true_items\npump,normal/n0.jpg,leak/l0.jpg,leak\n"
+    )
+    monkeypatch.setattr(camera, "get_inspector", lambda: _SeesRed())
+    out = tmp_path / "report.md"
+    assert pe.main(["--root", str(tmp_path), "--out", str(out)]) == 0
+    photos = pe.collect(tmp_path)
+    scored = [p for p in photos if not p.calibration]
+    leaks = sum(bool(p.labels) for p in scored)
+    normals = len(scored) - leaks
+    text = out.read_text()
+    # Every leak photo is a hit and no normal photo is a false alarm, counted on the scored photos only.
+    assert f"| Leak (oil, water or coolant) | {leaks} | {leaks}/{leaks} *" in text
+    assert f"| 0/{normals} * |" in text
+    assert (len(photos) - len(scored)) > 0 and "held out for calibration" in text
+
+
+def test_photo_eval_needs_thirty_calibration_photos_before_moving_a_bar(tmp_path, capsys):
+    pe = _photo_eval()
+    (tmp_path / "normal").mkdir()
+    for i in range(10):
+        (tmp_path / "normal" / f"n{i}.jpg").write_bytes(_photo(seed=i))
+    assert pe.main(["--root", str(tmp_path), "--calibrate"]) == 0
+    assert "no recommendation" in capsys.readouterr().out
+    with pytest.raises(ValueError, match="unknown checklist item"):
+        pe.parse_label("leak+dent")

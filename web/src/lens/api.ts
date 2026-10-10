@@ -8,11 +8,28 @@ const BASE =
 
 export type Box = { x: number; y: number; w: number; h: number };
 
+/** One checklist item a model reported; boxes are [ymin, xmin, ymax, xmax] in 0..1000. */
 export type Finding = {
   what: string;
   where: string;
   confidence: number;
   hazard: boolean;
+  item?: string;
+  status?: "present" | "absent" | "unsure" | "cannot_see";
+  severity?: "none" | "low" | "medium" | "high";
+  box?: [number, number, number, number] | null;
+  evidence?: string;
+  new_since_reference?: "yes" | "no" | "no_reference";
+};
+
+/** The photo check: kept findings, why to retake, what it was compared with. */
+export type Look = {
+  findings?: Finding[];
+  inspected_by?: string;
+  note?: string;
+  retake?: string;
+  reference?: string;
+  dropped?: number;
 };
 
 export type Line = {
@@ -70,7 +87,7 @@ export type Scan = {
     by: string;
     note: string;
   };
-  look: { findings?: Finding[]; inspected_by?: string; note?: string };
+  look: Look;
   box: Box;
   box_source: string;
   shake: number[][];

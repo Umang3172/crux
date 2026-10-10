@@ -106,8 +106,14 @@ def _camera_look() -> str:
     from ..ticket.camera import GeminiInspector, Still
 
     still = Still("preflight", "test card", _still(), "image/jpeg", "")
-    found = GeminiInspector().look(still, "a plain grey test card, nothing on it")
-    return f"{len(found)} finding(s) on a blank test card (none is the right answer)"
+    answers = GeminiInspector().look(still, "a plain grey test card, nothing on it")
+    if not answers:
+        raise RuntimeError("the model answered none of the checklist")
+    seen = sum(1 for a in answers if a.status == "present")
+    return (
+        f"answered {len(answers)} checklist items on a blank test card and reported "
+        f"{seen} present (none is the right answer)"
+    )
 
 
 def _lens_look() -> str:

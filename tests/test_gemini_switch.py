@@ -97,9 +97,12 @@ def test_the_model_is_chosen_in_one_place(monkeypatch):
     assert factory.gemini_model_id("ticket_writer") == factory.DEFAULT_GEMINI_MODEL
     assert factory.gemini_model_id("lens_look") == factory.DEFAULT_LENS_MODEL
     monkeypatch.setenv("GEMINI_MODEL", "one-model")
-    for role in (None, "ticket_writer", "lesson_writer", "report_writer", "camera_look"):
+    for role in (None, "ticket_writer", "lesson_writer", "report_writer"):
         assert factory.gemini_model_id(role) == "one-model", role
+    # Two looks need a model that suits the job, so each keeps its own default:
+    # one that can run code on an image, and the robotics model.
     assert factory.gemini_model_id("lens_look") == factory.DEFAULT_LENS_MODEL
+    assert factory.gemini_model_id("camera_look") == factory.DEFAULT_VISION_MODEL
     monkeypatch.setenv("GEMINI_VISION_MODEL", "a-vision-model")
     monkeypatch.setenv("GEMINI_LENS_MODEL", "a-pointing-model")
     assert factory.gemini_model_id("camera_look") == "a-vision-model"

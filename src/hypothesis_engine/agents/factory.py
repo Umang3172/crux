@@ -38,9 +38,17 @@ _TRUE = {"1", "true", "yes"}
 #: model, which returns points and boxes. Set `GEMINI_LENS_MODEL` to move.
 DEFAULT_LENS_MODEL = "gemini-robotics-er-2-preview"
 
-#: Call sites with a model setting of their own, for a model that suits the job.
-#: The camera look falls back to `GEMINI_MODEL`; Lens to the robotics model.
+#: The model the camera look uses to inspect a still. Gemini 3 Flash with code
+#: execution is what Google calls Agentic Vision: the model crops and zooms into
+#: the image in Python before answering ("Introducing Agentic Vision in Gemini 3
+#: Flash", blog.google, 27 Jan 2026). Set `GEMINI_VISION_MODEL` to move.
+DEFAULT_VISION_MODEL = "gemini-3-flash-preview"
+
+#: Call sites with a model setting of their own, and a default of their own,
+#: because each needs a model that suits the job: one that can run code on an
+#: image for the camera look, the robotics model for Lens.
 _ROLE_SETTING = {"camera_look": "GEMINI_VISION_MODEL", "lens_look": "GEMINI_LENS_MODEL"}
+_ROLE_DEFAULT = {"camera_look": DEFAULT_VISION_MODEL, "lens_look": DEFAULT_LENS_MODEL}
 
 #: Every place a model is called besides the investigator and the gate, by the
 #: name `describe()` and the preflight show it under.
@@ -58,12 +66,12 @@ def switched_off(role: str) -> bool:
 
 def gemini_model_id(role: str | None = None) -> str:
     """The Gemini model for a call site: its own setting if it has one and it is
-    set, else `GEMINI_MODEL`, else the default."""
+    set, else its own default if it has one, else `GEMINI_MODEL`, else the default."""
     own = os.getenv(_ROLE_SETTING.get(role or "", ""))
     if own:
         return own
-    if role == "lens_look":
-        return DEFAULT_LENS_MODEL
+    if role in _ROLE_DEFAULT:
+        return _ROLE_DEFAULT[role]
     return os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
 
 

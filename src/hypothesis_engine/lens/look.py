@@ -163,7 +163,18 @@ def identify(still: bytes) -> Identity:
     return Identity(note=note)
 
 
-def visible(still: bytes, context: str) -> camera.CameraLook:
-    """Plainly visible trouble in the still, kept only if a second look confirms it."""
+def visible(
+    still: bytes, context: str, reference: bytes | None = None, reference_label: str = ""
+) -> camera.CameraLook:
+    """The checklist on the still, kept only where a cropped second look confirms it.
+
+    `reference` is the middle still of the scan a person marked as this machine's
+    normal one; the model then sees it beside the new still.
+    """
     s = camera.Still("lens", "phone", still, "image/jpeg", "")
-    return camera.inspect(s, context)
+    ref = (
+        camera.Still("lens", reference_label or "normal scan", reference, "image/jpeg", "")
+        if reference
+        else None
+    )
+    return camera.inspect(s, context, reference=ref, use_registry=False)
