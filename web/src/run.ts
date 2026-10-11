@@ -165,7 +165,9 @@ export function toSteps(states: Investigation[]): Step[] {
 
 /** Run a case and return it as a playable list of steps. */
 export async function investigate(params: RunParams): Promise<Step[]> {
-  const settled = await postReplay(params);
+  // The replay is run only to learn what the rig answers; the stepped case below
+  // is the one this visit is remembered by.
+  const settled = await postReplay({ ...params, remember: false });
 
   try {
     const states: Investigation[] = [await startInvestigation(params)];

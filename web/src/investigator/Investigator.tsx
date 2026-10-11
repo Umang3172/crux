@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { faultText, plainSentence } from "../guided/plain";
+import { faultText, plainSentence, plantId } from "../guided/plain";
 import { CaseReportPanel } from "../report/Report";
 import { About, AgentRun, RunParams, Suspect, about, investigate } from "./api";
 import "../notes/notes.css";
@@ -38,6 +38,12 @@ const SCENARIOS: Scenario[] = [
     params: { fault: "inner_race", severity: 0.5, extra_noise: 0.45 },
   },
   {
+    id: "aux_pump",
+    label: "A part only the machine's notes know",
+    hint: "A knock 5.7 times a turn. No bearing part explains it; the pump's notes name one that does.",
+    params: { fault: "aux_pump", severity: 1.0, extra_noise: 0.05 },
+  },
+  {
     id: "unlisted_impact",
     label: "Something no bearing part explains",
     hint: "An impact 7.6 times a turn that matches nothing in this bearing.",
@@ -55,6 +61,7 @@ const SCENARIOS: Scenario[] = [
 const pct = (x: number) => (x >= 0.995 ? ">99%" : `${Math.round(x * 100)}%`);
 
 const OFF_LIST: Record<string, string> = {
+  aux_pump: "a worn auxiliary pump, which is in the machine's notes and not on Crux's list",
   rolling_element: "a worn rolling element, which is not on Crux's list",
   unlisted_impact: "an impact 7.6 times a turn that no part of this bearing explains",
 };
@@ -117,6 +124,17 @@ function Outcome({ run }: { run: AgentRun }) {
           physics never reads it, and the outcome below is the physics'.
         </p>
       )}
+      {run.history && run.history.length > 0 && (
+        <div className="i-history">
+          <b>Earlier cases on this pump</b>
+          <ul>
+            {run.history.map((h) => (
+              <li key={h.case_id}>{plainSentence(h.sentence)}</li>
+            ))}
+          </ul>
+          <small className="g-muted">Shown to people and to the agents. It changes no belief.</small>
+        </div>
+      )}
       {c.unresolved_reason && <p>{plainSentence(c.unresolved_reason)}</p>}
       {c.investigator_reason && (
         <p className="g-muted">
@@ -138,6 +156,7 @@ function Outcome({ run }: { run: AgentRun }) {
             <span>
               {nameOf(s.name, c.suspects)}
               {s.origin === "written" && <em> written by the model, tested by the physics</em>}
+              {s.source && <em> · from {s.source}</em>}
             </span>
             <span className="i-bar">
               <span style={{ width: `${Math.round((s.belief ?? 0) * 100)}%` }} />
@@ -181,7 +200,9 @@ export function Investigator() {
     setRun(null);
     try {
       const seed = 1 + Math.floor(Math.random() * 9999);
-      setRun(await investigate({ ...chosen.params, seed, note: note.trim() || undefined }));
+      setRun(
+        await investigate({ ...chosen.params, seed, note: note.trim() || undefined, plant: plantId() }),
+      );
       setRan(chosen.label);
     } catch (e) {
       setError(
@@ -265,9 +286,15 @@ export function Investigator() {
           {info && (
             <section className="i-card">
               <h2>Everything the model can do</h2>
+              {info.agents?.map((a) => (
+                <p key={a.name} className="g-muted">
+                  <b>{a.name === "critic" ? "Critic" : "Investigator"}:</b> {a.job}{" "}
+                  <em>{a.tools.length} tools.</em>
+                </p>
+              ))}
               <p className="g-muted">
-                {info.tools.length} tools. None takes a probability, a score or a reading from the
-                model.
+                {info.tools.length} tools in all. None takes a probability, a score or a reading
+                from the model.
                 {limits?.rounds !== undefined &&
                   ` A run is stopped after ${limits.rounds} rounds, ${limits.model_calls} model calls or ${limits.seconds} seconds, by plain code.`}
               </p>
@@ -311,9 +338,10 @@ export function Investigator() {
               <ol className="i-steps">
                 {run.steps.map((s, i) => (
                   <li key={i} className={`i-step ${s.kind}${s.tool === "get_case" ? " read" : ""}`}>
-                    <div className="i-voice model">
+                    <div className={`i-voice model${s.agent === "critic" ? " critic" : ""}`}>
                       <span className="i-who">
-                        {s.kind === "says" ? "Tells the team" : "Asks"}
+                        <b>{s.agent === "critic" ? "Critic" : "Investigator"}</b>{" "}
+                        {s.kind === "says" ? "tells the team" : "asks"}
                         <code>{s.tool}</code>
                       </span>
                       <p>{s.asked}</p>

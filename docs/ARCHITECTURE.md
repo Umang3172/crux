@@ -63,10 +63,14 @@ is simulated like the catalogue's and scored on everything already seen, so it
 wins only by explaining the evidence better; one no capture could tell apart
 from an existing hypothesis is refused.
 
-**`agents/`** is optional. The investigator (`agents/investigator.py`) is an ADK
-graph workflow: Gemini drives the case through `tools/`, a plain-code gate
-decides when the loop stops, and each run is capped in model calls and time
-(ADR-0011). Without credentials a scripted
+**`agents/`** is optional. `agents/investigator.py` is an ADK graph workflow
+with two agents: the investigator drives the case through `tools/` and closes
+it, and the critic is called when something is explained by no suspect and may
+write one (ADR-0029). A plain-code gate routes between them and decides when
+the loop stops, and each run is capped in model calls and time (ADR-0011).
+The critic can look in the machine's documents (`knowledge/`, ADR-0028); both
+can ask how the machine's earlier cases ended (`investigation/history.py`,
+ADR-0027). Neither is evidence. Without credentials a scripted
 investigator runs the same loop over the same tools, so CI runs with no keys and
 a laptop with no network still demos. Jev gives typed verdicts while somebody
 takes a measurement, with a rule-based fallback.

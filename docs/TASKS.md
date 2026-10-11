@@ -43,6 +43,8 @@ the same thing. What is built is in the README; this file lists what is not.
 - [ ] The repair check, on a real repair (ADR-0024).
 - [ ] The check on a model's sentences, with Gemini writing them (ADR-0021).
 - [ ] An order typed into a note, with a real model reading it (ADR-0025).
+- [ ] The two agents, the document look-up and the rewrite loop, with Gemini
+      (ADR-0028 to ADR-0030). A real manual in place of the demo document.
 - [ ] The hazard words, on notes written by technicians (`docs/DOMAIN.md`).
 
 ---

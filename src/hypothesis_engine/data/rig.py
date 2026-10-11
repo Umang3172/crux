@@ -56,7 +56,7 @@ TEMPERATURE_RISE = {
 
 #: Faults the catalogue does not list, for showing what the investigator does
 #: when the list is missing a cause. The engine is never told about them.
-OffCatalogue = Literal["rolling_element", "unlisted_impact"]
+OffCatalogue = Literal["rolling_element", "unlisted_impact", "aux_pump"]
 OFF_CATALOGUE: tuple[str, ...] = get_args(OffCatalogue)
 
 #: A rate for `unlisted_impact` chosen to sit on nothing this machine predicts:
@@ -64,6 +64,16 @@ OFF_CATALOGUE: tuple[str, ...] = get_args(OffCatalogue)
 #: nearest shaft harmonics are 7x and 8x, so no catalogue hypothesis explains it
 #: and no bearing frequency matches it. A scenario choice, not a physical constant.
 UNLISTED_IMPACT_ORDER = 7.6
+
+#: A part the bearing table does not know and the machine's documents do: a
+#: small auxiliary pump driven from the main shaft, whose lobes pass at
+#: ratio x lobes per main-shaft turn. A made-up part for the demo
+#: (`knowledge.documents` describes the same one). The rate is chosen to sit on
+#: nothing the list predicts: 5.7x is 5 % from the nearest of them (BPFI at
+#: 5.42x; shaft harmonics 5x and 6x are further), and on no bearing frequency.
+AUX_PUMP_RATIO = 1.9
+AUX_PUMP_LOBES = 3
+AUX_PUMP_ORDER = round(AUX_PUMP_RATIO * AUX_PUMP_LOBES, 6)
 
 
 def off_catalogue_signature(
@@ -86,6 +96,10 @@ def off_catalogue_signature(
         rate = UNLISTED_IMPACT_ORDER * shaft_hz(rpm)
         train = ImpactTrain(rate, 1.00 * severity, label="unlisted impacts")
         what = f"Impacts at {UNLISTED_IMPACT_ORDER:g}x shaft speed, on no bearing frequency."
+    elif name == "aux_pump":
+        rate = AUX_PUMP_ORDER * shaft_hz(rpm)
+        train = ImpactTrain(rate, 1.00 * severity, label="auxiliary pump knocks")
+        what = f"A worn auxiliary pump knocking {AUX_PUMP_ORDER:g} times per main-shaft turn."
     else:
         raise ValueError(f"unknown scenario {name!r}; off-catalogue ones are {OFF_CATALOGUE}")
     return Signature(None, healthy.tones, (train,), noise=healthy.noise, description=what)

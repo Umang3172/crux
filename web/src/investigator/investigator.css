@@ -309,3 +309,21 @@
   color: inherit;
   resize: vertical;
 }
+
+/* The critic's calls are set apart from the investigator's. */
+.i-voice.model.critic {
+  border-left: 3px solid var(--ask);
+  padding-left: 10px;
+}
+
+.i-history {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 13.5px;
+}
+
+.i-history ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}

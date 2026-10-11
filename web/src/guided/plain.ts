@@ -179,3 +179,17 @@ export function list(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
+
+/** A name for this browser's own plant, so its pump has its own history of cases. */
+export function plantId(): string {
+  try {
+    const kept = window.localStorage.getItem("crux-plant");
+    if (kept) return kept;
+    const made = `web-${Math.random().toString(36).slice(2, 12)}`;
+    window.localStorage.setItem("crux-plant", made);
+    return made;
+  } catch {
+    return "demo";
+  }
+}
+

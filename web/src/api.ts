@@ -120,6 +120,8 @@ export type Investigation = {
   notes: Note[];
   /** Set by the server when a note describes a hazard: a flag for a person. */
   hazard: string | null;
+  /** Earlier closed cases on this machine, as known when this one opened. */
+  history?: { case_id: string; sentence: string }[];
 };
 
 /** One row of `GET /tests`: a measurement the agent is allowed to ask for. */
@@ -163,6 +165,10 @@ export type RunParams = {
   seed: number;
   /** Extra sensor noise on the capture. Left out, the API's default applies. */
   extra_noise?: number;
+  /** Whose machine this is: closed cases are remembered per plant. */
+  plant?: string;
+  /** False for a case the screen opens only to learn the rig's answers. */
+  remember?: boolean;
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
