@@ -53,7 +53,10 @@ def _worded(case: dict) -> dict[str, str] | None:
             from google import genai  # type: ignore
             from google.genai import types  # type: ignore
 
-            r = genai.Client().models.generate_content(
+            # Held in a name: the SDK closes a client when it is collected, so a
+            # client made inline is closed before its request goes out.
+            client = genai.Client()
+            r = client.models.generate_content(
                 model=gemini_model_id("lesson_writer"),
                 contents=[prompt],
                 config=types.GenerateContentConfig(

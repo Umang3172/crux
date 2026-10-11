@@ -74,6 +74,9 @@ steps:
           SECRET_FLAG="--set-secrets=${_SECRETS}"
         fi
 
+        # The timeout is longer than an investigator run's own cap (120 s in
+        # agents/investigator.py) plus the case around it, so a slow model run
+        # ends on the code's cap with its result, not on a gateway error.
         # One instance, on purpose: cases, notes, reports and a machine's history
         # live in the process's memory, so a second instance would not know a
         # case the first one opened. Raise it only with a store behind them.
@@ -85,7 +88,7 @@ steps:
           --port 8080 \
           --cpu 1 \
           --memory 1Gi \
-          --timeout 120s \
+          --timeout 300s \
           --min-instances "${_MIN_INSTANCES}" \
           --max-instances 1 \
           --concurrency 8 \
