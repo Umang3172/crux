@@ -10,11 +10,17 @@ substitutions:
   _REGION: asia-south1 # Mumbai: closest region to the team and the rig
   _SERVICE: hypothesis-engine
   _REPO: containers # Artifact Registry repository, created once
-  # name=secret:version pairs. GOOGLE_API_KEY is what agents/factory.py reads to
-  # decide whether Gemini narration is live; the secret itself is called
-  # gemini-api-key. Empty deploys the offline path, which is fully supported
-  # (docs/DECISIONS.md, ADR-0002) — the UI just reports offline-template.
-  _SECRETS: GOOGLE_API_KEY=gemini-api-key:latest
+  # Gemini through Google Cloud's own login: the service's account calls the
+  # model, so there is no key to store or leak (agents/factory.py prefers it).
+  # The project is the one being built in ($PROJECT_ID). "false" drops back to
+  # the key in _SECRETS, or to the offline path if that is empty too, which is
+  # fully supported (docs/DECISIONS.md, ADR-0002).
+  _GOOGLE_LOGIN: "true"
+  _GEMINI_LOCATION: global
+  # name=secret:version pairs to mount, empty by default. The key fallback is
+  # GOOGLE_API_KEY=gemini-api-key:latest with _GOOGLE_LOGIN=false; a sensor
+  # token is RIG_INGEST_TOKEN=rig-ingest-token:latest (unset keeps /ingest off).
+  _SECRETS: ""
   # The id the code defaults to (agents/factory.py). A model id that does not
   # exist does not stop the deploy: every call fails and the product quietly
   # runs its offline paths. Check with `hypengine gemini-check` first.
@@ -83,7 +89,7 @@ steps:
           --min-instances "${_MIN_INSTANCES}" \
           --max-instances 1 \
           --concurrency 8 \
-          --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL}" \
+          --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL},GOOGLE_GENAI_USE_ENTERPRISE=${_GOOGLE_LOGIN},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${_GEMINI_LOCATION}" \
           $${SECRET_FLAG}
 
         echo "---"
