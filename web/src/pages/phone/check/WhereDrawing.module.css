@@ -1,0 +1,76 @@
+.figure {
+  margin: 0;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+  padding: var(--space-3) var(--space-2);
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* The drawing wears the machine scene's own colours, so the two read as one machine. */
+.body,
+.metal,
+.base,
+.spot {
+  stroke: var(--scene-ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.body {
+  fill: var(--scene-body);
+}
+
+.metal {
+  fill: var(--scene-metal);
+}
+
+.base {
+  fill: var(--scene-base);
+}
+
+.spot {
+  fill: var(--scene-marker);
+}
+
+.fin {
+  fill: none;
+  stroke: var(--scene-ink);
+  stroke-width: 1.25;
+}
+
+.ring {
+  fill: none;
+  stroke: var(--scene-marker);
+  stroke-width: 3;
+}
+
+.leader {
+  stroke: var(--scene-marker);
+  stroke-width: 2;
+}
+
+.flag {
+  fill: var(--scene-marker);
+}
+
+.flagText {
+  fill: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-anchor: middle;
+}
+
+.part {
+  fill: var(--ink-3);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}

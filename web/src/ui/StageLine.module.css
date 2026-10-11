@@ -1,0 +1,91 @@
+.line ol {
+  display: grid;
+  border: var(--hairline) solid var(--line);
+  background: var(--surface);
+}
+
+.line li {
+  min-width: 0;
+}
+
+.line li + li {
+  border-left: var(--hairline) solid var(--line);
+}
+
+.line button,
+.static {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.line button:hover {
+  background: var(--surface-2);
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.done {
+  color: var(--ink);
+}
+
+.done .mark {
+  color: var(--ok);
+}
+
+.current {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.open {
+  color: var(--ink);
+}
+
+.ahead {
+  color: var(--ink-3);
+}
+
+@media (max-width: 760px) {
+  /* On a phone the stage on screen keeps its whole name; the others become marks. */
+  .line ol {
+    display: flex;
+  }
+  .line li {
+    flex: none;
+  }
+  .line li.current {
+    flex: 1;
+  }
+  .line button,
+  .static {
+    padding: 0 var(--space-3);
+  }
+  .label {
+    display: none;
+  }
+  .current .label {
+    display: inline;
+    white-space: normal;
+  }
+}

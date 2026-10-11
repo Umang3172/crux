@@ -1,0 +1,56 @@
+.lead {
+  color: var(--ink-2);
+  font-size: var(--step--1);
+}
+
+.jobs {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.job {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+  border-top: var(--hairline) solid var(--line);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.name {
+  font-weight: 700;
+}
+
+.live,
+.off {
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.live {
+  color: var(--ok);
+}
+
+.off {
+  color: var(--ink-2);
+}
+
+.config {
+  font-family: var(--font-mono);
+  font-size: var(--step--2);
+  color: var(--ink-3);
+}
+
+.instead,
+.why {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.why {
+  color: var(--attention);
+}

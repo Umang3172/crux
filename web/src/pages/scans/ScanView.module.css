@@ -1,0 +1,66 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.back {
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.title {
+  font-size: var(--step-3);
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.notes {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.left,
+.right {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  align-content: start;
+}
+
+.ask {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 480px;
+}
+
+@media (max-width: 1000px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

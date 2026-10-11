@@ -1,0 +1,34 @@
+.loading {
+  padding: var(--space-6) 0;
+  color: var(--ink-3);
+}
+
+.box,
+.empty {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 640px;
+  padding: var(--space-5);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.box {
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
+}
+
+.title {
+  font-size: var(--step-2);
+}
+
+.text {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--ink-2);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

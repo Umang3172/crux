@@ -1,0 +1,95 @@
+/* Design tokens. Every colour, face, size, space and timing on screen comes
+   from here; components never hard-code them.
+
+   The world is the inspection tag hung on plant machinery: concrete-grey
+   ground, tag-stock panels, ink, and tag classes that each carry one meaning.
+   Blue is the measurement Crux asks for (and the primary action), yellow
+   needs attention or is under test, green is normal or verified, and red is
+   kept for a hazard. Colour stays flat: no gradients, no shadows. */
+
+:root {
+  color-scheme: light;
+
+  /* Grounds and text */
+  --bg: #e6e7e2;
+  --surface: #fbfaf6;
+  --surface-2: #f0f0eb;
+  --ink: #1d1d1b;
+  --ink-2: #464743;
+  --ink-3: #5f605b;
+  --line: #cdcec8;
+  --line-strong: #1d1d1b;
+
+  /* Shell */
+  --shell: #1d1d1b;
+  --shell-ink: #fbfaf6;
+  --shell-ink-2: #b7b8b1;
+
+  /* Tag classes: each colour has one job */
+  --accent: #0b5cad; /* NOTICE: the requested measurement, the primary action */
+  --accent-ink: #ffffff;
+  --accent-soft: #dbe7f4;
+  --attention: #f2c200; /* CAUTION: needs attention, under test (a fill; text on it is ink) */
+  --attention-ink: #1d1d1b;
+  --attention-soft: #faefc2;
+  --danger: #c62828; /* DANGER: a reported hazard only */
+  --danger-soft: #f7e0de;
+  --ok: #1f7a3a; /* SAFETY: normal, verified */
+  --ok-soft: #dcefe1;
+  --void: #66675f; /* ruled out: still on the rack, quiet, and still readable (4.5:1 on tag stock) */
+  --figure: #1d1d1b; /* measured numbers */
+  --model: #464743; /* a language model's words: told apart by their label, never by belief colours */
+
+  /* Machine scene */
+  --scene-ground: #e6e7e2;
+  --scene-body: #b9bab3;
+  --scene-metal: #8f9089;
+  --scene-base: #3c3d39;
+  --scene-ink: #1d1d1b;
+  --scene-hot: #f2c200;
+  --scene-marker: #0b5cad;
+
+  /* Type: one family, two widths, one strict ladder */
+  --font-ui: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --step--2: 0.75rem; /* 12 */
+  --step--1: 0.875rem; /* 14 */
+  --step-0: 1rem; /* 16 */
+  --step-1: 1.25rem; /* 20 */
+  --step-2: 1.625rem; /* 26 */
+  --step-3: 2.125rem; /* 34 */
+  --step-4: 3rem; /* 48 */
+  --step-5: 6rem; /* 96: the deciding values, at specimen scale */
+  --leading: 1.5;
+  --leading-tight: 1.1;
+  --tracking-caps: 0.08em;
+
+  /* Space (4px module; tag fields sit on it) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Shape */
+  --radius-s: 2px;
+  --radius-m: 3px;
+  --hairline: 1px;
+  --tag-clip: 14px; /* the clipped top corners of a tag */
+
+  /* Motion: tags drop and punch, numbers count; nothing loops for decoration */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-drop: cubic-bezier(0.16, 1, 0.3, 1); /* a tag or marker falling into place: fast, then a long settle, no bounce */
+  --dur-fast: 140ms;
+  --dur-med: 260ms;
+  --dur-slow: 480ms;
+
+  /* Layout */
+  --page-max: 1440px;
+  --gutter: clamp(16px, 2.2vw, 32px);
+}

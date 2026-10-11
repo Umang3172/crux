@@ -1,0 +1,21 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--step-3);
+}
+
+.meta {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}

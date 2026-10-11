@@ -1,0 +1,66 @@
+.help {
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.field textarea,
+.field input {
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-s);
+  line-height: 1.35;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field :is(textarea, input):focus-visible {
+  outline-offset: 0;
+}
+
+.kept {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
+  font-weight: 600;
+}
+
+.hazard {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  line-height: 1.4;
+}
+
+.do {
+  font-weight: 700;
+}
+
+.failed {
+  padding: var(--space-3) var(--space-4);
+  background: var(--attention-soft);
+  line-height: 1.4;
+}

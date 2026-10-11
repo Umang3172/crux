@@ -1,0 +1,7 @@
+.quiet {
+  color: var(--ink-2);
+}
+
+.stopped {
+  font-weight: 600;
+}

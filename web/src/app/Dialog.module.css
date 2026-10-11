@@ -1,0 +1,56 @@
+.center,
+.side {
+  padding: 0;
+  border: var(--hairline) solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  max-height: calc(100dvh - 48px);
+}
+
+.center {
+  width: min(720px, calc(100vw - 32px));
+  border-radius: var(--radius-m);
+}
+
+.side {
+  margin: 0 0 0 auto;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: min(460px, 100vw);
+  border-width: 0 0 0 var(--hairline);
+}
+
+.center::backdrop,
+.side::backdrop {
+  background: color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+.body {
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.head h2 {
+  font-size: var(--step-2);
+}
+
+.close {
+  border: 0;
+  background: none;
+  padding: var(--space-2);
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.close:hover {
+  color: var(--ink);
+}

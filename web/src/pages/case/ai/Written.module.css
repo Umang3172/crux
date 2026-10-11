@@ -1,0 +1,25 @@
+.list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.status,
+.refused {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--2);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  padding: 1px var(--space-2);
+  border: var(--hairline) solid var(--ink);
+}
+
+.refused {
+  color: var(--void);
+  border-color: var(--void);
+}
+
+.detail,
+.quiet {
+  color: var(--ink-2);
+}

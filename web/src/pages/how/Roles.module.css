@@ -1,0 +1,66 @@
+.roles {
+  display: grid;
+}
+
+.role {
+  display: grid;
+  grid-template-columns: minmax(220px, 3fr) minmax(0, 8fr);
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-4) 0 var(--space-5);
+  border-top: 4px solid var(--ink);
+}
+
+/* The section's own rule already stands for the physics above the first row. */
+.role:first-child {
+  border-top: 0;
+  padding-top: var(--space-2);
+}
+
+.ai {
+  border-top-style: dashed;
+  border-top-color: var(--ink-3);
+}
+
+.people {
+  border-top-color: var(--line);
+}
+
+.name {
+  font-size: var(--step-2);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  line-height: 1.05;
+}
+
+.ai .name {
+  color: var(--model);
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 68ch;
+}
+
+.text {
+  font-size: var(--step-0);
+}
+
+.never {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.never b {
+  font-family: var(--font-display);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .role {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,142 @@
+/* The four tags on the rail share one small vocabulary of values. */
+
+.stack {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.big {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-2);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.quiet {
+  display: block;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+  line-height: 1.35;
+}
+
+.quote {
+  display: block;
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.live {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+  line-height: 1.35;
+  min-height: 2.7em;
+}
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-s);
+}
+
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The test: two models, three measures, on one ruled module. */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  justify-self: stretch;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) 0;
+  text-align: right;
+  vertical-align: baseline;
+  border-top: var(--hairline) solid var(--line);
+}
+
+.table thead th,
+.table thead td {
+  border-top: 0;
+  padding-top: 0;
+  vertical-align: bottom;
+}
+
+.table tbody th {
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--step--1);
+  padding-right: var(--space-2);
+}
+
+.table tbody td {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--step-1);
+  color: var(--ink-2);
+}
+
+.colHead {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--2);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.colName {
+  display: block;
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+/* The figure that is no worse where the test is decided. */
+.table tbody td.better {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.means {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--step--2);
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+
+.means dt {
+  display: inline;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.means dt::after {
+  content: ": ";
+}
+
+.means dd {
+  display: inline;
+  margin: 0;
+}

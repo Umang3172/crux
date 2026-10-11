@@ -1,0 +1,165 @@
+.stage {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  min-width: 0;
+}
+
+.h2 {
+  font-size: var(--step-3);
+}
+
+.lead {
+  font-size: var(--step-1);
+  line-height: 1.4;
+  max-width: 60ch;
+}
+
+.honest {
+  max-width: 62ch;
+  padding-top: var(--space-2);
+  border-top: 2px solid var(--ink);
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The cause, how sure Crux is, and the bar it has to pass */
+
+.verdict {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cause {
+  font-size: var(--step-4);
+  line-height: 1;
+}
+
+.technical {
+  color: var(--ink-3);
+}
+
+.bar {
+  position: relative;
+  height: 14px;
+  margin-top: var(--space-5);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ink);
+}
+
+.bar80 {
+  position: absolute;
+  bottom: 100%;
+  transform: translateX(-1px);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--ink);
+  height: 30px;
+  font-size: var(--step--2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.belief {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-2);
+}
+
+.fields {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cite {
+  display: inline-flex;
+  padding: 2px var(--space-2);
+  font-size: var(--step--2);
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-s);
+}
+
+/* Two voices about why there is no cause: the engine's, in ink; the
+   investigator's, dashed and labelled with its name. */
+
+.voices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.voiceEngine,
+.voiceModel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface);
+}
+
+.voiceEngine {
+  border: var(--hairline) solid var(--ink);
+}
+
+.voiceModel {
+  border: 1.5px dashed var(--ink-3);
+  color: var(--model);
+}
+
+.voiceLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.action {
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--line);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  /* The label turns round to sit left of its tick, so it stays on a narrow bar. */
+  .bar80 {
+    transform: translateX(calc(-100% + 1px));
+    padding-left: 0;
+    padding-right: var(--space-2);
+    border-left: 0;
+    border-right: 2px solid var(--ink);
+    text-align: right;
+  }
+  .voices {
+    grid-template-columns: 1fr;
+  }
+  .cause {
+    font-size: var(--step-3);
+  }
+}

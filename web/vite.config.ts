@@ -14,6 +14,8 @@ const API_PATHS = [
   "/maintenance",
   "/fleet",
   "/lens",
+  "/agent",
+  "/ingest",
   "/openapi.json",
 ];
 

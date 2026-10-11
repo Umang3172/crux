@@ -1,0 +1,145 @@
+import { ApiError, BASE, get, post, qs } from "./client";
+import type {
+  AgentAbout,
+  AgentRun,
+  Capture,
+  CatalogTest,
+  FaultKind,
+  FleetStatus,
+  Health,
+  Investigation,
+  Lesson,
+  MachineReplay,
+  MachineSummary,
+  RecordingVerdict,
+  RepairResult,
+  Report,
+  Risk,
+  RunParams,
+  Scan,
+  ScanAnalysis,
+  ScanRow,
+  Spectrum,
+  StreamStatus,
+  TestId,
+  Ticket,
+  Box,
+} from "./types";
+
+const enc = encodeURIComponent;
+
+export const health = () => get<Health>("/health");
+export const catalogue = () => get<CatalogTest[]>("/tests");
+
+// Cases on the physics-model pump
+
+export type StartParams = RunParams & { fault: FaultKind; plant: string; remember?: boolean };
+
+export const startCase = (p: StartParams) => post<Investigation>("/investigations", p);
+export const getCase = (id: string, signal?: AbortSignal) => get<Investigation>(`/investigations/${enc(id)}`, signal);
+
+/** `collected_by` other than "technician" lands in the ledger as a sensor reading. */
+export const submitEvidence = (id: string, test_id: TestId, value: number, collected_by: string) =>
+  post<Investigation>(`/investigations/${enc(id)}/evidence`, { test_id, value, collected_by });
+
+export const addNote = (id: string, text: string, by: string) =>
+  post<Investigation>(`/investigations/${enc(id)}/notes`, { text, by });
+
+export const report = (id: string, writer: "" | "engine" | "careless" = "") =>
+  get<Report>(`/investigations/${enc(id)}/report?${qs({ writer })}`, undefined, { quiet: true });
+
+export type RepairChoice = { removed: number; left_behind?: FaultKind | null; seed?: number };
+export const repair = (id: string, choice: RepairChoice) =>
+  post<RepairResult>(`/investigations/${enc(id)}/repair`, choice, undefined, { quiet: true });
+
+/** A whole case answered by the pump model's instrument. Used to learn its answers. */
+export const replay = (p: StartParams) => post<Investigation>("/replay", p);
+
+/** `/capture` and `/spectrum` exist only on the deployed server; null when absent. */
+export async function capture(p: RunParams & { fault: FaultKind }): Promise<Capture | null> {
+  try {
+    return await post<Capture>("/capture", p);
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 405 || e.status === 422)) return null;
+    throw e;
+  }
+}
+
+export async function spectrum(
+  p: RunParams & { fault: FaultKind; hypothesis: FaultKind; band: "raw" | "envelope" },
+): Promise<Spectrum | null> {
+  try {
+    return await post<Spectrum>("/spectrum", p);
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 405 || e.status === 422)) return null;
+    throw e;
+  }
+}
+
+// The AI investigator
+
+export const agentReplay = (p: RunParams & { plant: string; note?: string }) => post<AgentRun>("/agent/replay", p, undefined, { quiet: true });
+export const agentAbout = () => get<AgentAbout>("/agent/about");
+
+// Recorded run-to-failure machines
+
+export const machines = () => get<{ machines: MachineSummary[]; note: string; synthetic: boolean }>("/maintenance/machines");
+export const machine = (id: string) => get<MachineReplay>(`/maintenance/machines/${id.split("/").map(enc).join("/")}`);
+export const risk = (machine: string, part: string, at_h: number, stop_in_h: number) =>
+  get<Risk>(`/maintenance/risk?${qs({ machine, part, at_h, stop_in_h })}`);
+export const investigateRecording = (machine: string, part: string, at_h: number) =>
+  post<RecordingVerdict>("/maintenance/investigate", { machine, part, at_h });
+export const createTicket = (b: { machine: string; part: string; at_h: number; stop_in_h?: number; investigate?: boolean }) =>
+  post<Ticket>("/maintenance/tickets", b, undefined, { quiet: true });
+export const tickets = () => get<Ticket[]>("/maintenance/tickets");
+export const approveTicket = (id: string, by: string) => post<Ticket>(`/maintenance/tickets/${enc(id)}/approve`, { by });
+export const ticketStillUrl = (id: string) => `${BASE}/maintenance/tickets/${enc(id)}/still`;
+
+// Learning across sites
+
+export const fleetStatus = () => get<FleetStatus>("/fleet/status");
+export const fleetPull = () => post<{ alerts: { version: number; lessons: string[] }[]; staged: unknown; rejected: { version: number; why: string }[] }>("/fleet/pull");
+export const fleetApprove = (by: string) => post<{ active: number; lessons_added: number }>("/fleet/approve", { by });
+export const fleetRollback = (by: string) => post<{ active: number }>("/fleet/rollback", { by });
+export const lessons = (machine_type = "rolling bearing", q = "", k = 10) =>
+  get<Lesson[]>(`/fleet/lessons?${qs({ machine_type, q, k })}`);
+export const outcome = (b: { ticket_id: string; found: string; right: boolean; by: string; major?: boolean }) =>
+  post<{ lesson: Lesson; sent_to_hub: boolean; alert: string | null }>("/fleet/outcome", b);
+
+// Lens
+
+export const scans = () => get<ScanRow[]>("/lens/scans");
+export const scan = (id: string) => get<Scan>(`/lens/scans/${enc(id)}`);
+export const scanStillUrl = (id: string, i: number) => `${BASE}/lens/scans/${enc(id)}/still/${i}`;
+export const analyseScan = (id: string, body: { rpm: number; box?: Box; bearing?: string }) =>
+  post<ScanAnalysis>(`/lens/scans/${enc(id)}/analyse`, body);
+export const markNormalScan = (id: string) => post<Scan>(`/lens/scans/${enc(id)}/normal`);
+
+/** Cloud Run refuses request bodies over 32 MiB, whatever the server would accept. */
+export const LENS_MAX_BYTES = 32 * 1024 * 1024;
+
+export function uploadScan(file: Blob, machine: string, onProgress: (f: number) => void): Promise<Scan> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}/lens/scans?${qs({ machine, filename: "video.mp4", look: true })}`);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText) as Scan);
+      else {
+        let detail = xhr.statusText;
+        try {
+          detail = JSON.parse(xhr.responseText).detail ?? detail;
+        } catch {
+          /* keep statusText */
+        }
+        reject(new ApiError(xhr.status, String(detail), "/lens/scans"));
+      }
+    };
+    xhr.onerror = () => reject(new ApiError(0, "The engine could not be reached.", "/lens/scans"));
+    xhr.send(file);
+  });
+}
+
+// Live sensor (only on the laptop server, while a sensor is sending)
+
+export const streamStatus = (machine: string) => get<StreamStatus>(`/ingest/${enc(machine)}`);

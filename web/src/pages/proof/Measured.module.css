@@ -1,0 +1,41 @@
+.list {
+  display: grid;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: var(--hairline) solid var(--line);
+}
+
+.item:first-child {
+  padding-top: var(--space-2);
+}
+
+.figure {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+}
+
+.n {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-4);
+  line-height: 0.95;
+  font-variant-numeric: proportional-nums;
+}
+
+.of {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  line-height: 1.4;
+}

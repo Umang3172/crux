@@ -1,0 +1,99 @@
+.rule {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.lead {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.statement {
+  font-size: var(--step-3);
+}
+
+.why {
+  max-width: 70ch;
+  color: var(--ink-2);
+}
+
+/* The only road from a model to a belief: three boxes, one way. */
+
+.chain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.chain li {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
+
+.chain li b {
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.chain li span {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.model {
+  border: 1.5px dashed var(--ink-3);
+}
+
+.tools {
+  border: var(--hairline) solid var(--ink);
+}
+
+.chain li.physics {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.chain li.physics span {
+  color: var(--surface);
+}
+
+.chain li.arrow {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  color: var(--ink-3);
+}
+
+.verified {
+  font-size: var(--step-0);
+  font-weight: 600;
+}
+
+.agents {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 78ch;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+
+.agents b {
+  color: var(--ink);
+}
+
+@media (max-width: 900px) {
+  .chain {
+    grid-template-columns: 1fr;
+  }
+  .chain li.arrow {
+    justify-content: center;
+    transform: rotate(90deg);
+  }
+}

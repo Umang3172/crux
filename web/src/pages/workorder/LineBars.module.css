@@ -1,0 +1,120 @@
+.chart {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--step--2);
+  color: var(--ink-2);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend span::before {
+  content: "";
+  flex: none;
+}
+
+.keyBefore::before {
+  width: 16px;
+  height: 10px;
+  border: var(--hairline) solid var(--ink-3);
+}
+
+.keyAfter::before {
+  width: 16px;
+  height: 6px;
+  background: var(--ink);
+}
+
+.keyHealthy::before {
+  width: 3px;
+  height: 14px;
+  background: var(--ok);
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.axis {
+  position: relative;
+  height: 14px;
+  font-size: var(--step--2);
+  color: var(--ink-3);
+}
+
+.axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-1px);
+}
+
+.axis span[data-end] {
+  transform: translateX(calc(-100% + 1px));
+}
+
+.row {
+  display: grid;
+  gap: 4px;
+}
+
+.name {
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.track {
+  position: relative;
+  height: 20px;
+  border-left: 2px solid var(--ink);
+}
+
+.grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--hairline);
+  background: var(--line);
+}
+
+.was,
+.now {
+  position: absolute;
+  left: 0;
+}
+
+.was {
+  top: 0;
+  bottom: 0;
+  border: var(--hairline) solid var(--ink-3);
+  border-left: 0;
+}
+
+.now {
+  top: 5px;
+  bottom: 5px;
+  background: var(--ink);
+}
+
+.usual {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  margin-left: -1px;
+  background: var(--ok);
+}
+
+.nums {
+  font-size: var(--step--2);
+  color: var(--ink-2);
+}

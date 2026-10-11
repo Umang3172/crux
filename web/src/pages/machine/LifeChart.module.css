@@ -1,0 +1,171 @@
+/* The plot sits on a tag-stock panel; every mark takes its colour from the
+   class it carries: ink for the measured line, yellow for the alarm, blue for
+   the forecast. */
+
+/* The drawing is laid over the panel rather than inside its flow, so its width
+   never decides how wide the panel's column is: the column decides, and the
+   drawing is measured from it. */
+.wrap {
+  position: relative;
+  width: 100%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.floor {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.tick,
+.note {
+  font-family: var(--font-ui);
+  font-size: var(--step--2);
+  font-weight: 500;
+  fill: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  font-weight: 600;
+  fill: var(--ink-2);
+}
+
+.line {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.focus {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.ghost {
+  fill: none;
+  stroke: var(--void);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.band {
+  fill: var(--accent-soft);
+}
+
+.bandEdge {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.more {
+  fill: var(--accent);
+}
+
+.mid {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.bandLabel,
+.failText {
+  font-family: var(--font-display);
+  font-size: var(--step--1);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: var(--accent);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.failText {
+  fill: var(--ink);
+  letter-spacing: 0.06em;
+}
+
+.alarmLine {
+  stroke: var(--attention);
+  stroke-width: 3;
+}
+
+.alarmFlag {
+  fill: var(--attention);
+}
+
+.alarmText,
+.nowText {
+  font-family: var(--font-display);
+  font-size: var(--step--2);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.alarmText {
+  fill: var(--attention-ink);
+}
+
+.dot {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.fail {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.nowLine {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.nowFlag {
+  fill: var(--ink);
+}
+
+.nowText {
+  fill: var(--surface);
+}
+
+/* The alarm flag falls onto its line once, when the clock reaches the alarm. */
+.drop {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  animation: drop var(--dur-slow) var(--ease-drop) both;
+}
+
+@keyframes drop {
+  from {
+    transform: translateY(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}

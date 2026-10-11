@@ -1,0 +1,49 @@
+.phone {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  background: var(--bg);
+  /* Taps should never flash, select text or zoom the page. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-3);
+  background: var(--shell);
+  color: var(--shell-ink);
+}
+
+.word {
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 700;
+}
+
+.where {
+  font-size: var(--step--1);
+  color: var(--shell-ink-2);
+}
+
+.main {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) calc(env(safe-area-inset-bottom) + var(--space-7));
+}
+
+.main :is(input, select, textarea) {
+  /* iOS zooms the page when a focused field is under 16px. */
+  font-size: max(16px, 1em);
+}
+
+.main button {
+  touch-action: manipulation;
+  user-select: none;
+}

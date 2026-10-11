@@ -1,0 +1,42 @@
+.drawing {
+  width: 100%;
+  height: auto;
+}
+
+.drawing rect,
+.drawing circle {
+  stroke: var(--scene-ink);
+  stroke-width: 1.5;
+}
+
+.body {
+  fill: var(--scene-body);
+}
+
+.metal {
+  fill: var(--scene-metal);
+}
+
+.base {
+  fill: var(--scene-base);
+}
+
+.fin {
+  stroke: color-mix(in srgb, var(--scene-ink) 45%, transparent);
+  stroke-width: 1;
+}
+
+.hot {
+  fill: var(--scene-hot);
+}
+
+.marker circle {
+  fill: none;
+  stroke: var(--scene-marker);
+  stroke-width: 4;
+}
+
+.marker .markerDot {
+  fill: var(--scene-marker);
+  stroke: none;
+}

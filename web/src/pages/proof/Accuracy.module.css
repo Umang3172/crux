@@ -1,0 +1,80 @@
+.accuracy {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.half {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+  padding-right: var(--space-5);
+}
+
+.half + .half {
+  padding-right: 0;
+  padding-left: var(--space-5);
+  border-left: var(--hairline) solid var(--line);
+}
+
+.who {
+  font-size: var(--step-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+.big {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+/* The deciding numbers, at specimen scale; proportional figures since each stands alone. */
+.num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-5);
+  line-height: 0.82;
+  font-variant-numeric: proportional-nums;
+}
+
+.what {
+  padding-bottom: 2px;
+  font-size: var(--step-0);
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+.costRow {
+  padding-top: var(--space-3);
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cost {
+  max-width: 100ch;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+@media (max-width: 1000px) {
+  .compare {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .half,
+  .half + .half {
+    padding: 0;
+    border-left: 0;
+  }
+
+  .half + .half {
+    padding-top: var(--space-5);
+    border-top: var(--hairline) solid var(--line);
+  }
+}

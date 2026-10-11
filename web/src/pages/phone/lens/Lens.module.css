@@ -1,0 +1,136 @@
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.title {
+  font-size: var(--step-2);
+}
+
+.lead {
+  color: var(--ink-2);
+}
+
+/* Three steps, one ruled bar each; the current one is ink. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.steps li {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.bar {
+  height: 4px;
+  background: var(--line);
+}
+
+.done .bar {
+  background: var(--ok);
+}
+
+.now .bar {
+  background: var(--accent);
+}
+
+.stepLabel {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.now .stepLabel,
+.done .stepLabel {
+  color: var(--ink);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wide {
+  width: 100%;
+}
+
+.input {
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-s);
+}
+
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+.hint {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+
+.tips {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  list-style: disc;
+  font-size: var(--step--1);
+  line-height: 1.4;
+}
+
+.progress {
+  width: 100%;
+  height: 12px;
+  appearance: none;
+  border: var(--hairline) solid var(--ink);
+  background: var(--surface-2);
+}
+
+.progress::-webkit-progress-bar {
+  background: var(--surface-2);
+}
+
+.progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+.error {
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--step--1);
+  font-weight: 600;
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+}
+
+.big {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-3);
+  line-height: 1;
+}
+
+.sentences {
+  display: grid;
+  gap: var(--space-2);
+}
