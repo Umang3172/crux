@@ -15,7 +15,10 @@ substitutions:
   # gemini-api-key. Empty deploys the offline path, which is fully supported
   # (docs/DECISIONS.md, ADR-0002) — the UI just reports offline-template.
   _SECRETS: GOOGLE_API_KEY=gemini-api-key:latest
-  _GEMINI_MODEL: gemini-3.1-pro
+  # The id the code defaults to (agents/factory.py). A model id that does not
+  # exist does not stop the deploy: every call fails and the product quietly
+  # runs its offline paths. Check with `hypengine gemini-check` first.
+  _GEMINI_MODEL: gemini-3.8-flash
   # 0 costs nothing and cold-starts in a few seconds. Set to 1 for the judging
   # window so the first person to open the link never waits.
   _MIN_INSTANCES: "0"
@@ -65,6 +68,9 @@ steps:
           SECRET_FLAG="--set-secrets=${_SECRETS}"
         fi
 
+        # One instance, on purpose: cases, notes, reports and a machine's history
+        # live in the process's memory, so a second instance would not know a
+        # case the first one opened. Raise it only with a store behind them.
         gcloud run deploy "${_SERVICE}" \
           --image "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${BUILD_ID}" \
           --region "${_REGION}" \
@@ -75,7 +81,7 @@ steps:
           --memory 1Gi \
           --timeout 120s \
           --min-instances "${_MIN_INSTANCES}" \
-          --max-instances 4 \
+          --max-instances 1 \
           --concurrency 8 \
           --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL}" \
           $${SECRET_FLAG}
