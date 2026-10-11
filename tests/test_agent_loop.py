@@ -28,6 +28,8 @@ from hypothesis_engine.data.rig import BENCH_RIG, rig_oracle, synthetic_capture 
 from hypothesis_engine.models import FaultKind  # noqa: E402
 from hypothesis_engine.tools import (  # noqa: E402
     AGENT_TOOL_NAMES,
+    CRITIC_TOOL_NAMES,
+    INVESTIGATOR_TOOL_NAMES,
     InMemoryCaseStore,
     InvestigatorTools,
     open_case,
@@ -144,14 +146,16 @@ def test_impacts_on_no_bearing_frequency_end_unresolved_with_the_clue():
     run = investigate(store, case_id, model=ScriptedInvestigator())
 
     names = [name for name, _ in run.tool_calls]
-    assert "propose_suspect" not in names, "nothing in the kinematics supports a suspect"
+    assert "propose_suspect" not in names, "nothing in the kinematics or on file supports one"
     assert "request_measurement" not in names
     assert run.case.status == "unresolved"
-    # Two voices. The case's reason is the physics' own; the clue the
-    # investigator passed on is kept as the investigator's.
+    # Two voices. The case's reason is the physics' own; the clue is the
+    # critic's, in the narration, after it looked at the bearing and the documents.
     assert "no hypothesis on the list predicts" in run.case.unresolved_reason
     assert "match no frequency of this bearing" not in run.case.unresolved_reason
-    assert "match no frequency of this bearing" in run.case.investigator_reason
+    (clue,) = [n for n in run.case.narration if "match no frequency of this bearing" in n]
+    assert "The machine's documents name no part at that rate." in clue
+    assert names.index("bearing_frequency_matches") < names.index("search_knowledge")
 
 
 def test_the_loop_is_ended_by_code_not_by_the_model():
@@ -381,7 +385,125 @@ def test_the_screen_is_told_the_tools_and_limits_from_the_code():
     assert [t["name"] for t in about["tools"]] == list(AGENT_TOOL_NAMES)
     assert all(t["does"] for t in about["tools"]), "each tool says what it does"
     taken = {p for t in about["tools"] for p in t["takes"]}
-    assert taken == {"test_id", "request_id", "suspect", "text", "reason"}
+    assert taken == {"test_id", "request_id", "suspect", "text", "reason", "question"}
     assert about["limits"] == {"rounds": 6, "model_calls": 30, "seconds": 120.0}
     off = [s["id"] for s in about["scenarios"] if not s["on_the_list"]]
-    assert off == ["rolling_element", "unlisted_impact"]
+    assert off == ["rolling_element", "unlisted_impact", "aux_pump"]
+    # Two agents, and the tools each is given, read from the code.
+    by_name = {a["name"]: a for a in about["agents"]}
+    assert by_name["investigator"]["tools"] == list(INVESTIGATOR_TOOL_NAMES)
+    assert by_name["critic"]["tools"] == list(CRITIC_TOOL_NAMES)
+    assert all(a["job"] for a in about["agents"])
+
+
+# ------------------------------------------------------------------ two agents, two jobs
+
+
+def _run(fault, **capture):
+    store = InMemoryCaseStore()
+    case_id = open_case(store, BENCH_RIG, synthetic_capture(fault, BENCH_RIG, **capture)).id
+    return store, case_id, investigate(store, case_id, model=ScriptedInvestigator())
+
+
+def test_the_agent_that_can_close_a_case_cannot_write_a_suspect_and_the_reverse():
+    investigator, critic = set(INVESTIGATOR_TOOL_NAMES), set(CRITIC_TOOL_NAMES)
+
+    assert investigator | critic == set(AGENT_TOOL_NAMES), "every tool belongs to someone"
+    assert not investigator & {"propose_suspect", "search_knowledge", "bearing_frequency_matches"}
+    assert not critic & {
+        "conclude",
+        "declare_unresolved",
+        "request_measurement",
+        "choose_next_test",
+        "run_virtual_experiments",
+    }
+    assert investigator & critic == {"get_case", "recall_cases", "narrate"}, (
+        "both may read and speak"
+    )
+
+
+def test_a_part_only_the_machines_notes_know_is_found_by_the_critic_and_tested_by_the_physics():
+    # A worn auxiliary pump knocks 5.7 times a turn. No hypothesis predicts it
+    # and no frequency of the bearing matches it. The machine's notes name the
+    # part and state its rate; the critic writes that suspect; the physics tests it.
+    _, _, run = _run("aux_pump")
+
+    by_agent = {a: [s.tool for s in run.steps if s.agent == a] for a in ("investigator", "critic")}
+    assert by_agent["critic"] == [
+        "bearing_frequency_matches",
+        "search_knowledge",
+        "propose_suspect",
+        "narrate",
+    ]
+    assert "propose_suspect" not in by_agent["investigator"]
+    assert "conclude" in by_agent["investigator"] and "conclude" not in by_agent["critic"]
+    assert run.case.status == "concluded" and run.case.leader == "auxiliary_seal_flush_pump"
+    (written,) = [s for s in run.case.suspects if s.origin == "written"]
+    assert written.source.startswith("K") and "Auxiliary seal-flush pump" in written.source
+    assert run.case.critic_consulted and run.rounds == 3
+
+
+def test_the_critic_is_given_a_case_once_and_only_when_something_is_unexplained():
+    store, case_id, nothing_fits = _run("unlisted_impact")
+    _, _, clear = _run(FaultKind.OUTER_RACE)
+
+    assert store.get(case_id).critic_turns == 1
+    assert [s.tool for s in nothing_fits.steps if s.agent == "critic"] == [
+        "bearing_frequency_matches",
+        "search_knowledge",
+        "narrate",
+    ]
+    assert nothing_fits.case.status == "unresolved", "the critic found nothing, and said so"
+    assert not [s for s in clear.steps if s.agent == "critic"], "a clear case needs no critic"
+    assert not clear.case.critic_consulted
+
+
+class _SuspectWriter(BaseLlm):
+    """An investigator that tries to write a suspect, which is not its job."""
+
+    model: str = "suspect-writer"
+    case_id: str = ""
+
+    async def generate_content_async(
+        self, llm_request: LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        suspect = {
+            "name": "made_up_cause",
+            "description": "Something the model made up to win the case.",
+            "tones": [{"order": 2.0, "relative_amplitude": 3.0}],
+        }
+        call = types.FunctionCall(
+            name="propose_suspect", args={"case_id": self.case_id, "suspect": suspect}
+        )
+        yield LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(function_call=call)])
+        )
+
+
+def test_an_agent_that_reaches_for_a_tool_it_was_not_given_gets_nothing():
+    # The split is not an instruction the model may ignore: the tool is not there.
+    store = InMemoryCaseStore()
+    case_id = open_case(store, BENCH_RIG, synthetic_capture(FaultKind.OUTER_RACE, BENCH_RIG)).id
+
+    run = investigate(store, case_id, model=_SuspectWriter(case_id=case_id), max_model_calls=3)
+
+    assert {s.tool for s in run.steps} == {"propose_suspect"}
+    assert all("no tool with that name is available" in str(s.result) for s in run.steps)
+    case = store.get(case_id)
+    assert case.written_suspects == [] and case.investigation.written_suspects == ()
+    assert "made_up_cause" not in {h.name for h in case.investigation.state.hypotheses}
+
+
+def test_the_screen_is_told_which_agent_made_each_call():
+    client = TestClient(app)
+    run = client.post("/agent/replay", json={"fault": "aux_pump", "plant": "t-two-agents"}).json()
+
+    who = {step["agent"] for step in run["steps"]}
+    assert who == {"investigator", "critic"}
+    looked = next(step for step in run["steps"] if step["tool"] == "search_knowledge")
+    assert looked["agent"] == "critic"
+    assert looked["asked"].startswith("Look in the machine's documents:")
+    assert "Auxiliary seal-flush pump" in looked["answered"]
+    wrote = next(step for step in run["steps"] if step["tool"] == "propose_suspect")
+    assert "Taken from K" in wrote["asked"]
+    assert run["case"]["status"] == "concluded"

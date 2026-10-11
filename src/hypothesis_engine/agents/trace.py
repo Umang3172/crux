@@ -101,6 +101,28 @@ def describe(tool: str, args: dict[str, Any], result: dict[str, Any] | None) -> 
         answered = f"Shaft at {r.get('rpm')} rpm; {len(obs)} named observations." if r else None
         return Line(tool, "asks", asked, answered)
 
+    if tool == "recall_cases":
+        asked = "Ask how earlier cases on this machine ended."
+        if not r:
+            return Line(tool, "asks", asked, None)
+        past = r.get("cases") or []
+        latest = f" The latest: {past[0].get('sentence')}" if past else ""
+        return Line(tool, "asks", asked, f"{r.get('detail') or ''}{latest}".strip())
+
+    if tool == "search_knowledge":
+        asked = f"Look in the machine's documents: {args.get('question') or ''}".strip()
+        if not r:
+            return Line(tool, "asks", asked, None)
+        found = r.get("passages") or []
+        if not found:
+            return Line(tool, "asks", asked, r.get("detail"))
+        best = found[0]
+        answered = (
+            f"{r.get('detail') or ''} Best match, {best.get('id')}, "
+            f'"{best.get("section")}": {best.get("text")}'
+        ).strip()
+        return Line(tool, "asks", asked, answered)
+
     if tool == "bearing_frequency_matches":
         return Line(
             tool,
@@ -145,6 +167,8 @@ def describe(tool: str, args: dict[str, Any], result: dict[str, Any] | None) -> 
     if tool == "propose_suspect":
         spec = args.get("suspect") or {}
         asked = f"Write a new suspect, {_name(spec.get('name'))}. {_suspect(args)}".strip()
+        if spec.get("cites"):
+            asked += f" Taken from {', '.join(spec['cites'])}."
         if not r:
             return Line(tool, "asks", asked, None)
         reasons = " ".join(r.get("reasons") or [])

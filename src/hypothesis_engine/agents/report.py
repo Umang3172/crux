@@ -10,7 +10,7 @@ Two voices, kept apart:
   Each of its sentences must cite the evidence it rests on, and is kept only if
 
   1. it cites up to `MAX_CITES` entries, and each exists,
-  2. every number in it is in what it cites (`ticket.draft.unbacked`, the rule a
+  2. every number in it is in what it cites (`grounding.unbacked`, the rule a
      repair ticket is held to),
   3. every suspect it names is named in what it cites, and
   4. it calls nothing normal, acceptable or within range unless what it cites
@@ -28,6 +28,11 @@ the model only explains, the screen says what was and was not checked, and a
 case with no verdict is not given to a model at all: there the reason is the
 whole result.
 
+The check is also the model's feedback. A sentence that fails is handed back
+with the reason, and the model may rewrite it, at most `MAX_REVISIONS` times.
+Code runs that loop and ends it; what still fails after it is removed and
+listed. The model is never asked to judge its own sentences: the check does.
+
 With no model, or when its call fails, the report is the engine's lines alone
 and says so. Writing a report never changes a case.
 """
@@ -40,10 +45,10 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from ..grounding import Evidence, Sentence, unbacked
 from ..investigation.engine import CONCLUDE_ABOVE
 from ..investigation.notes import flag as hazard_flag
 from ..models import FaultKind, InvestigationState
-from ..ticket.draft import Evidence, Sentence, unbacked
 from .factory import gemini_model_id, gemini_route, not_live, switched_off
 
 #: The engine's own statements a model's sentence may cite, beside the ledger.
@@ -69,6 +74,10 @@ MAX_SENTENCES = 6
 #: Most entries one sentence may cite. A sentence that cites a dozen rests on
 #: none of them in particular, and nearly any number would then pass.
 MAX_CITES = 3
+#: Times a model is handed back what failed the check, with the reasons, to
+#: rewrite. Twice: a model that cannot back a sentence after being told twice
+#: why is not going to, and each round is another call a person waits for.
+MAX_REVISIONS = 2
 
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 _LEDGER_ID = re.compile(r"\bE\d+\b")
@@ -158,6 +167,8 @@ class Report:
     evidence: list[Evidence]  # everything a model's sentence could cite
     explained_by: str  # the model whose sentences were checked, "" when none ran
     notes: list[str]
+    first_removed: int = 0  # sentences that failed the check before any rewrite
+    revisions: int = 0  # times the model was handed back what failed
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -171,6 +182,8 @@ class Report:
             ],
             "explained_by": self.explained_by,
             "notes": list(self.notes),
+            "first_removed": self.first_removed,
+            "revisions": self.revisions,
         }
 
 
@@ -364,9 +377,34 @@ def _parsed(reply: str) -> list[Sentence]:
 
 
 class Explainer(Protocol):
+    """Writes an explanation. A writer may also have `revise(evidence, state,
+    removed)`, which is handed the sentences that failed the check and returns
+    them rewritten; one without it is simply not asked."""
+
     name: str
 
     def write(self, evidence: list[Evidence], state: InvestigationState) -> list[Sentence]: ...
+
+
+REVISE = """
+These sentences of yours failed the check and were removed. The reason is given for each.
+Rewrite each one so that the evidence it cites backs it, changing what it cites if you
+cited the wrong entries. Leave a sentence out if the evidence cannot back it. Do not
+repeat sentences that were kept, and add no new ones. The same rules apply.
+
+Removed:
+"""
+
+
+def _revision(evidence: list[Evidence], removed: list[Removed]) -> str:
+    """The first prompt again, with what failed and why."""
+    failed = "\n".join(
+        f'- "{r.text}" (cited: {", ".join(r.cites) or "nothing"}) removed because {r.why}.'
+        for r in removed
+    )
+    return (
+        PROMPT + _listing(evidence) + "\n" + REVISE + failed + "\n\nReturn JSON in the same shape."
+    )
 
 
 class GeminiExplainer:
@@ -394,6 +432,22 @@ class GeminiExplainer:
         )
         return _parsed(response.text or "")
 
+    def revise(
+        self, evidence: list[Evidence], state: InvestigationState, removed: list[Removed]
+    ) -> list[Sentence]:
+        from google.genai import types  # type: ignore
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=[_revision(evidence, removed)],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=_SENTENCES,
+                max_output_tokens=MAX_TOKENS,
+            ),
+        )
+        return _parsed(response.text or "")
+
 
 class LocalExplainer:
     """The same job on a local model through Ollama."""
@@ -409,6 +463,18 @@ class LocalExplainer:
     def write(self, evidence: list[Evidence], state: InvestigationState) -> list[Sentence]:
         reply = self._ollama.chat(
             PROMPT + _listing(evidence),
+            schema=_SENTENCES,
+            temperature=0,
+            max_tokens=MAX_TOKENS,
+            timeout_s=TIMEOUT_S,
+        )
+        return _parsed(reply)
+
+    def revise(
+        self, evidence: list[Evidence], state: InvestigationState, removed: list[Removed]
+    ) -> list[Sentence]:
+        reply = self._ollama.chat(
+            _revision(evidence, removed),
             schema=_SENTENCES,
             temperature=0,
             max_tokens=MAX_TOKENS,
@@ -509,17 +575,49 @@ def write_report(
         )
         return Report(state.id, state.outcome, lines, [], evidence, "", notes)
 
-    kept: list[Line] = []
-    removed: list[Removed] = []
-    for s in written:
-        s = Sentence(_INLINE_CITE.sub("", s.text).strip(), s.cites)
-        if not s.text:
-            continue
-        reason = why_not(s, evidence, state)
-        if reason is None:
-            kept.append(Line("plain", s.text, s.cites, explainer.name))
-        else:
-            removed.append(Removed(s.text, s.cites, reason))
+    def checked(sentences: list[Sentence], seen: set[str]) -> tuple[list[Line], list[Removed]]:
+        """Each sentence against the evidence. One whose text was already kept or
+        already rejected is not looked at again."""
+        passed: list[Line] = []
+        failed: list[Removed] = []
+        for s in sentences:
+            s = Sentence(_INLINE_CITE.sub("", s.text).strip(), s.cites)
+            if not s.text or s.text in seen:
+                continue
+            seen.add(s.text)
+            reason = why_not(s, evidence, state)
+            if reason is None:
+                passed.append(Line("plain", s.text, s.cites, explainer.name))
+            else:
+                failed.append(Removed(s.text, s.cites, reason))
+        return passed, failed
+
+    seen: set[str] = set()
+    kept, pending = checked(written, seen)
+    removed = list(pending)  # every draft the check rejected, in the order it did
+    first_kept, first_removed = len(kept), len(pending)
+    revisions = 0
+    # The check is the model's feedback: what failed goes back with the reason,
+    # and code decides how often. Whatever the check rejects stays on the list.
+    while pending and revisions < MAX_REVISIONS and hasattr(explainer, "revise"):
+        try:
+            again = explainer.revise(evidence, state, pending)[: len(pending)]
+        except Exception as exc:  # the first pass stands; say the rewrite did not happen
+            notes.append(
+                f"{explainer.name} could not rewrite what was removed ({type(exc).__name__})."
+            )
+            break
+        revisions += 1
+        passed, pending = checked(again, seen)
+        kept = (kept + passed)[:MAX_SENTENCES]
+        removed += pending
+    if revisions:
+        fixed = len(kept) - first_kept
+        notes.append(
+            f"{first_removed} of {explainer.name}'s sentences failed the check at first. It was "
+            f"told why and asked to rewrite them, {'once' if revisions == 1 else f'{revisions} times'}: "
+            f"{fixed or 'none'} passed after rewriting. Every draft the check rejected is listed."
+        )
     if not kept:
         wrote = (
             "wrote no sentence"
@@ -529,4 +627,14 @@ def write_report(
         )
         notes.append(f"{explainer.name} {wrote}: every line is the engine's own.")
     lines = sorted(lines + kept, key=lambda line: ORDER.index(line.part))
-    return Report(state.id, state.outcome, lines, removed, evidence, explainer.name, notes)
+    return Report(
+        state.id,
+        state.outcome,
+        lines,
+        removed,
+        evidence,
+        explainer.name,
+        notes,
+        first_removed=first_removed,
+        revisions=revisions,
+    )

@@ -23,10 +23,18 @@ from .cases import (
     record_note,
 )
 from .contract import ImpactSpec, SuspectSpec, ToneSpec
-from .investigator import AGENT_TOOL_NAMES, MAX_TEXT_CHARS, InvestigatorTools
+from .investigator import (
+    AGENT_TOOL_NAMES,
+    CRITIC_TOOL_NAMES,
+    INVESTIGATOR_TOOL_NAMES,
+    MAX_TEXT_CHARS,
+    InvestigatorTools,
+)
 
 __all__ = [
     "AGENT_TOOL_NAMES",
+    "CRITIC_TOOL_NAMES",
+    "INVESTIGATOR_TOOL_NAMES",
     "MAX_TEXT_CHARS",
     "AnswerSource",
     "Case",

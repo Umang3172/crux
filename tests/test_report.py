@@ -415,6 +415,120 @@ def test_a_local_model_is_bounded_and_its_reply_goes_through_the_same_check(oute
     assert outer.conclusion.recommended_action not in asked["prompt"], "the action is not shown"
 
 
+# ------------------------------------------------------------------ the rewrite loop
+
+
+class _Rewrites(_Says):
+    """A writer that can be handed back what failed, and answers from a script."""
+
+    def __init__(self, first, *rounds) -> None:
+        super().__init__(*first)
+        self.rounds = [[Sentence(t, tuple(c)) for t, c in r] for r in rounds]
+        self.told: list[list[report.Removed]] = []
+
+    def revise(self, evidence, state, removed) -> list[Sentence]:
+        self.told.append(list(removed))
+        return self.rounds[len(self.told) - 1] if len(self.told) <= len(self.rounds) else []
+
+
+def test_a_sentence_that_fails_goes_back_with_the_reason_and_may_be_rewritten(outer):
+    peak = _entry(outer, "envelope peak at BPFO")
+    good = f"The envelope peak at BPFO stands {peak.value:.0f} times above the median."
+    model = _Rewrites(
+        [("The peak at BPFO stands 40 times above the median.", [peak.id])],
+        [(good, [peak.id])],
+    )
+
+    written = write_report(outer, model)
+
+    assert _plain(written) == [good], "the rewritten sentence passed and is kept"
+    (told,) = model.told
+    assert [(r.text, r.why) for r in told] == [
+        ("The peak at BPFO stands 40 times above the median.", "40 is not in the evidence it cites")
+    ], "the model is told what failed and why"
+    assert (written.first_removed, written.revisions) == (1, 1)
+    assert [r.text for r in written.removed] == [told[0].text], "the rejected draft stays listed"
+    assert "1 passed after rewriting" in written.notes[0]
+
+
+def test_the_rewrite_loop_is_ended_by_code(outer):
+    peak = _entry(outer, "envelope peak at BPFO")
+    drafts = [[(f"It will fail in {n} days.", [peak.id])] for n in (3, 5, 9, 12, 20)]
+    model = _Rewrites(drafts[0], *drafts[1:])
+
+    written = write_report(outer, model)
+
+    assert len(model.told) == report.MAX_REVISIONS, "asked that many times and no more"
+    assert _plain(written) == []
+    assert len(written.removed) == 1 + report.MAX_REVISIONS, "every rejected draft is listed"
+    assert written.lines == engine_lines(outer), "the engine's lines stand alone"
+
+
+def test_a_rewrite_cannot_add_sentences_or_repeat_one(outer):
+    peak = _entry(outer, "envelope peak at BPFO")
+    speed = _entry(outer, "shaft speed, reported")
+    kept_first = f"The shaft turns at {speed.value} rpm."
+    model = _Rewrites(
+        [(kept_first, [speed.id]), ("It will fail in 3 days.", [peak.id])],
+        [
+            (kept_first, [speed.id]),  # a repeat of a sentence already kept
+            ("The outer race fitted best of all.", ["verdict"]),  # one more than was asked
+        ],
+    )
+
+    written = write_report(outer, model)
+
+    assert _plain(written) == [kept_first], (
+        "one failed, so one sentence is taken back, and it is a repeat"
+    )
+    assert len(model.told) == 1, "nothing was left to rewrite after that"
+
+
+def test_a_writer_that_fails_while_rewriting_keeps_what_it_had(outer):
+    peak = _entry(outer, "envelope peak at BPFO")
+    kept_first = f"The envelope peak at BPFO stands {peak.value:.0f} times above the median."
+
+    class _Breaks(_Says):
+        def revise(self, evidence, state, removed):
+            raise TimeoutError("no answer")
+
+    written = write_report(
+        outer, _Breaks((kept_first, [peak.id]), ("It will fail in 3 days.", [peak.id]))
+    )
+
+    assert _plain(written) == [kept_first]
+    assert [r.why for r in written.removed] == ["3 is not in the evidence it cites"]
+    assert "could not rewrite what was removed (TimeoutError)" in written.notes[0]
+    assert written.revisions == 0
+
+
+def test_the_model_is_shown_what_failed_and_why_when_asked_to_rewrite(outer, monkeypatch):
+    peak = _entry(outer, "envelope peak at BPFO")
+    prompts: list[str] = []
+    replies = iter(
+        [
+            {"sentences": [{"text": "It will fail in 3 days.", "cites": [peak.id]}]},
+            {"sentences": [{"text": f"The peak reads {peak.value}.", "cites": [peak.id]}]},
+        ]
+    )
+
+    def chat(prompt, **options):
+        prompts.append(prompt)
+        return json.dumps(next(replies))
+
+    monkeypatch.setenv("OLLAMA_MODEL", "a-local-model")
+    monkeypatch.setattr(ollama, "available", lambda *a, **k: True)
+    monkeypatch.setattr(ollama, "chat", chat)
+
+    written = write_report(outer)
+
+    assert _plain(written) == [f"The peak reads {peak.value}."]
+    assert len(prompts) == 2
+    assert '- "It will fail in 3 days."' in prompts[1]
+    assert "removed because 3 is not in the evidence it cites." in prompts[1]
+    assert f"{peak.id} (sensor): envelope peak at BPFO" in prompts[1], "with the evidence again"
+
+
 def test_the_explanation_can_be_switched_off(outer, monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "a-local-model")
     monkeypatch.setattr(ollama, "available", lambda *a, **k: True)

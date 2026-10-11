@@ -22,11 +22,15 @@ watch → alarm → simulate every suspect → ask for one check → verdict, or
 
 ## What a language model does here, and what it cannot
 
-Gemini works a case through eleven tools, in a loop built on the Agent
-Development Kit. It reads the evidence, asks the physics which measurement to
-request, narrates for the maintenance team, and, when the list is missing a
-cause, writes a new suspect as the vibration it would make. The physics
-simulates that suspect and scores it on all the evidence, like any other.
+Two Gemini agents work a case through thirteen tools, in a loop built on the
+Agent Development Kit. The investigator reads the evidence, asks the physics
+which measurement to request, narrates for the maintenance team and closes the
+case. The critic is called when something in the capture is explained by no
+suspect: it compares it with the bearing's own frequencies, looks in the
+machine's documents and at its earlier cases, and may write a new suspect as
+the vibration it would make. The physics simulates that suspect and scores it
+on all the evidence, like any other. The tools are split, so the agent that
+can close a case cannot write a suspect, and the reverse.
 
 No tool takes a probability, a score or a reading from the model, so it cannot
 set a belief. Plain code ends the loop. If the model cannot be reached, an
@@ -178,8 +182,9 @@ Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
 Working: the engine and its tests, the investigator loop with its offline
 stand-in, the five tabs, the path from alarm to investigation to ticket, the
 live-sensor route, the result written up with a checked explanation, the check
-after a repair, a technician's note with a hazard flag, and the menu a
-measurement was chosen from.
+after a repair, a technician's note with a hazard flag, the menu a measurement
+was chosen from, a memory of a machine's earlier cases, look-up in a machine's
+documents, and a second agent, the critic.
 
 Not done: a run against the Gemini service (the loop, the report's explanation
 and the other model call sites have only met stand-ins); a result for the

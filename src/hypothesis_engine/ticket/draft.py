@@ -4,9 +4,9 @@ A ticket is drafted the moment a part needs attention. It is built from
 evidence items (the health reading, the alarm, the time-left range, the
 planned-stop risk, the camera look, the machine record), each with an id and
 the numbers it holds. A writer turns them into sentences, each citing the ids
-it rests on. Then `check` keeps only the sentences whose every number appears
-in the evidence they cite; anything else is removed and listed, so a model
-cannot slip in a figure nobody measured.
+it rests on. Then `check` (`grounding.py`) keeps only the sentences whose every
+number appears in the evidence they cite; anything else is removed and listed,
+so a model cannot slip in a figure nobody measured.
 
 It never reads the dataset's answer key: what is wrong comes from the
 investigation or is stated as not yet known. It only ever recommends: a person
@@ -22,27 +22,17 @@ from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 from ..agents.factory import gemini_model_id, gemini_route, not_live
+from ..grounding import Evidence, Sentence, check, matches, unbacked, written_numbers
 from .camera import CameraLook
+
+# The check lives in `grounding`, shared with the verdict's explanation and with
+# suspects written from a document. Its names stay importable from here.
+__all__ = ["Evidence", "Sentence", "Ticket", "check", "draft", "unbacked"]
 
 SAFETY = (
     "Crux only recommends. A person approves this ticket, and the machine is isolated and "
     "locked out under the site's own procedure before anyone works on it."
 )
-
-
-@dataclass(frozen=True)
-class Evidence:
-    id: str
-    kind: str  # sensor | forecast | camera | record | status
-    statement: str
-    numbers: tuple[float, ...] = ()
-    key: tuple[float, ...] = ()  # numbers a sentence citing this must state, e.g. a range's ends
-
-
-@dataclass(frozen=True)
-class Sentence:
-    text: str
-    cites: tuple[str, ...]
 
 
 @dataclass
@@ -75,7 +65,6 @@ class Ticket:
 
 # ------------------------------------------------------------------ the check
 
-_NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?")
 # "(E1)", "[E1, E2]" or stray JSON braces a model leaves in its text; the screen
 # shows citations itself.
 _INLINE_CITE = re.compile(r"\s*[(\[](?:E\d+(?:,\s*)?)+[)\]]|[{}]")
@@ -86,40 +75,6 @@ _ANY_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 #: time-left range, the planned-stop risk, the camera, what is known of the
 #: cause, the part to have ready, and lessons from past cases.
 _MUST_CARRY = ("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8")
-
-
-def _matches(written: str, values: tuple[float, ...]) -> bool:
-    """A written number matches a value if it is that value rounded as written."""
-    x = float(written)
-    places = len(written.split(".")[1]) if "." in written else 0
-    tol = 0.5 * 10**-places + 1e-9
-    return any(abs(v - x) <= tol for v in values)
-
-
-def unbacked(sentence: Sentence, by_id: dict[str, Evidence]) -> str | None:
-    """Why the evidence does not back a sentence, or None when it does: it must
-    cite evidence that exists, and every number in it must be in what it cites."""
-    if not sentence.cites:
-        return "it cites no evidence"
-    unknown = [c for c in sentence.cites if c not in by_id]
-    if unknown:
-        return f"it cites {', '.join(unknown)}, which is not in the evidence"
-    values = tuple(v for c in sentence.cites for v in by_id[c].numbers)
-    stray = [n for n in _NUMBER.findall(sentence.text) if not _matches(n, values)]
-    if stray:
-        return f"{', '.join(stray)} is not in the evidence it cites"
-    return None
-
-
-def check(
-    sentences: list[Sentence], evidence: list[Evidence]
-) -> tuple[list[Sentence], list[Sentence]]:
-    """(kept, removed): kept sentences cite real evidence and every number in them is in it."""
-    by_id = {e.id: e for e in evidence}
-    kept, removed = [], []
-    for s in sentences:
-        (kept if unbacked(s, by_id) is None else removed).append(s)
-    return kept, removed
 
 
 # ------------------------------------------------------------------ writers
@@ -377,8 +332,8 @@ def draft(
     by_id = {e.id: e for e in ev}
 
     def states(x: Sentence, e: Evidence) -> bool:
-        written = _NUMBER.findall(x.text)
-        return all(any(_matches(w, (k,)) for w in written) for k in e.key)
+        written = written_numbers(x.text)
+        return all(any(matches(w, (k,)) for w in written) for k in e.key)
 
     # A sentence that cites a range or a chance but leaves its numbers out does not carry it.
     vague = {

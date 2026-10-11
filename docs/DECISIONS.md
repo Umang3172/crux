@@ -749,3 +749,77 @@ three recordings get the right verdict, against the textbook none gets a
 verdict at all. The lengths of the real baselines, and so how much of each is
 left for its case, have not been checked.
 
+## ADR-0027 · A closed case leaves a record, and the next case on that machine is shown it
+
+**Context.** Every case started knowing nothing about the machine's past. A
+model working a case had memory for one run only.
+
+**Decision.** When a case closes, code writes a record from it
+(`investigation/history.py`): the machine, the outcome, what settled it, and
+later what the check after the repair found. A case is handed the records of
+its machine as it opens. People see them on the screen and a model can ask for
+them (`recall_cases`). A record is knowledge, never evidence: the engine does
+not read it, and an earlier verdict is not a prior, because how often a fault
+recurs on a machine is not something anyone here has measured. A model has no
+tool that writes a record. Cases are kept per plant and machine, so visitors
+to a shared link do not see each other's.
+
+**Consequence.** In memory, or in a file when `CRUX_HISTORY_FILE` names one. On
+Cloud Run the file system is memory too, so the history lives as long as the
+instance; a database goes behind the same four methods.
+
+## ADR-0028 · A machine's documents can supply a suspect, and the suspect is held to the passage
+
+**Context.** When the capture held impacts no suspect predicted and no bearing
+frequency matched, the case could only end unresolved. What else turns with the
+shaft is written in a machine's manual, not in a bearing table.
+
+**Decision.** `knowledge/` cuts the documents on file for a machine into
+passages and finds them by the words they share with a question
+(`search_knowledge`). A suspect may cite passages. Before the physics sees it,
+every number in its description and every rate it is simulated at must be
+stated in what it cites; a rate a model worked out from two other figures is
+refused. Then the physics tests it like any other suspect. A passage is
+knowledge, never evidence.
+
+**Consequence.** One document is on file, for the demo pump, written for this
+project from the rig's own constants and labelled a demo document on every
+passage. It names an auxiliary pump that knocks 5.7 times per shaft turn; a new
+rig fault at that rate is found through it. That is circular in one respect:
+we put the fact there. It shows the path, a document to a suspect to a physics
+test, not that a real manual would hold the fact. Retrieval is by words, not
+embeddings: enough for one document, and it runs with no model.
+
+## ADR-0029 · Two agents with separate tools: one can close a case, the other can write a suspect
+
+**Context.** One agent held every tool. The same model that wrote a suspect
+could then ask for the verdict on it.
+
+**Decision.** The tools are split (`tools/investigator.py`). The investigator
+reads the case, asks the physics what to measure, and closes the case; it has
+no tool that writes a suspect. The critic is called by the loop's code when a
+verdict is blocked by something no suspect explains, once per case; it can
+look at the bearing's frequencies, the machine's documents and its earlier
+cases, and write one suspect; it has no tool that closes a case. Neither has a
+tool that takes a belief. Whether the critic has had the case is in the case
+itself (`critic_consulted`), so the two do not depend on reading each other's
+conversation.
+
+**Consequence.** The split is enforced by the framework, not by the
+instruction: an agent that calls a tool it was not given is told there is no
+such tool, and nothing reaches the engine (`tests/test_agent_loop.py`). Run
+with the two offline stand-ins only; not with Gemini.
+
+## ADR-0030 · The check is the writer's feedback, and code ends the rewriting
+
+**Context.** A sentence that failed the evidence check was removed, and that
+was the end of it. A weak model lost most of what it wrote.
+
+**Decision.** What fails is handed back to the model with the reason, to
+rewrite, at most twice. The model is never asked whether its sentence is
+backed: the check decides. Every draft the check rejects stays listed.
+
+**Consequence.** With a local 7B model on five verdicts, 4 sentences failed at
+first; after the loop 10 sentences stood and 5 rejected drafts were listed.
+The limit of the check is unchanged (ADR-0021).
+

@@ -44,6 +44,7 @@ import {
   live,
   pct,
   plainSentence,
+  plantId,
   ranked,
 } from "./plain";
 
@@ -98,6 +99,7 @@ export function Guided() {
       severity,
       seed: 1 + Math.floor(Math.random() * 9999),
       extra_noise: noise,
+      plant: plantId(),
     };
     setLoading(true);
     setError(null);
@@ -614,6 +616,12 @@ function StepText({
         <small>{belief(inv.conclusion?.confidence ?? top.posterior)} confident</small>
       </div>
       {text.story && <p>{text.story}</p>}
+      {inv.history && inv.history.length > 0 && (
+        <p className="g-muted">
+          <b>Earlier on this pump:</b> {plainSentence(inv.history[0].sentence)} Shown for people;
+          it changed no belief here.
+        </p>
+      )}
       {top.kind !== "healthy" && (
         <p>
           <b>Where:</b> {text.partName}.

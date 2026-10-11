@@ -14,6 +14,7 @@ import hmac
 import inspect
 import os
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -34,6 +35,7 @@ from ..data.rig import (
 from ..data.stream import CAPTURE_S, MAX_BATCH_SAMPLES, NotEnoughSignal, Stream, Streams
 from ..investigation.catalog import BY_ID, CATALOG
 from ..investigation.engine import Investigation
+from ..investigation.history import History, machine_key, record_of
 from ..investigation.notes import MAX_NOTE_CHARS
 from ..investigation.notes import flag as hazard_flag
 from ..investigation.repair import NothingToVerify, RepairCheck, check_repair
@@ -54,6 +56,26 @@ app.add_middleware(
 )
 
 _INVESTIGATIONS: dict[str, Investigation] = {}
+
+#: Closed cases, by machine. In memory unless `CRUX_HISTORY_FILE` names a file.
+_HISTORY = History(
+    Path(os.environ["CRUX_HISTORY_FILE"]) if os.getenv("CRUX_HISTORY_FILE") else None
+)
+
+
+def _open_with_history(inv: Investigation, plant: str, remember: bool = True) -> None:
+    """Hand a case what is on file about its machine, as it opens. The engine
+    never reads it: it is for the people on the case and a model working it."""
+    key = machine_key(plant, inv.machine.machine_id)
+    inv.state.extra["machine_key"] = key
+    inv.state.extra["remember"] = remember
+    inv.state.extra["history"] = [r.to_dict() for r in _HISTORY.earlier(key)]
+
+
+def _remember(inv: Investigation) -> None:
+    """Keep a case that has closed, once, for the next case on that machine."""
+    if inv.state.outcome != "open" and inv.state.extra.get("remember"):
+        _HISTORY.add(record_of(inv, inv.state.extra["machine_key"]))
 
 
 def serialise(state: InvestigationState) -> dict[str, Any]:
@@ -89,6 +111,9 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
         "request": state.extra.get("request"),
         # Set when the engine weighed the menu and asked for nothing, with the menu.
         "no_test": state.extra.get("no_test"),
+        # Earlier closed cases on this machine, as known when this one opened.
+        # Knowledge for people and for a model; no belief here depends on it.
+        "history": state.extra.get("history", []),
         "outcomes": [
             {"test_id": o.test_id, "feature": o.feature, "value": round(o.value, 4)}
             for o in state.outcomes
@@ -136,6 +161,15 @@ class StartRequest(BaseModel):
         ge=0.0,
         description="Added sensor noise. Raise it, with a low severity, for a case the physics "
         "cannot settle without a measurement.",
+    )
+    plant: str = Field(
+        default="demo",
+        pattern=r"^[A-Za-z0-9_-]{1,40}$",
+        description="Whose machine this is. Closed cases are remembered per plant and machine, "
+        "so a later case on the same machine is shown the earlier ones.",
+    )
+    remember: bool = Field(
+        default=True, description="Keep this case in the machine's history when it closes."
     )
 
 
@@ -218,6 +252,7 @@ def start(req: StartRequest) -> dict[str, Any]:
         extra_noise=req.extra_noise,
     )
     inv = Investigation(BENCH_RIG, obs)
+    _open_with_history(inv, req.plant, req.remember)
     inv.observe()
     inv.run_virtual_experiments()
     inv.advance()
@@ -225,6 +260,7 @@ def start(req: StartRequest) -> dict[str, Any]:
     inv.state.extra["rig"] = _rig_state(req)
     inv.state.ledger = inv.ledger.items
     _INVESTIGATIONS[inv.state.id] = inv
+    _remember(inv)
     return serialise(inv.state)
 
 
@@ -250,6 +286,7 @@ def add_evidence(investigation_id: str, req: EvidenceRequest) -> dict[str, Any]:
     inv.apply_outcome(req.test_id, req.value, collected_by=req.collected_by)
     inv.advance()
     inv.state.ledger = inv.ledger.items
+    _remember(inv)
     return serialise(inv.state)
 
 
@@ -268,10 +305,12 @@ def replay(req: StartRequest) -> dict[str, Any]:
         extra_noise=req.extra_noise,
     )
     inv = Investigation(BENCH_RIG, obs)
+    _open_with_history(inv, req.plant, req.remember)
     state = inv.run(oracle=_rig_answers(req))
     state.extra["ground_truth"] = req.fault.value
     state.extra["rig"] = _rig_state(req)
     _INVESTIGATIONS[state.id] = inv
+    _remember(inv)
     return serialise(state)
 
 
@@ -376,11 +415,13 @@ def ingest_investigate(machine_id: str, who: IngestToken) -> dict[str, Any]:
     except NotEnoughSignal as exc:
         raise HTTPException(409, str(exc)) from None
     inv = Investigation(stream.machine, obs, normal=stream.normal)
+    _open_with_history(inv, "live")
     inv.observe()
     inv.run_virtual_experiments()
     inv.advance()
     inv.state.ledger = inv.ledger.items
     _INVESTIGATIONS[inv.state.id] = inv
+    _remember(inv)
     return serialise(inv.state)
 
 
@@ -410,9 +451,11 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
     )
     case = open_case(_AGENT_CASES, BENCH_RIG, obs, answer_source=_rig_answers(req))
     case.investigation.state.extra["rig"] = _rig_state(req)
+    _open_with_history(case.investigation, req.plant, req.remember)
     if req.note.strip():
         record_note(_AGENT_CASES, case.id, req.note)
     run = await investigate_async(_AGENT_CASES, case.id)
+    _remember(case.investigation)
     return {
         "model": run.model,
         # True when a Gemini model made the calls from start to finish.
@@ -422,11 +465,18 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
         "stopped": run.stopped,
         "tool_calls": [{"tool": name, "args": args} for name, args in run.tool_calls],
         "steps": [
-            {"by": step.by, **asdict(describe(step.tool, step.args, step.result))}
+            # `agent` says which of the two made the call: investigator or critic.
+            {
+                "by": step.by,
+                "agent": step.agent,
+                **asdict(describe(step.tool, step.args, step.result)),
+            }
             for step in run.steps
         ],
         "thoughts": run.thoughts,
         "ground_truth": str(req.fault),  # demo only; the investigator is never told
+        # Earlier closed cases on this machine, as known when this one opened.
+        "history": case.investigation.state.extra.get("history", []),
         "case": run.case.model_dump(mode="json") if run.case else None,
     }
 
@@ -436,7 +486,7 @@ def agent_about() -> dict[str, Any]:
     """What the investigator is, for the screen: which model would run, the tools
     it is given and the limits a run is held to. Read from the code, so the
     screen cannot promise more than the tool layer allows."""
-    from ..tools import InvestigatorTools
+    from ..tools import CRITIC_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES, InvestigatorTools
 
     tools = InvestigatorTools(_AGENT_CASES)
     limits: dict[str, Any] = {}
@@ -459,6 +509,23 @@ def agent_about() -> dict[str, Any]:
                 "takes": [p for p in inspect.signature(fn).parameters if p != "case_id"],
             }
             for fn in tools.agent_functions()
+        ],
+        # Two agents, and which tools each is given. The split is a permission:
+        # the one that can close a case cannot write a suspect, and the reverse.
+        "agents": [
+            {
+                "name": "investigator",
+                "job": "Reads the case, asks the physics what to measure, and closes the case. "
+                "It cannot write a suspect.",
+                "tools": list(INVESTIGATOR_TOOL_NAMES),
+            },
+            {
+                "name": "critic",
+                "job": "Called when something in the capture is explained by no suspect. Looks "
+                "at the bearing's own frequencies, the machine's documents and its earlier "
+                "cases, and may write one suspect. It cannot close a case.",
+                "tools": list(CRITIC_TOOL_NAMES),
+            },
         ],
         "limits": limits,
         "scenarios": [{"id": kind.value, "on_the_list": True} for kind in FaultKind]
@@ -558,6 +625,9 @@ class RepairRequest(BaseModel):
 def _repair_view(check: RepairCheck, rig: dict[str, Any] | None = None) -> dict[str, Any]:
     follow = check.follow
     follow.state.ledger = follow.ledger.items
+    # The first case's record learns what the check found. The follow-up is not
+    # a case of its own in the history: it is the end of the first one's story.
+    _HISTORY.note_repair(check.case_id, check.outcome)
     # The capture after the repair is a case of its own: its ledger and report
     # can be read like any other's.
     _INVESTIGATIONS[follow.state.id] = follow

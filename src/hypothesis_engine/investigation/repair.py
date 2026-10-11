@@ -65,6 +65,7 @@ class LineChange:
 
 @dataclass(frozen=True)
 class RepairCheck:
+    case_id: str  # the case the repair followed from
     outcome: Outcome
     cause: str  # the hypothesis the repair was for
     found: str | None  # what the capture after it fits, when it fits something
@@ -226,6 +227,7 @@ def check_repair(
     if changes:
         statement += " " + _line_sentence(cause.label, changes, outcome, usual_from)
     return RepairCheck(
+        case_id=case.state.id,
         outcome=outcome,
         cause=cause.name,
         found=found,

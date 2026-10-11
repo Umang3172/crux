@@ -44,6 +44,8 @@ class WrittenSuspect:
     spec: SuspectSpec
     status: Literal["tested", "pending_experiments", "refused"]
     reasons: list[str]
+    #: Where it came from, when it was written from a document on file.
+    source: str = ""
 
 
 @dataclass
@@ -57,6 +59,8 @@ class Case:
     # verdict. Its own words, like the narration: the engine's reason is the
     # state's `unresolved_reason`.
     investigator_reason: str = ""
+    # How many times the critic has been given this case (`agents.investigator`).
+    critic_turns: int = 0
     # The physics' latest pick, and the engine's own words for it. A request must
     # name this test; the words go into the transcript once, when it is made.
     chosen: TestChoice | None = None
