@@ -1,27 +1,36 @@
-// One case, whole: where it stands, the measurement it asked for, every
-// suspect, the signal, the evidence, who did the work, and what happened after.
+// One case, whole: where it stands in its pipeline, the agents at work on it,
+// the machine it is about, the measurement it asked for, every suspect, the
+// signal, the evidence, and what happened after.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { Bot, ChevronRight, CircleCheck, CircleHelp, ClipboardCheck, Cpu, FolderSearch, Hourglass, LoaderCircle, Scale, ServerCrash, ShieldAlert } from "lucide-react";
+import { Bot, ChevronRight, CircleCheck, CircleHelp, ClipboardCheck, Cog, Cpu, FastForward, FolderSearch, Hourglass, LoaderCircle, Scale, ServerCrash, ShieldAlert, Workflow } from "lucide-react";
 import { report as fetchReport } from "../api/crux";
+import type { AgentRun } from "../api/types";
 import { runBrain } from "../lib/ai";
-import { STATUS_LABEL, STATUS_TONE, modelOf, type CaseStatus } from "../lib/casemodel";
-import { clock, pct, shortId, stamp } from "../lib/format";
-import { useAbout, useAsync, useCatalogue, useLiveCase } from "../lib/hooks";
+import { STATUS_LABEL, STATUS_TONE, modelOf, type CaseModel, type CaseStatus } from "../lib/casemodel";
+import { clock, num, pct, shortId, stamp } from "../lib/format";
+import { useAbout, useAsync, useCatalogue, useLiveCase, useMachineModel } from "../lib/hooks";
+import { shownSteps, useLiveRun } from "../lib/liveruns";
 import { fault } from "../lib/plain";
+import { usePlayback } from "../lib/playback";
 import { PUMP, isOnList, scenario } from "../lib/scenarios";
 import { patchCase, useCaseEntry, type CaseEntry } from "../lib/session";
+import { AgentStage } from "../ui/AgentStage";
+import { MachineTwin, type TwinFrequencies } from "../ui/MachineTwin";
 import { Badge, Button, Callout, Card, Empty, LinkButton, SourceTag, Stat, cx } from "../ui/kit";
 import { DecisionCard, Menu } from "./case/Decision";
 import { LedgerCard } from "./case/Ledger";
+import { PipelineCard } from "./case/Pipeline";
 import { ChecksCard, MemoryCard, NotesCard, RunCard } from "./case/Rail";
 import { RepairCard } from "./case/RepairCard";
 import { ReportCard } from "./case/ReportCard";
-import { SignalCard } from "./case/Signal";
+import { SignalCard, type Band } from "./case/Signal";
 import { SuspectsCard } from "./case/Suspects";
+import { TheatreCard } from "./case/Theatre";
 import { AgentTrace, EngineLog } from "./case/Trace";
 import { VerdictCard } from "./case/Verdict";
+import "../styles/viz.css";
 import "./pages.css";
 
 const STATUS_ICON: Record<CaseStatus, React.ReactNode> = {
@@ -30,6 +39,22 @@ const STATUS_ICON: Record<CaseStatus, React.ReactNode> = {
   concluded: <CircleCheck size={15} />,
   unresolved: <CircleHelp size={15} />,
 };
+
+const EMPTY_RUN: Pick<AgentRun, "tool_calls" | "model" | "live" | "rounds" | "fallback" | "stopped" | "thoughts"> = {
+  tool_calls: [],
+  model: "",
+  live: false,
+  rounds: 0,
+  fallback: null,
+  stopped: null,
+  thoughts: [],
+};
+
+/** The frequencies the case's own ledger holds, for the machine drawing's readouts. */
+function ledgerHz(model: CaseModel | null): TwinFrequencies {
+  const find = (re: RegExp) => model?.ledger.find((l) => re.test(l.statement) && typeof l.value === "number")?.value as number | undefined;
+  return { shaft: find(/shaft frequency \(1x\)/i), bpfo: find(/predicted BPFO/i), bpfi: find(/predicted BPFI/i) };
+}
 
 /** Keyed by the case, so nothing read for one case is ever shown on another. */
 export default function CasePage() {
@@ -41,17 +66,42 @@ function Case({ id }: { id: string | undefined }) {
   const entry = useCaseEntry(id);
   const catalogue = useCatalogue();
   const about = useAbout();
+  const twin = useMachineModel();
+  const live = useLiveRun(id);
   const [picked, setPicked] = useState<string | null>(null);
   const [cited, setCited] = useState<string[]>([]);
+  const [band, setBand] = useState<Band>("envelope");
 
   const model = useMemo(() => modelOf(entry, catalogue.data), [entry, catalogue.data]);
   useLiveCase(id, entry?.kind === "engine", model?.status === "waiting");
+
+  const isAgents = entry?.kind === "agents";
+  const running = !!entry && isAgents && !entry.run && !entry.failed;
+  const stuck = running && !live;
+  const raw = entry?.run?.steps ?? live?.steps;
+  const steps = useMemo(() => shownSteps(raw ?? []), [raw]);
+  const streaming = running && !!live?.streaming;
+  // Decided once, when the page opens: a run started just now is shown as it happens.
+  const firstView = useRef(isAgents && (!!entry?.watch || running));
+  const pb = usePlayback(steps, { streaming, autoplay: firstView.current, runKey: id ?? "" });
+  const ended = pb.play.ended;
+  const watching = firstView.current && !stuck && (running || !ended);
+
+  useEffect(() => {
+    // A run opened earlier is shown finished, ready to be replayed.
+    if (!firstView.current) pb.finish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    if (id && entry?.watch && ended) patchCase(id, { watch: false });
+  }, [id, entry?.watch, ended]);
 
   const closed = model?.status === "concluded" || model?.status === "unresolved";
   const notes = model?.notes.length ?? 0;
   const rep = useAsync(() => (closed && id && !entry?.lost ? fetchReport(id) : Promise.resolve(null)), [id, closed, entry?.lost, notes]);
 
-  if (!entry || !model) {
+  if (!entry) {
     return (
       <div className="page">
         <Card>
@@ -63,33 +113,71 @@ function Case({ id }: { id: string | undefined }) {
     );
   }
 
-  const leader = model.leader;
-  const defaultPick = leader && isOnList(leader.kind) ? leader.kind : "healthy";
-  const shown = picked ?? defaultPick;
-  const conclusion = entry.inv?.conclusion ?? null;
   const sc = scenario(entry.scenario);
   const brain = entry.run ? runBrain(entry.run.model, entry.run.live) : null;
-  const answered = model.checks.filter((c) => c.status === "answered").length;
-  const faultNamed = model.status === "concluded" && leader && leader.kind !== "healthy";
-  const noTest = entry.inv?.no_test ?? null;
+  const leader = model?.leader ?? null;
+  const show = model && !watching ? model : null;
+  const named = show?.status === "concluded" && leader ? fault(leader.kind).part : "none";
 
-  return (
-    <div className="page">
+  const stage = isAgents && (
+    <Card
+      title={watching ? "The agents at work" : "The run, replayed"}
+      icon={<Workflow size={15} />}
+      tone={watching ? "model" : undefined}
+      sub={streaming ? "live" : entry.run ? `${entry.run.tool_calls.length} tool calls in ${entry.run.rounds} rounds` : undefined}
+      actions={
+        <>
+          {brain && (
+            <Badge tone={brain.live ? "ok" : "neutral"} dot title={entry.run?.model}>
+              {brain.name}
+            </Badge>
+          )}
+          {watching && !running && (
+            <Button size="sm" icon={<FastForward size={13} />} onClick={pb.finish}>
+              Skip to the result
+            </Button>
+          )}
+        </>
+      }
+      foot={
+        streaming
+          ? "Live: each call is shown as the server reports it, and its answer when the tools give one."
+          : watching
+            ? `The run is over on the server${entry.tookMs ? ` (it took ${num(entry.tookMs / 1000, 1)} s)` : ""}. Its calls are shown here at reading speed; the result follows.`
+            : "A record of the run. Every packet is one tool call it made; violet is a model's call, blue is the engine's answer."
+      }
+    >
+      <AgentStage about={about.data} steps={steps} play={pb.play} streaming={streaming} experiments={model?.experiments} controls={streaming ? undefined : pb} />
+    </Card>
+  );
+
+  const machine = twin.data && (
+    <Card title="The machine" icon={<Cog size={15} />} sub="its parts turning at their real ratios to the shaft" actions={<SourceTag source={PUMP.source} />}>
+      <MachineTwin model={twin.data} rpm={model?.rpm ?? twin.data.nominal_rpm} part={named} sensor={show?.status === "waiting" ? "asked" : "idle"} hz={ledgerHz(show)} />
+      {named !== "none" && leader && (
+        <p className="small muted" style={{ marginTop: 10 }}>
+          The verdict names <b style={{ color: "var(--warn)" }}>{fault(leader.kind).partName}</b>. {fault(leader.kind).story}
+        </p>
+      )}
+    </Card>
+  );
+
+  const head = (
+    <>
       <nav className="crumbs" aria-label="Breadcrumb">
         <Link to="/cases">Cases</Link>
         <ChevronRight size={12} aria-hidden />
         <span className="mono">Case {shortId(entry.id)}</span>
       </nav>
-
       <header className="case-head">
         <div className="grow">
           <h1>{PUMP.name}</h1>
           <div className="case-meta">
             <span className="mono">Case {shortId(entry.id)}</span>
             <SourceTag source={PUMP.source} />
-            {entry.kind === "agents" ? (
+            {isAgents ? (
               <Badge tone="model" dot>
-                agents · {brain?.name}
+                agents{brain ? ` · ${brain.name}` : ""}
               </Badge>
             ) : (
               <Badge tone="accent" dot>
@@ -101,20 +189,72 @@ function Case({ id }: { id: string | undefined }) {
             {entry.batch && <span className="dim">· part of an autonomous run</span>}
           </div>
         </div>
-        <span className={cx("status-lg", `tone-${STATUS_TONE[model.status]}`)}>
-          {STATUS_ICON[model.status]}
-          {STATUS_LABEL[model.status]}
-        </span>
+        {show ? (
+          <span className={cx("status-lg", `tone-${STATUS_TONE[show.status]}`)}>
+            {STATUS_ICON[show.status]}
+            {STATUS_LABEL[show.status]}
+          </span>
+        ) : (
+          !stuck &&
+          !entry.failed && (
+            <span className="status-lg tone-accent">
+              <LoaderCircle size={15} className="spin" />
+              {running ? "The agents are working" : "Showing the run"}
+            </span>
+          )
+        )}
       </header>
+      {stuck && (
+        <Callout tone="warn" icon={<ServerCrash size={15} />}>
+          This run did not finish in this browser: the page was reloaded while the agents were working, and the server sends a run only once. Start it again from New case.
+        </Callout>
+      )}
+      {entry.failed && (
+        <Callout tone="danger" icon={<ServerCrash size={15} />}>
+          The run did not finish: {entry.failed}
+        </Callout>
+      )}
+    </>
+  );
+
+  // While a run is being shown, the page holds back its result.
+  if (!show) {
+    return (
+      <div className="page">
+        {head}
+        <PipelineCard model={null} entry={entry} />
+        <div className="split">
+          <div className="col" style={{ gap: "var(--s-5)" }}>
+            {stage}
+            {machine}
+          </div>
+          <aside className="col rail" style={{ gap: "var(--s-5)" }}>
+            <AgentTrace run={{ ...EMPTY_RUN, ...(entry.run ?? {}), steps: raw ?? [] }} about={about.data} running upTo={pb.play.at} current={pb.play.at} />
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const defaultPick = leader && isOnList(leader.kind) ? leader.kind : "healthy";
+  const shown = picked ?? defaultPick;
+  const conclusion = entry.inv?.conclusion ?? null;
+  const answered = show.checks.filter((c) => c.status === "answered").length;
+  const faultNamed = show.status === "concluded" && leader && leader.kind !== "healthy";
+  const noTest = entry.inv?.no_test ?? null;
+
+  return (
+    <div className="page">
+      {head}
 
       {entry.lost && (
         <Callout tone="warn" icon={<ServerCrash size={15} />}>
           The server no longer holds this case: it keeps cases in memory and has restarted since. What you see is the last state this browser read, and it cannot be changed.
         </Callout>
       )}
-      {model.hazard && (
+      {show.hazard && (
         <Callout tone="danger" icon={<ShieldAlert size={15} />}>
-          <b>{model.hazard}</b>
+          <b>{show.hazard}</b>
           {entry.hazardAck && (
             <div className="small" style={{ marginTop: 4 }}>
               Acknowledged by {entry.hazardAck.by} at {clock(entry.hazardAck.at)} (recorded in this browser).
@@ -125,41 +265,46 @@ function Case({ id }: { id: string | undefined }) {
 
       <div className="stats">
         <Stat label="Leading suspect" value={<span style={{ fontSize: "1.25rem" }}>{leader ? fault(leader.kind).name : "–"}</span>} sub={leader ? <span className="mono">{fault(leader.kind).technical}</span> : undefined} />
-        <Stat label="Belief" value={pct(leader?.belief)} sub={`a verdict needs ${pct(model.concludeAt)}`} />
-        <Stat label="Evidence" value={model.ledger.length} unit="entries" sub={`${model.experiments} from virtual experiments`} />
-        <Stat label="Measurements" value={`${answered}/${model.checks.length}`} sub={model.checks.length === 0 ? "none was needed" : "answered / asked for"} />
+        <Stat label="Belief" value={pct(leader?.belief)} sub={`a verdict needs ${pct(show.concludeAt)}`} />
+        <Stat label="Evidence" value={show.ledger.length} unit="entries" sub={`${show.experiments} from virtual experiments`} />
+        <Stat label="Measurements" value={`${answered}/${show.checks.length}`} sub={show.checks.length === 0 ? "none was needed" : "answered / asked for"} />
         <Stat
           label="Investigated by"
-          icon={entry.kind === "agents" ? <Bot size={13} /> : <Cpu size={13} />}
-          value={<span style={{ fontSize: "1.25rem" }}>{entry.kind === "agents" ? "Agents" : "Engine"}</span>}
-          sub={entry.kind === "agents" ? `${entry.run?.tool_calls.length ?? 0} tool calls, ${entry.run?.rounds ?? 0} rounds` : "a person answers its requests"}
+          icon={isAgents ? <Bot size={13} /> : <Cpu size={13} />}
+          value={<span style={{ fontSize: "1.25rem" }}>{isAgents ? "Agents" : "Engine"}</span>}
+          sub={isAgents ? `${entry.run?.tool_calls.length ?? 0} tool calls, ${entry.run?.rounds ?? 0} rounds` : "a person answers its requests"}
         />
       </div>
 
+      <PipelineCard model={show} entry={entry} />
+
       <div className="split">
-        <div className="col gap-4" style={{ gap: "var(--s-5)" }}>
-          <VerdictCard model={model} conclusion={conclusion} report={rep.data} />
-          <DecisionCard model={model} entry={entry} catalogue={catalogue.data} />
-          {model.status === "unresolved" && noTest && noTest.considered.length > 0 && (
+        <div className="col" style={{ gap: "var(--s-5)" }}>
+          <VerdictCard model={show} conclusion={conclusion} report={rep.data} />
+          <DecisionCard model={show} entry={entry} catalogue={catalogue.data} />
+          {show.status === "unresolved" && noTest && noTest.considered.length > 0 && (
             <Card title="No measurement could settle it" icon={<Scale size={15} />}>
               <p className="muted">{noTest.reason}</p>
               <Menu considered={noTest.considered} />
             </Card>
           )}
-          <SuspectsCard model={model} entry={entry} picked={shown} onPick={isOnList(entry.params.fault) ? setPicked : null} onCite={setCited} />
-          <SignalCard model={model} entry={entry} picked={shown} />
+          {stage}
+          {machine}
+          <TheatreCard model={show} entry={entry} band={band} picked={shown} onPick={setPicked} />
+          <SuspectsCard model={show} entry={entry} picked={shown} onPick={isOnList(entry.params.fault) ? setPicked : null} onCite={setCited} />
+          <SignalCard model={show} entry={entry} picked={shown} band={band} onBand={setBand} />
           {closed && <ReportCard caseId={entry.id} report={rep.data} loading={rep.loading} lost={!!entry.lost} onCite={setCited} />}
           {faultNamed && <HandOff entry={entry} action={conclusion?.recommended_action ?? rep.data?.lines.find((l) => l.part === "action")?.text ?? null} />}
           {faultNamed && leader && <RepairCard entry={entry} cause={leader.kind} approvedBy={entry.approved?.by} />}
-          <LedgerCard model={model} cited={cited} />
+          <LedgerCard model={show} cited={cited} />
         </div>
 
         <aside className="col rail" style={{ gap: "var(--s-5)" }}>
-          {entry.kind === "agents" && entry.run ? <AgentTrace run={entry.run} about={about.data} tookMs={entry.tookMs} id={entry.id} /> : <EngineLog transcript={model.transcript} />}
-          {entry.kind === "agents" && <ChecksCard model={model} />}
-          <MemoryCard model={model} />
-          <NotesCard entry={entry} model={model} />
-          <RunCard entry={entry} model={model} />
+          {isAgents && entry.run ? <AgentTrace run={entry.run} about={about.data} tookMs={entry.tookMs} current={pb.play.playing || !ended ? pb.play.at : undefined} /> : <EngineLog transcript={show.transcript} />}
+          {isAgents && <ChecksCard model={show} />}
+          <MemoryCard model={show} />
+          <NotesCard entry={entry} model={show} />
+          <RunCard entry={entry} model={show} />
         </aside>
       </div>
     </div>

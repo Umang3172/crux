@@ -40,6 +40,8 @@ export function Shell() {
     setDrawer(false);
     const here = NAV.flatMap((g) => g.items).find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)));
     document.title = here ? `${here.label} · Crux` : "Crux";
+    // A new page starts at its top, wherever the last one was scrolled to.
+    window.scrollTo(0, 0);
   }, [location.pathname]);
   useHotkey(
     (e) => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k",

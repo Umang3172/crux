@@ -1,29 +1,29 @@
 // What did the work. For an agent run: every tool call, by which agent, and
 // the physics' answer to it. For an engine case: the engine's own log.
 
-import { Bot, CornerDownRight, Play, ScrollText, Search, Sparkles } from "lucide-react";
+import { Bot, CornerDownRight, ScrollText, Search, Sparkles } from "lucide-react";
 import type { AgentAbout, AgentRun, AgentStep } from "../../api/types";
 import { runBrain } from "../../lib/ai";
 import { num } from "../../lib/format";
-import { useStepper } from "../../lib/hooks";
+import { isOpeningRead } from "../../lib/liveruns";
 import { plainSentence } from "../../lib/plain";
 import { ENGINE_MACHINE_NAME, PUMP } from "../../lib/scenarios";
-import { Badge, Button, Card, cx } from "../../ui/kit";
+import { Badge, Card, cx } from "../../ui/kit";
 
-type Call = AgentStep & { args: Record<string, unknown> };
+type Call = AgentStep & { args: Record<string, unknown>; n: number };
 type Turn = { agent: AgentStep["agent"]; calls: Call[] };
 
-/** The run's first step reads the case before any experiment has run and reports nothing true yet. */
-const beforeAnyExperiment = (s: AgentStep, i: number) => i < 2 && s.tool === "get_case" && /Nothing stands in the way/.test(s.answered ?? "");
-
-export function turnsOf(run: AgentRun): Turn[] {
+/** The run as turns: a turn is one agent's calls until the case changes hands. `n` counts the calls shown. */
+export function turnsOf(run: Pick<AgentRun, "steps" | "tool_calls">): Turn[] {
   const turns: Turn[] = [];
+  let n = 0;
   run.steps.forEach((s, i) => {
-    if (beforeAnyExperiment(s, i)) return;
+    if (!s || isOpeningRead(s, i)) return;
     const { case_id: _omit, ...args } = (run.tool_calls[i]?.args ?? {}) as Record<string, unknown>;
+    const call = { ...s, args, n: n++ };
     const last = turns[turns.length - 1];
-    if (last && last.agent === s.agent) last.calls.push({ ...s, args });
-    else turns.push({ agent: s.agent, calls: [{ ...s, args }] });
+    if (last && last.agent === s.agent) last.calls.push(call);
+    else turns.push({ agent: s.agent, calls: [call] });
   });
   return turns;
 }
@@ -32,59 +32,77 @@ const WHY: Record<string, string> = {
   critic: "called by the gate: something in the capture is explained by no suspect",
 };
 
-export function AgentTrace({ run, about, tookMs, id }: { run: AgentRun; about: AgentAbout | null; tookMs?: number; id: string }) {
+export function AgentTrace({
+  run,
+  about,
+  tookMs,
+  running,
+  upTo,
+  current,
+}: {
+  run: Pick<AgentRun, "steps" | "tool_calls" | "model" | "live" | "rounds" | "fallback" | "stopped" | "thoughts">;
+  about: AgentAbout | null;
+  tookMs?: number;
+  /** The run is still going: its totals are not known yet. */
+  running?: boolean;
+  /** Show calls up to this one only, while the run is being shown on the stage. */
+  upTo?: number;
+  /** The call on the stage now. */
+  current?: number;
+}) {
   const turns = turnsOf(run);
-  const total = turns.reduce((n, t) => n + t.calls.length, 0);
-  const [shown, replay, playing] = useStepper(total, 420, id);
   const brain = runBrain(run.model, run.live);
-  let seen = 0;
+  const limit = upTo ?? Infinity;
 
   return (
     <Card
-      title="Agent run"
+      title="Trace"
       icon={<Bot size={15} />}
+      sub="every tool call, and the physics' answer"
       flush
-      actions={
-        <Button size="sm" icon={<Play size={12} />} onClick={replay} disabled={playing}>
-          {playing ? "Replaying" : "Replay"}
-        </Button>
-      }
       foot={
-        <>
-          The run finished on the server before it was shown{tookMs ? ` (the request took ${num(tookMs / 1000, 1)} s)` : ""}; this is its record in order.
-          {about && ` Limits: ${about.limits.rounds} rounds, ${about.limits.model_calls} model calls, ${about.limits.seconds} s.`}
-        </>
+        running ? (
+          "Calls appear here as the server reports them."
+        ) : (
+          <>
+            {tookMs ? `The run took ${num(tookMs / 1000, 1)} s. ` : ""}
+            {about && `Limits: ${about.limits.rounds} rounds, ${about.limits.model_calls} model calls, ${about.limits.seconds} s.`}
+          </>
+        )
       }
     >
-      <div className="trace-head">
-        <Badge tone={brain.live ? "ok" : "neutral"} dot title={run.model}>
-          {brain.name}
-        </Badge>
-        {!run.live && <Badge title={run.model}>no Gemini credentials on this server</Badge>}
-        {run.fallback && <Badge tone="warn">fell back: {run.fallback}</Badge>}
-        {run.stopped && <Badge tone="warn">stopped: {run.stopped}</Badge>}
-      </div>
-      <div className="budget">
-        <div>
-          <b>
-            {run.rounds}
-            {about && <span className="dim" style={{ fontWeight: 450 }}> of {about.limits.rounds}</span>}
-          </b>
-          <span>rounds</span>
-        </div>
-        <div>
-          <b>{run.tool_calls.length}</b>
-          <span>tool calls</span>
-        </div>
-        <div>
-          <b>{turns.filter((t) => t.agent === "critic").length}</b>
-          <span>critic turns</span>
-        </div>
-      </div>
+      {!running && (
+        <>
+          <div className="trace-head">
+            <Badge tone={brain.live ? "ok" : "neutral"} dot title={run.model}>
+              {brain.name}
+            </Badge>
+            {!run.live && <Badge title={run.model}>no Gemini credentials on this server</Badge>}
+            {run.fallback && <Badge tone="warn">fell back: {run.fallback}</Badge>}
+            {run.stopped && <Badge tone="warn">stopped: {run.stopped}</Badge>}
+          </div>
+          <div className="budget">
+            <div>
+              <b>
+                {run.rounds}
+                {about && <span className="dim" style={{ fontWeight: 450 }}> of {about.limits.rounds}</span>}
+              </b>
+              <span>rounds</span>
+            </div>
+            <div>
+              <b>{run.tool_calls.length}</b>
+              <span>tool calls</span>
+            </div>
+            <div>
+              <b>{turns.filter((t) => t.agent === "critic").length}</b>
+              <span>critic turns</span>
+            </div>
+          </div>
+        </>
+      )}
       {turns.map((t, ti) => {
-        const start = seen;
-        seen += t.calls.length;
-        if (start >= shown) return null;
+        const calls = t.calls.filter((c) => c.n <= limit);
+        if (calls.length === 0) return null;
         return (
           <div className={cx("turn", t.agent)} key={ti}>
             <div className="turn-head">
@@ -94,13 +112,14 @@ export function AgentTrace({ run, about, tookMs, id }: { run: AgentRun; about: A
               </span>
               <span className="turn-why">{WHY[t.agent] ?? (ti === 0 ? "opens the case" : "takes the case back")}</span>
             </div>
-            {t.calls.slice(0, Math.max(0, shown - start)).map((c, ci) => (
-              <Step key={ci} call={c} />
+            {calls.map((c) => (
+              <Step key={c.n} call={c} now={c.n === current} />
             ))}
           </div>
         );
       })}
-      {run.thoughts.length > 0 && (
+      {turns.length === 0 && <div className="empty left">No call yet.</div>}
+      {!running && run.thoughts.length > 0 && (
         <div className="turn">
           <div className="turn-head">
             <span className="who" style={{ background: "var(--model-soft)", color: "var(--model)" }}>
@@ -118,11 +137,11 @@ export function AgentTrace({ run, about, tookMs, id }: { run: AgentRun; about: A
   );
 }
 
-function Step({ call }: { call: Call }) {
+function Step({ call, now }: { call: Call; now?: boolean }) {
   const hasArgs = Object.keys(call.args).length > 0;
   if (call.kind === "says") {
     return (
-      <div className="step says">
+      <div className={cx("step", "says", now && "now")}>
         <div className="step-tool">
           narrate <span className="dim" style={{ fontWeight: 450 }}>· shown as narration, never as evidence</span>
         </div>
@@ -131,7 +150,7 @@ function Step({ call }: { call: Call }) {
     );
   }
   return (
-    <div className="step">
+    <div className={cx("step", now && "now")}>
       <div className="step-tool">{call.tool}</div>
       <div className="step-ask">{call.asked}</div>
       {call.answered && (

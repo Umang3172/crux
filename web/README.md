@@ -25,11 +25,11 @@ make web-build && make serve-app     # http://localhost:8080
 
 | Page | What is on it | Routes it calls |
 |---|---|---|
-| Overview | This browser's cases by how they ended, the case queue, the agents' latest tool calls, pinned scenarios, the autonomous run, the machines | `/health`, `/maintenance/machines`, `/maintenance/tickets`, `/ingest/{id}`, `/investigations`, `/agent/replay` |
-| Cases, Case | A whole investigation on one page: the verdict, the measurement the engine asked for with what each suspect predicts it reads, every suspect, measured against simulated spectra, the evidence ledger, the agents' trace, the report with its sentence check, the repair check, notes | `/investigations…`, `/replay`, `/capture`, `/spectrum`, `/tests` |
+| Overview | This browser's cases by how they ended, the case queue, the agents' latest tool calls, pinned scenarios, the autonomous run drawn call by call, the machine running | `/health`, `/machine`, `/maintenance/machines`, `/maintenance/tickets`, `/ingest/{id}`, `/investigations`, `/agent/stream` |
+| Cases, Case | A whole investigation on one page: where it is in its pipeline, the agents at work on it (live while the run streams, a record afterwards), the verdict, the measurement the engine asked for with what each suspect predicts it reads, the machine with the named part marked, the virtual experiments side by side, every suspect, measured against simulated spectra, the evidence ledger, the report with its sentence check, the repair check, notes | `/investigations…`, `/agent/stream`, `/machine`, `/replay`, `/capture`, `/spectrum`, `/tests` |
 | Agents | The two agents, the tools each was given and what each takes, the limits on a run, which model does each job | `/agent/about`, `/health` |
 | Proof | The evaluation run's figures, each with its source | none: `src/data/evaluation.ts` |
-| Machines, Machine | A part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/maintenance/…`, `/ingest/{id}` |
+| Machines, Machine | The pump model drawn with its parts turning; a part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/machine`, `/maintenance/…`, `/ingest/{id}` |
 | Work orders | Work orders drafted from forecast alarms, with cited evidence and approval by name; what a repair found | `/maintenance/tickets…`, `/fleet/outcome` |
 | Lens scans | A phone video read for motion and sound | `/lens/…` |
 | Network | This site's forecasting model, an update waiting for a decision, lessons | `/fleet/…` |
@@ -42,10 +42,13 @@ make web-build && make serve-app     # http://localhost:8080
 src/
   api/        types and calls: the one door to the server
   app/        the shell: navigation, command palette (Cmd-K), new-case dialog, routes
-  lib/        session store, the case model, scenarios, formatting, plain words
+  lib/        session store, the case model, scenarios, formatting, plain words,
+              liveruns.ts (runs as they stream) and playback.ts (showing one call by call)
   data/       the evaluation run's figures
-  styles/     tokens.css (every colour and size), base.css, ui.css (the components)
-  ui/         kit.tsx (components), charts.tsx (SVG charts), QrCode.tsx
+  styles/     tokens.css (every colour and size), base.css, ui.css (the components),
+              viz.css (the moving drawings)
+  ui/         kit.tsx (components), charts.tsx (SVG charts), QrCode.tsx,
+              AgentStage.tsx (the agents at work), MachineTwin.tsx (the machine running)
   pages/      one file per page; pages/case/ holds the case page's panels
 ```
 
@@ -56,6 +59,13 @@ run's figures in `src/data/evaluation.ts`. Nothing here computes a posterior, a
 correlation or an information gain. If the UI would have to calculate something
 to display it, that calculation belongs in the engine, where it is tested and can
 be argued with.
+
+**Motion carries a number.** In the machine drawing every part turns at its
+ratio to the shaft as `GET /machine` reports it, slowed by a stated factor; a
+flash where a ball meets a damaged spot is not drawn in, it falls out of those
+ratios. On the agents' stage every packet is one recorded tool call. Nothing
+moves for decoration, and the drawings stand still when the visitor's system
+asks for less motion.
 
 **Colour has one meaning each** (`styles/tokens.css`): blue is the engine's voice
 and the measurement it asks for; violet is anything a language model did or
@@ -86,8 +96,12 @@ with a new plant id, which also gives the pump a clean history of earlier cases.
 
 ## Still open
 
-- **Streaming an agent run.** The server returns a run when it has finished, so
-  the trace replays its record; it does not show it live.
+- **Beliefs during an agent run.** The stream carries each call and each answer
+  in words, not the beliefs after it, so the stage cannot show beliefs moving
+  step by step. An engine case can: the browser keeps the beliefs before and
+  after each reading.
+- **A run that outlives the page.** The server sends a run once. Reload while
+  the agents are working and the run is lost to this browser.
 - **A work order for a case.** The server stores work orders only for forecast
   alarms. A case's recommendation is approved on the case and the approval is
   kept in the browser.

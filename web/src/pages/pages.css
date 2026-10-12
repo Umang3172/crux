@@ -424,6 +424,15 @@
 .turn.critic .step::after {
   border-color: var(--model);
 }
+.step.now > .step-tool,
+.step.now > .step-ask {
+  color: var(--model);
+}
+.step.now::after {
+  background: var(--model);
+  border-color: var(--model);
+  box-shadow: 0 0 0 4px var(--model-soft);
+}
 .step.says::after {
   border-radius: 2px;
   transform: rotate(45deg);

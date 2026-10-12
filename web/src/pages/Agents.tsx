@@ -10,10 +10,14 @@ import { AI_JOBS, brainOf, fallbackReason } from "../lib/ai";
 import { modelOf } from "../lib/casemodel";
 import { shortId, stamp } from "../lib/format";
 import { useAbout, useHealth } from "../lib/hooks";
-import { useSession } from "../lib/session";
+import { shownSteps } from "../lib/liveruns";
+import { usePlayback } from "../lib/playback";
+import { useSession, type CaseEntry } from "../lib/session";
+import { AgentStage } from "../ui/AgentStage";
 import { Badge, Button, Callout, Card, Empty, ErrorState, PageHead, SkeletonRows, Stat, cx } from "../ui/kit";
 import { Link } from "react-router";
 import { finding } from "./parts";
+import "../styles/viz.css";
 import "./pages.css";
 
 const CLOSES = new Set(["conclude", "declare_unresolved"]);
@@ -35,6 +39,28 @@ function ToolList({ about, agent }: { about: AgentAbout; agent: AgentAbout["agen
         );
       })}
     </div>
+  );
+}
+
+/** The session's latest run, ready to be played on the stage. */
+function LatestRun({ entry, about }: { entry: CaseEntry; about: AgentAbout }) {
+  const steps = shownSteps(entry.run?.steps ?? []);
+  const pb = usePlayback(steps, { streaming: false, autoplay: false, runKey: entry.id });
+  const m = modelOf(entry);
+  return (
+    <Card
+      title="The latest run, on the stage"
+      icon={<Workflow size={15} />}
+      sub={`case ${shortId(entry.id)}${m ? ` · ${finding(m).toLowerCase()}` : ""}`}
+      actions={
+        <Link to={`/cases/${entry.id}`} className="btn btn-sm">
+          Open the case
+        </Link>
+      }
+      foot="A record of the run. Every packet is one tool call it made; violet is a model's call, blue is the engine's answer."
+    >
+      <AgentStage about={about} steps={steps} play={pb.play} streaming={false} experiments={m?.experiments} controls={pb} />
+    </Card>
   );
 }
 
@@ -82,6 +108,8 @@ export default function Agents() {
             <Stat label="Model calls per run" value={a.limits.model_calls} unit="at most" sub={`and ${a.limits.seconds} s`} />
             <Stat label="Runs on" value={<span style={{ fontSize: "1.25rem" }}>{health.data ? brain.name : "…"}</span>} sub={brain.live ? "a live model" : "no model credentials on this server"} />
           </div>
+
+          {runs[0] && <LatestRun key={runs[0].id} entry={runs[0]} about={a} />}
 
           <Card title="The loop" icon={<Workflow size={15} />} sub="who may do what">
             <div className="loop">

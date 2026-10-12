@@ -34,6 +34,10 @@ export type CaseEntry = {
   hazardAck?: { by: string; at: number };
   /** The server no longer holds this case (it keeps cases in memory). */
   lost?: boolean;
+  /** An agent run opened from this page: shown as it happens before its result is. */
+  watch?: boolean;
+  /** Why an agent run did not finish. */
+  failed?: string;
 };
 
 type Session = { v: 2; plant: string; cases: CaseEntry[] };

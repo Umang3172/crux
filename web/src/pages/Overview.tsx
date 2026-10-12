@@ -3,21 +3,26 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Activity, ArrowRight, Bot, CircleCheck, CircleDashed, CircleHelp, CircleX, Eye, Factory, FolderOpen, Hourglass, LoaderCircle, Play, Plus, Radio, Sparkles, Zap } from "lucide-react";
+import { Activity, ArrowRight, Bot, CircleCheck, CircleDashed, CircleHelp, CircleX, Eye, Factory, FastForward, FolderOpen, Hourglass, LoaderCircle, Play, Plus, Radio, Sparkles, Zap } from "lucide-react";
 import { machines as fetchMachines, streamStatus, tickets as fetchTickets } from "../api/crux";
 import { openLauncher } from "../app/Launcher";
-import { clearBatch, startBatch, useBatch } from "../lib/autopilot";
+import { clearBatch, skipBatchAnimation, startBatch, useBatch } from "../lib/autopilot";
 import { modelOf } from "../lib/casemodel";
 import { num, pct, shortId } from "../lib/format";
-import { useAsync } from "../lib/hooks";
+import { useAbout, useAsync, useMachineModel } from "../lib/hooks";
 import { launchScenario } from "../lib/launch";
+import { shownSteps, useLiveRun } from "../lib/liveruns";
+import { usePlayback } from "../lib/playback";
 import { fault, plainSentence } from "../lib/plain";
 import { FAULT_SET, LIVE_SENSOR, PLANT_NAME, PUMP, SCENARIOS, type Scenario } from "../lib/scenarios";
 import { patchCase, useSession } from "../lib/session";
+import { AgentStage } from "../ui/AgentStage";
 import { StackBar } from "../ui/charts";
+import { MachineTwin } from "../ui/MachineTwin";
 import { Badge, Button, Callout, Card, Empty, LinkButton, PageHead, SourceTag, Stat, cx } from "../ui/kit";
 import { turnsOf } from "./case/Trace";
 import { CaseTable, finding, rowsOf } from "./parts";
+import "../styles/viz.css";
 import "./pages.css";
 
 export default function Overview() {
@@ -169,10 +174,14 @@ function BatchCard() {
   const session = useSession();
   const done = batch?.items.filter((i) => i.state === "done" || i.state === "failed").length ?? 0;
   const entries = (batch?.items ?? []).map((i) => session.cases.find((c) => c.id === i.caseId));
-  const models = entries.map((e) => modelOf(e));
+  // An incident is counted and named only once it has been shown.
+  const models = entries.map((e, i) => (batch?.items[i].state === "done" ? modelOf(e) : null));
+  const onStage = batch?.items.findIndex((i) => i.state === "running" || i.state === "showing") ?? -1;
   const revealed = entries.length > 0 && entries.every((e) => !e || e.revealed);
   const count = (st: string) => models.filter((m) => m?.status === st).length;
   const askedFirst = models.filter((m) => m && m.checks.length > 0).length;
+  // The agents' own time: what each request took, not how long it was held on screen.
+  const agentMs = entries.reduce((sum, e) => sum + (e?.tookMs ?? 0), 0);
 
   return (
     <Card
@@ -184,6 +193,10 @@ function BatchCard() {
         batch && !batch.running ? (
           <Button size="sm" variant="ghost" onClick={clearBatch}>
             Clear
+          </Button>
+        ) : batch && !batch.skip ? (
+          <Button size="sm" variant="ghost" icon={<FastForward size={13} />} onClick={skipBatchAnimation}>
+            Skip the animation
           </Button>
         ) : undefined
       }
@@ -207,7 +220,7 @@ function BatchCard() {
         <>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
             <div className="row between small" style={{ marginBottom: 6 }}>
-              <span className="muted">{batch.running ? `Investigating ${Math.min(done + 1, batch.items.length)} of ${batch.items.length}…` : `${batch.items.length} incidents, ${num(((batch.finishedAt ?? 0) - batch.startedAt) / 1000, 1)} s`}</span>
+              <span className="muted">{batch.running ? `Investigating ${Math.min(done + 1, batch.items.length)} of ${batch.items.length}…` : `${batch.items.length} incidents · ${num(agentMs / 1000, 1)} s of agent time`}</span>
               {!batch.running && (
                 <span className="dim">
                   {count("concluded")} named a cause · {askedFirst} asked for a measurement first · {count("unresolved")} closed without one
@@ -223,17 +236,31 @@ function BatchCard() {
               ]}
             />
           </div>
+          {batch.running && onStage >= 0 && !batch.skip && (
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
+              <div className="row between small" style={{ marginBottom: 6 }}>
+                <b>
+                  Incident {onStage + 1} of {batch.items.length}
+                </b>
+                <span className="dim">{batch.items[onStage].state === "running" ? "the agents have it" : "its calls, as they were made"}</span>
+              </div>
+              <BatchStage key={`${batch.id}:${onStage}`} caseId={batch.items[onStage].caseId} />
+              <p className="small dim" style={{ marginTop: 8 }}>
+                On the offline stand-in a run is over in a fraction of a second, so each one is held on screen long enough to follow. Skipping drops the wait, never a run.
+              </p>
+            </div>
+          )}
           {batch.items.map((it, i) => {
             const e = entries[i];
             const m = models[i];
             return (
               <div className="batch-row" key={i}>
-                {it.state === "done" && m ? m.status === "concluded" ? <CircleCheck size={15} className="t-ok" /> : <CircleHelp size={15} className="dim" /> : ICON[it.state as keyof typeof ICON]}
+                {it.state === "done" && m ? m.status === "concluded" ? <CircleCheck size={15} className="t-ok" /> : <CircleHelp size={15} className="dim" /> : ICON[(it.state === "showing" ? "running" : it.state) as keyof typeof ICON]}
                 <div className="col gap-1" style={{ gap: 1 }}>
                   <span className={cx(it.state === "queued" && "dim")}>
                     <span className="mono dim">#{i + 1}</span>{" "}
                     {it.state === "queued" && "queued"}
-                    {it.state === "running" && "the agents are on it"}
+                    {(it.state === "running" || it.state === "showing") && "the agents are on it"}
                     {it.state === "failed" && <span className="t-danger">{it.error}</span>}
                     {m && (
                       <>
@@ -246,7 +273,7 @@ function BatchCard() {
                   </span>
                   {e?.revealed && <span className="small dim">fed in: {fault(it.params.fault).name.toLowerCase()}</span>}
                 </div>
-                {it.caseId ? (
+                {it.caseId && it.state === "done" ? (
                   <Link to={`/cases/${it.caseId}`} className="small mono">
                     {shortId(it.caseId)}
                   </Link>
@@ -275,6 +302,16 @@ function BatchCard() {
       )}
     </Card>
   );
+}
+
+/** The incident the agents are on, drawn call by call. */
+function BatchStage({ caseId }: { caseId: string | undefined }) {
+  const about = useAbout();
+  const live = useLiveRun(caseId);
+  const steps = shownSteps(live?.steps ?? []);
+  const streaming = !live || live.streaming;
+  const pb = usePlayback(steps, { streaming, quick: true, autoplay: true, runKey: caseId ?? "none" });
+  return <AgentStage about={about.data} steps={steps} play={pb.play} streaming={streaming} compact />;
 }
 
 /** The agents' latest tool calls across this session's runs. */
@@ -335,6 +372,7 @@ function Fleet({
   sensor: Awaited<ReturnType<typeof streamStatus>> | null;
   activeCase?: string;
 }) {
+  const twin = useMachineModel();
   return (
     <Card
       title="Machines"
@@ -346,6 +384,15 @@ function Fleet({
         </LinkButton>
       }
     >
+      {twin.data && (
+        <div style={{ padding: "12px 16px 14px", borderBottom: "1px solid var(--line)" }}>
+          <div className="row between small" style={{ marginBottom: 2 }}>
+            <b>{PUMP.name}, as the engine models it</b>
+            <span className="dim">nominal speed</span>
+          </div>
+          <MachineTwin model={twin.data} rpm={twin.data.nominal_rpm} sensor={activeCase ? "asked" : "idle"} compact />
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>

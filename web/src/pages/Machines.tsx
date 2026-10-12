@@ -3,11 +3,13 @@ import { ArrowRight, Factory, Play, Radio } from "lucide-react";
 import { machines as fetchMachines, streamStatus } from "../api/crux";
 import { openLauncher } from "../app/Launcher";
 import { num } from "../lib/format";
-import { useAsync } from "../lib/hooks";
+import { useAsync, useMachineModel } from "../lib/hooks";
 import { LIVE_SENSOR, PUMP } from "../lib/scenarios";
 import { useSession } from "../lib/session";
 import { Badge, Button, Callout, Card, ErrorState, LinkButton, PageHead, SkeletonRows, SourceTag } from "../ui/kit";
+import { MachineTwin } from "../ui/MachineTwin";
 import { rowsOf } from "./parts";
+import "../styles/viz.css";
 import "./pages.css";
 
 export default function Machines() {
@@ -16,37 +18,53 @@ export default function Machines() {
   const session = useSession();
   const rows = rowsOf(session.cases);
   const open = rows.filter((r) => r.model.status === "waiting").length;
+  const twin = useMachineModel();
 
   return (
     <div className="page">
       <PageHead title="Machines" sub="Three kinds of machine reach Crux: a physics model that can be given a fault, whole lives replayed from a recording or a simulation, and a live sensor." />
 
-      <div className="grid-3">
-        <Card title={PUMP.name} icon={<Factory size={15} />} foot="Its readings are synthetic: the fault is fed in, and the engine does not know which.">
-          <div className="col gap-3">
-            <div className="row row-wrap">
-              <SourceTag source={PUMP.source} />
-              <Badge>{PUMP.type}</Badge>
-            </div>
-            <dl className="defs">
+      <Card
+        title={PUMP.name}
+        icon={<Factory size={15} />}
+        sub={PUMP.type}
+        actions={
+          <>
+            <SourceTag source={PUMP.source} />
+            <LinkButton to="/cases" variant="ghost" size="sm">
+              Its cases <ArrowRight size={13} />
+            </LinkButton>
+            <Button variant="primary" size="sm" icon={<Play size={13} />} onClick={() => openLauncher()}>
+              Investigate it
+            </Button>
+          </>
+        }
+        foot="The engine's own model of the pump: a fault is fed in and its readings are simulated. Each part in the drawing turns at the ratio to the shaft that the engine computes from the bearing's geometry."
+      >
+        {twin.data ? (
+          <>
+            <MachineTwin model={twin.data} rpm={twin.data.nominal_rpm} sensor={open > 0 ? "asked" : "idle"} />
+            <dl className="defs" style={{ marginTop: 12 }}>
+              <dt>Bearing</dt>
+              <dd>
+                {twin.data.bearing.label}: {twin.data.bearing.rolling_elements} balls of {twin.data.bearing.ball_diameter_mm} mm on a {twin.data.bearing.pitch_diameter_mm} mm pitch circle
+              </dd>
+              <dt>Sampled at</dt>
+              <dd className="num">{num(twin.data.sample_rate_hz, 0)} Hz</dd>
               <dt>Cases</dt>
               <dd>
                 {rows.length} in this session{open > 0 && `, ${open} waiting for a measurement`}
               </dd>
-              <dt>Bearing</dt>
-              <dd className="mono">SKF 6205-2RS JEM</dd>
             </dl>
-            <div className="row row-wrap">
-              <Button variant="primary" icon={<Play size={14} />} onClick={() => openLauncher()}>
-                Investigate it
-              </Button>
-              <LinkButton to="/cases" variant="ghost">
-                Its cases <ArrowRight size={13} />
-              </LinkButton>
-            </div>
-          </div>
-        </Card>
+          </>
+        ) : twin.loading ? (
+          <SkeletonRows rows={5} />
+        ) : (
+          <p className="muted">This server does not describe the machine's parts, so there is no drawing of it.</p>
+        )}
+      </Card>
 
+      <div className="grid-2">
         <Card title="Bench motor M-1" icon={<Radio size={15} />} foot="A sensor posts readings with a device token. This console reads its status only.">
           {!sensor.data ? (
             sensor.loading ? (

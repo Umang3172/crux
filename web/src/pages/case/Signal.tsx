@@ -1,7 +1,6 @@
 // The virtual experiment, drawn: the measured spectrum against what one
 // suspect's simulation predicts. A picture of the fit; no belief depends on it.
 
-import { useState } from "react";
 import { AudioWaveform } from "lucide-react";
 import { capture, spectrum } from "../../api/crux";
 import type { FaultKind } from "../../api/types";
@@ -27,8 +26,9 @@ function markers(model: CaseModel): Marker[] {
   return out;
 }
 
-export function SignalCard({ model, entry, picked }: { model: CaseModel; entry: CaseEntry; picked: string | null }) {
-  const [band, setBand] = useState<"raw" | "envelope">("envelope");
+export type Band = "raw" | "envelope";
+
+export function SignalCard({ model, entry, picked, band, onBand }: { model: CaseModel; entry: CaseEntry; picked: string | null; band: Band; onBand: (b: Band) => void }) {
   const p = entry.params;
   const drawable = isOnList(p.fault);
   const hypothesis = picked && isOnList(picked) ? picked : "healthy";
@@ -46,7 +46,7 @@ export function SignalCard({ model, entry, picked }: { model: CaseModel; entry: 
           <SourceTag source="physics model · synthetic" />
           <Seg
             value={band}
-            onChange={setBand}
+            onChange={onBand}
             options={[
               { id: "envelope", label: "Envelope", title: "The envelope spectrum: where bearing impacts show" },
               { id: "raw", label: "Raw", title: "The raw spectrum: shaft-speed lines" },
@@ -70,7 +70,7 @@ export function SignalCard({ model, entry, picked }: { model: CaseModel; entry: 
         <>
           <div className="row row-wrap between" style={{ marginBottom: 4 }}>
             <span className="muted">
-              Simulated suspect: <b style={{ color: "var(--sim)" }}>{fault(hypothesis).name}</b> <span className="dim">· pick another in the suspects table</span>
+              Simulated suspect: <b style={{ color: "var(--sim)" }}>{fault(hypothesis).name}</b> <span className="dim">· choose another above</span>
             </span>
           </div>
           <SpectrumChart
