@@ -25,6 +25,11 @@ substitutions:
   # exist does not stop the deploy: every call fails and the product quietly
   # runs its offline paths. Check with `hypengine gemini-check` first.
   _GEMINI_MODEL: gemini-3.8-flash
+  # Lens's model. The code's default, gemini-robotics-er-2-preview, is offered
+  # through the Gemini API but not to a Google Cloud project (404 on 11 Oct
+  # 2026; it is not in the project's model list), so the deploy names one that
+  # is and that reads images: the camera look's model.
+  _GEMINI_LENS_MODEL: gemini-3-flash-preview
   # 0 costs nothing and cold-starts in a few seconds. Set to 1 for the judging
   # window so the first person to open the link never waits.
   _MIN_INSTANCES: "0"
@@ -92,7 +97,7 @@ steps:
           --min-instances "${_MIN_INSTANCES}" \
           --max-instances 1 \
           --concurrency 8 \
-          --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL},GOOGLE_GENAI_USE_ENTERPRISE=${_GOOGLE_LOGIN},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${_GEMINI_LOCATION}" \
+          --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL},GEMINI_LENS_MODEL=${_GEMINI_LENS_MODEL},GOOGLE_GENAI_USE_ENTERPRISE=${_GOOGLE_LOGIN},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${_GEMINI_LOCATION}" \
           $${SECRET_FLAG}
 
         echo "---"
