@@ -10,9 +10,12 @@ Keep this layer thin: it serialises engine state, it does not decide anything.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import inspect
+import json
 import os
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -20,11 +23,15 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..agents.factory import describe as describe_models
 from ..agents.trace import describe
 from ..data.rig import (
+    AUX_PUMP_LOBES,
+    AUX_PUMP_ORDER,
+    AUX_PUMP_RATIO,
     BENCH_RIG,
     BENCH_RIG_ESP32,
     OFF_CATALOGUE,
@@ -40,6 +47,7 @@ from ..investigation.notes import MAX_NOTE_CHARS
 from ..investigation.notes import flag as hazard_flag
 from ..investigation.repair import NothingToVerify, RepairCheck, check_repair
 from ..models import FaultKind, InvestigationState
+from ..physics.frequencies import bearing_multipliers
 from ..tools import CaseNotFound, InMemoryCaseStore, open_case, record_note
 
 app = FastAPI(
@@ -437,10 +445,23 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
     otherwise; `model` in the response says which. Readings come from the
     synthetic rig, never from the agent.
     """
+    investigate_async = _investigator()
+    case = _open_agent_case(req)
+    run = await investigate_async(_AGENT_CASES, case.id)
+    _remember(case.investigation)
+    return _run_payload(run, req, case)
+
+
+def _investigator() -> Any:
     try:
         from ..agents.investigator import investigate_async
     except ImportError as exc:  # the agent framework is the optional `llm` extra
         raise HTTPException(503, f"the investigator needs the llm extra: {exc}") from exc
+    return investigate_async
+
+
+def _open_agent_case(req: AgentReplayRequest) -> Any:
+    """A case on the synthetic rig, open and ready for the agents."""
     obs = synthetic_capture(
         req.fault,
         BENCH_RIG,
@@ -454,8 +475,19 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
     _open_with_history(case.investigation, req.plant, req.remember)
     if req.note.strip():
         record_note(_AGENT_CASES, case.id, req.note)
-    run = await investigate_async(_AGENT_CASES, case.id)
-    _remember(case.investigation)
+    return case
+
+
+def _step_payload(step: Any) -> dict[str, Any]:
+    # `agent` says which of the two made the call: investigator or critic.
+    return {
+        "by": step.by,
+        "agent": step.agent,
+        **asdict(describe(step.tool, step.args, step.result)),
+    }
+
+
+def _run_payload(run: Any, req: AgentReplayRequest, case: Any) -> dict[str, Any]:
     return {
         "model": run.model,
         # True when a Gemini model made the calls from start to finish.
@@ -464,20 +496,104 @@ async def agent_replay(req: AgentReplayRequest) -> dict[str, Any]:
         "rounds": run.rounds,
         "stopped": run.stopped,
         "tool_calls": [{"tool": name, "args": args} for name, args in run.tool_calls],
-        "steps": [
-            # `agent` says which of the two made the call: investigator or critic.
-            {
-                "by": step.by,
-                "agent": step.agent,
-                **asdict(describe(step.tool, step.args, step.result)),
-            }
-            for step in run.steps
-        ],
+        "steps": [_step_payload(step) for step in run.steps],
         "thoughts": run.thoughts,
         "ground_truth": str(req.fault),  # demo only; the investigator is never told
         # Earlier closed cases on this machine, as known when this one opened.
         "history": case.investigation.state.extra.get("history", []),
         "case": run.case.model_dump(mode="json") if run.case else None,
+    }
+
+
+def _event(name: str, data: dict[str, Any]) -> str:
+    return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.post("/agent/stream")
+async def agent_stream(req: AgentReplayRequest) -> StreamingResponse:
+    """The same run as `/agent/replay`, sent while it happens (server-sent events).
+
+    `open` carries the case id as soon as the case exists. `step` is sent when an
+    agent makes a tool call and again when the tools answer it, with the step's
+    place in the run. `done` carries what `/agent/replay` returns. A run that
+    fails sends `error` and ends. The words in a step are written by the same
+    code as in the finished run, so a screen showing a run live and one showing
+    it afterwards read the same.
+    """
+    investigate_async = _investigator()
+    case = _open_agent_case(req)
+
+    async def events() -> AsyncIterator[str]:
+        queue: asyncio.Queue[tuple[int, dict[str, Any]] | None] = asyncio.Queue()
+
+        def on_step(index: int, step: Any) -> None:
+            queue.put_nowait((index, _step_payload(step)))
+
+        async def work() -> Any:
+            try:
+                return await investigate_async(_AGENT_CASES, case.id, on_step=on_step)
+            finally:
+                queue.put_nowait(None)
+
+        yield _event(
+            "open",
+            {
+                "case_id": case.id,
+                "history": case.investigation.state.extra.get("history", []),
+            },
+        )
+        task = asyncio.create_task(work())
+        try:
+            while (item := await queue.get()) is not None:
+                yield _event("step", {"index": item[0], "step": item[1]})
+            run = await task
+        except asyncio.CancelledError:  # the screen went away: stop working the case
+            task.cancel()
+            raise
+        except Exception as exc:
+            yield _event("error", {"detail": f"{type(exc).__name__}: {exc}"[:300]})
+            return
+        _remember(case.investigation)
+        yield _event("done", _run_payload(run, req, case))
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        # A proxy that buffers would hold every step back until the run ends.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/machine")
+def machine() -> dict[str, Any]:
+    """The machine every synthetic case runs on, for a drawing of it: its parts
+    and how fast each moves for one turn of the shaft. Read from the machine's
+    spec and the physics, so a screen cannot show a rate the engine does not
+    compute. Multiply by the shaft frequency for hertz."""
+    spec = BENCH_RIG
+    bearing = spec.bearing
+    return {
+        "id": spec.machine_id,
+        "name": spec.name,
+        "nominal_rpm": spec.nominal_rpm,
+        "sample_rate_hz": spec.sample_rate_hz,
+        "blade_count": spec.blade_count,
+        "bearing": {
+            "label": bearing.label,
+            "rolling_elements": bearing.n_rolling_elements,
+            "ball_diameter_mm": bearing.ball_diameter_mm,
+            "pitch_diameter_mm": bearing.pitch_diameter_mm,
+            "contact_angle_deg": bearing.contact_angle_deg,
+        },
+        # ftf: turns of the cage; bsf: spins of a ball; bpfo and bpfi: balls passing
+        # a point on the outer and on the inner ring. All per turn of the shaft.
+        "per_shaft_turn": bearing_multipliers(bearing),
+        # The belt-driven pump of the off-catalogue scenario (data/rig.py).
+        "auxiliary_pump": {
+            "belt_ratio": AUX_PUMP_RATIO,
+            "lobes": AUX_PUMP_LOBES,
+            "passes_per_shaft_turn": AUX_PUMP_ORDER,
+        },
     }
 
 
