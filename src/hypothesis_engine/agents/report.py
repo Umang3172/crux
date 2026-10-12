@@ -69,6 +69,12 @@ NO_VERDICT_ACTION = (
 #: A reply cut off by either is not a report: the engine's lines stand alone.
 TIMEOUT_S = 30.0
 MAX_TOKENS = 500
+#: How hard Gemini thinks before it writes. Its thinking counts against
+#: MAX_TOKENS: at the model's default, 478 of the 500 went to thinking and the
+#: JSON was cut off after 8 tokens; at "low" it stopped on its own after 136
+#: (gemini-3.8-flash, 13 Oct 2026). Wording sentences from a listed ledger needs
+#: little reasoning.
+THINKING_LEVEL = "low"
 #: Most sentences taken from a model. The rest are dropped unread.
 MAX_SENTENCES = 6
 #: Most entries one sentence may cite. A sentence that cites a dozen rests on
@@ -428,6 +434,7 @@ class GeminiExplainer:
                 response_mime_type="application/json",
                 response_schema=_SENTENCES,
                 max_output_tokens=MAX_TOKENS,
+                thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL),
             ),
         )
         return _parsed(response.text or "")
@@ -444,6 +451,7 @@ class GeminiExplainer:
                 response_mime_type="application/json",
                 response_schema=_SENTENCES,
                 max_output_tokens=MAX_TOKENS,
+                thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL),
             ),
         )
         return _parsed(response.text or "")

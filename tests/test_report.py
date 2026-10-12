@@ -9,6 +9,9 @@ that say exactly what the test needs said.
 from __future__ import annotations
 
 import json
+import sys
+import types
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -580,3 +583,43 @@ def test_a_case_the_investigator_worked_has_a_report_too():
 
     assert written.status_code == 200
     assert "outer race" in written.json()["lines"][0]["text"]
+
+
+@pytest.mark.parametrize("call", ["write", "revise"])
+def test_gemini_is_left_room_to_answer_after_it_thinks(
+    call: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Thinking counts against the token cap: at the model's default it used 478
+    # of the 500 and the JSON was cut off, so every explanation fell back.
+    sent: dict = {}
+
+    class _Models:
+        def generate_content(self, **kw: object) -> SimpleNamespace:
+            sent.update(kw["config"])  # type: ignore[arg-type]
+            return SimpleNamespace(text='{"sentences": []}')
+
+    class _Client:
+        def __init__(self, **_: object) -> None:
+            self.models = _Models()
+
+    fake_types = types.ModuleType("google.genai.types")
+    fake_types.GenerateContentConfig = lambda **kw: kw  # type: ignore[attr-defined]
+    fake_types.HttpOptions = lambda **kw: kw  # type: ignore[attr-defined]
+    fake_types.ThinkingConfig = lambda **kw: kw  # type: ignore[attr-defined]
+    fake = types.ModuleType("google.genai")
+    fake.Client = _Client  # type: ignore[attr-defined]
+    fake.types = fake_types  # type: ignore[attr-defined]
+    if "google" not in sys.modules:
+        monkeypatch.setitem(sys.modules, "google", types.ModuleType("google"))
+    monkeypatch.setattr(sys.modules["google"], "genai", fake, raising=False)
+    monkeypatch.setitem(sys.modules, "google.genai", fake)
+    monkeypatch.setitem(sys.modules, "google.genai.types", fake_types)
+
+    explainer = report.GeminiExplainer()
+    if call == "write":
+        explainer.write([], None)  # type: ignore[arg-type]
+    else:
+        explainer.revise([], None, [])  # type: ignore[arg-type]
+
+    assert sent["max_output_tokens"] == report.MAX_TOKENS
+    assert sent["thinking_config"] == {"thinking_level": report.THINKING_LEVEL}
