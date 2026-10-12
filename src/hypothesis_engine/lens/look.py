@@ -103,7 +103,10 @@ def _gemini(prompt: str, schema: dict, still: bytes) -> tuple[dict, str]:  # pra
     from google.genai import types  # type: ignore
 
     model = gemini_model_id("lens_look")
-    response = genai.Client().models.generate_content(
+    # Held in a name: the SDK closes a client when it is collected, so a client
+    # made inline is closed before its request goes out.
+    client = genai.Client()
+    response = client.models.generate_content(
         model=model,
         contents=[types.Part.from_bytes(data=still, mime_type="image/jpeg"), prompt],
         config=types.GenerateContentConfig(
