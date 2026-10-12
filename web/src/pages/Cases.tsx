@@ -21,28 +21,28 @@ export default function Cases() {
   return (
     <div className="page">
       <PageHead
-        title="Cases"
-        sub="Every case this browser opened. The server keeps cases in memory, so each one's last known state is kept here as well."
+        title="Investigations"
+        sub="Every reading Crux has investigated in this browser's session, on any machine. The server keeps them in memory, so each one's last known state is kept here as well."
         actions={
           <>
             {all.length > 0 && (
               <Button
                 variant="ghost"
                 icon={<RotateCcw size={14} />}
-                onClick={() => window.confirm("Start a fresh session? This browser forgets its cases.") && resetSession()}
+                onClick={() => window.confirm("Start a fresh session? This browser forgets its investigations.") && resetSession()}
               >
                 Reset session
               </Button>
             )}
             <Button variant="primary" icon={<Plus size={15} />} onClick={() => openLauncher()}>
-              New case
+              Investigate a machine
             </Button>
           </>
         }
       />
       <Card
         flush
-        title={`${rows.length} case${rows.length === 1 ? "" : "s"}`}
+        title={`${rows.length} investigation${rows.length === 1 ? "" : "s"}`}
         icon={<FolderOpen size={15} />}
         actions={
           <>
@@ -52,8 +52,8 @@ export default function Cases() {
               label="Investigated by"
               options={[
                 { id: "all", label: "Anyone" },
-                { id: "agents", label: "Agents" },
-                { id: "engine", label: "Engine + person" },
+                { id: "agents", label: "Crux's AI" },
+                { id: "engine", label: "Engine + technician" },
               ]}
             />
             <Seg
@@ -71,8 +71,8 @@ export default function Cases() {
         }
       >
         {rows.length === 0 ? (
-          <Empty icon={<FolderOpen size={18} />} title={all.length === 0 ? "No case yet" : "No case matches this filter"}>
-            {all.length === 0 ? "Open one from the overview, or with New case." : "Change the filters above to see the others."}
+          <Empty icon={<FolderOpen size={18} />} title={all.length === 0 ? "Nothing investigated yet" : "Nothing matches this filter"}>
+            {all.length === 0 ? "Simulate a shift from the plant page, or investigate a machine." : "Change the filters above to see the others."}
           </Empty>
         ) : (
           <CaseTable rows={rows} />

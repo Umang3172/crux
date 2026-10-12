@@ -13,10 +13,10 @@ import { Badge, Button, Callout, Card, Empty } from "../../ui/kit";
 
 export function MemoryCard({ model }: { model: CaseModel }) {
   return (
-    <Card title="Earlier cases on this pump" icon={<History size={15} />} flush foot="Shown to people and to the agents. A record is never evidence and never changes a belief.">
+    <Card title="Earlier on this machine" icon={<History size={15} />} flush foot="Shown to people and to Crux's AI. A record is never evidence and never changes a belief.">
       {model.history.length === 0 ? (
         <Empty left title="No earlier case">
-          This is the first case on this pump in this session.
+          This is the first investigation on this machine in this session.
         </Empty>
       ) : (
         <ul className="list">
@@ -53,7 +53,7 @@ export function ChecksCard({ model }: { model: CaseModel }) {
               ) : (
                 "no reading yet"
               )}
-              {c.by && <> · {c.by === "replay" ? "answered by the pump model's instrument" : `taken by ${c.by}`}</>}
+              {c.by && <> · {c.by === "replay" ? "answered by the model's instrument" : `taken by ${c.by}`}</>}
               {c.minutes !== null && <> · {c.minutes} min</>}
             </div>
           </li>
@@ -143,7 +143,7 @@ export function RunCard({ entry, model }: { entry: CaseEntry; model: CaseModel }
         <dt>Opened</dt>
         <dd>{stamp(entry.createdAt)}</dd>
         <dt>Investigated by</dt>
-        <dd>{entry.kind === "agents" ? "the agents, with nobody answering" : "the engine, with a person answering"}</dd>
+        <dd>{entry.kind === "agents" ? "Crux's AI investigators, with nobody answering" : "the engine, with a technician answering"}</dd>
         <dt>Shaft speed</dt>
         <dd className="num">{num(model.rpm, 0)} rpm</dd>
         <dt>Capture</dt>
@@ -167,7 +167,7 @@ export function RunCard({ entry, model }: { entry: CaseEntry; model: CaseModel }
         <dd className="mono small">{getSession().plant}</dd>
       </dl>
       <p className="small dim" style={{ marginTop: 12 }}>
-        The pump is a physics model: the fault is fed in and its readings are synthetic. What was fed in is an answer key, so it stays hidden until someone asks.
+        This machine is a model: the fault is fed in and its readings are synthetic. What was fed in is an answer key, so it stays hidden until someone asks.
       </p>
     </Card>
   );

@@ -13,7 +13,7 @@ export default function Proof() {
   return (
     <div className="page">
       <PageHead
-        title="Proof"
+        title="Track record"
         sub={`On ${TOTAL} hard synthetic cases Crux named a wrong cause ${CRUX.wrong} times and said “can't tell” ${CRUX.cantTell} times. A system that is allowed to decline is judged in this order: how often it answers alone, how often it needs a measurement, how often it declines, and only last how often it is wrong.`}
         actions={<SourceTag source="synthetic cases" />}
       />

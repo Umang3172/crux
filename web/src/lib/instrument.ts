@@ -19,7 +19,7 @@ export function openRequest(inv: Investigation): TestRequest | null {
 }
 
 const cache = new Map<string, Promise<Investigation>>();
-const keyOf = (p: InstrumentParams) => `${p.fault}|${p.severity}|${p.seed}|${p.extra_noise}`;
+const keyOf = (p: InstrumentParams) => `${p.fault}|${p.severity}|${p.seed}|${p.extra_noise}|${p.rpm ?? ""}`;
 
 function instrumentRun(p: InstrumentParams): Promise<Investigation> {
   const k = keyOf(p);
@@ -69,16 +69,16 @@ export async function answerWithInstrument(caseId: string, p: InstrumentParams):
 // model's instrument knows the fault it was given; the phone page says so.
 
 export function encodeKey(p: InstrumentParams): string {
-  const raw = JSON.stringify([p.fault, p.severity, p.seed, p.extra_noise]);
+  const raw = JSON.stringify(p.rpm ? [p.fault, p.severity, p.seed, p.extra_noise, p.rpm] : [p.fault, p.severity, p.seed, p.extra_noise]);
   return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function decodeKey(k: string): InstrumentParams | null {
   try {
     const pad = k.length % 4 ? "=".repeat(4 - (k.length % 4)) : "";
-    const [fault, severity, seed, extra_noise] = JSON.parse(atob(k.replace(/-/g, "+").replace(/_/g, "/") + pad));
+    const [fault, severity, seed, extra_noise, rpm] = JSON.parse(atob(k.replace(/-/g, "+").replace(/_/g, "/") + pad));
     if (typeof fault !== "string" || typeof severity !== "number") return null;
-    return { fault: fault as FaultKind, severity, seed, extra_noise };
+    return typeof rpm === "number" ? { fault: fault as FaultKind, severity, seed, extra_noise, rpm } : { fault: fault as FaultKind, severity, seed, extra_noise };
   } catch {
     return null;
   }

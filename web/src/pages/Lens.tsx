@@ -3,7 +3,7 @@
 // measure next.
 
 import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ChevronRight, ScanLine, Star, Upload } from "lucide-react";
 import { ApiError } from "../api/client";
 import { LENS_MAX_BYTES, analyseScan, markNormalScan, scan as fetchScan, scanStillUrl, scans as fetchScans, uploadScan } from "../api/crux";
@@ -19,7 +19,8 @@ export function Lens() {
   const navigate = useNavigate();
   const list = useAsync(() => fetchScans(), []);
   const file = useRef<HTMLInputElement>(null);
-  const [machine, setMachine] = useState("");
+  const [search] = useSearchParams();
+  const [machine, setMachine] = useState(search.get("machine") ?? "");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,7 @@ export function Lens() {
 
   return (
     <div className="page">
-      <PageHead title="Lens scans" sub="Point a phone at a machine nobody has a sensor on. Crux reads how it shakes and how it sounds, says which faults a camera could and could not see, and names the measurement to take next." />
+      <PageHead title="Phone scans" sub="Point a phone at a machine nobody has a sensor on. Crux reads how it shakes and how it sounds, says which faults a camera could and could not see, and names the measurement to take next." />
 
       <div className="split-even">
         <Card title="Scans on this server" icon={<ScanLine size={15} />} sub="shared by everyone using it" flush>
@@ -165,7 +166,7 @@ export function LensScan() {
   return (
     <div className="page">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to="/lens">Lens scans</Link>
+        <Link to="/lens">Phone scans</Link>
         <ChevronRight size={12} aria-hidden />
         <span className="mono">{s.id}</span>
       </nav>

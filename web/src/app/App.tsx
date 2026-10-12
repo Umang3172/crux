@@ -3,14 +3,17 @@
 
 import { lazy, Suspense, type ReactNode } from "react";
 import { createHashRouter } from "react-router";
+import { useRole } from "../lib/role";
 import { Shell } from "./Shell";
 
-const Overview = lazy(() => import("../pages/Overview"));
+const Plant = lazy(() => import("../pages/Plant"));
+const Crew = lazy(() => import("../pages/Crew"));
+const Manager = lazy(() => import("../pages/Manager"));
+const PlantMachine = lazy(() => import("../pages/PlantMachine"));
 const Cases = lazy(() => import("../pages/Cases"));
 const CasePage = lazy(() => import("../pages/CasePage"));
 const Agents = lazy(() => import("../pages/Agents"));
 const Proof = lazy(() => import("../pages/Proof"));
-const Machines = lazy(() => import("../pages/Machines"));
 const MachinePage = lazy(() => import("../pages/MachinePage"));
 const WorkOrders = lazy(() => import("../pages/WorkOrders").then((m) => ({ default: m.WorkOrders })));
 const WorkOrderPage = lazy(() => import("../pages/WorkOrders").then((m) => ({ default: m.WorkOrderPage })));
@@ -23,22 +26,31 @@ const NotFound = lazy(() => import("../pages/NotFound"));
 
 const page = (el: ReactNode) => <Suspense fallback={null}>{el}</Suspense>;
 
+/** The first page is the one the person's job starts from. */
+function Home() {
+  const role = useRole();
+  return role === "crew" ? <Crew /> : role === "manager" ? <Manager /> : <Plant />;
+}
+
 export const router = createHashRouter([
   {
     element: <Shell />,
     children: [
-      { index: true, element: page(<Overview />) },
+      { index: true, element: page(<Home />) },
+      { path: "plant", element: page(<Plant />) },
+      { path: "crew", element: page(<Crew />) },
+      { path: "manager", element: page(<Manager />) },
+      { path: "machines/:id", element: page(<PlantMachine />) },
+      { path: "lives/*", element: page(<MachinePage />) },
       { path: "cases", element: page(<Cases />) },
       { path: "cases/:id", element: page(<CasePage />) },
-      { path: "agents", element: page(<Agents />) },
-      { path: "proof", element: page(<Proof />) },
-      { path: "machines", element: page(<Machines />) },
-      { path: "machines/*", element: page(<MachinePage />) },
       { path: "work-orders", element: page(<WorkOrders />) },
       { path: "work-orders/:id", element: page(<WorkOrderPage />) },
       { path: "lens", element: page(<Lens />) },
       { path: "lens/:id", element: page(<LensScan />) },
       { path: "network", element: page(<Network />) },
+      { path: "proof", element: page(<Proof />) },
+      { path: "agents", element: page(<Agents />) },
       { path: "system", element: page(<System />) },
       { path: "*", element: page(<NotFound />) },
     ],

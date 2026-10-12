@@ -33,7 +33,7 @@ export function QrCode({ value, size = 132, label }: { value: string; size?: num
 }
 
 /** The link a phone opens for a case's check. The key carries the run settings the pump model answers from. */
-export function phoneCheckUrl(caseId: string, key: string): string {
+export function phoneCheckUrl(caseId: string, key: string, machine: string): string {
   const { origin, pathname } = window.location;
-  return `${origin}${pathname}#/phone/check/${encodeURIComponent(caseId)}?k=${key}`;
+  return `${origin}${pathname}#/phone/check/${encodeURIComponent(caseId)}?k=${key}&m=${encodeURIComponent(machine)}`;
 }

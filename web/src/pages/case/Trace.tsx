@@ -7,7 +7,7 @@ import { runBrain } from "../../lib/ai";
 import { num } from "../../lib/format";
 import { isOpeningRead } from "../../lib/liveruns";
 import { plainSentence } from "../../lib/plain";
-import { ENGINE_MACHINE_NAME, PUMP } from "../../lib/scenarios";
+import { ENGINE_MACHINE_NAME } from "../../lib/scenarios";
 import { Badge, Card, cx } from "../../ui/kit";
 
 type Call = AgentStep & { args: Record<string, unknown>; n: number };
@@ -56,9 +56,9 @@ export function AgentTrace({
 
   return (
     <Card
-      title="Trace"
+      title="Work log"
       icon={<Bot size={15} />}
-      sub="every tool call, and the physics' answer"
+      sub="every step Crux's AI took, and the physics' answer"
       flush
       foot={
         running ? (
@@ -169,14 +169,14 @@ function Step({ call, now }: { call: Call; now?: boolean }) {
   );
 }
 
-export function EngineLog({ transcript }: { transcript: string[] }) {
+export function EngineLog({ transcript, machine }: { transcript: string[]; machine: string }) {
   return (
     <Card title="Engine log" icon={<ScrollText size={15} />} sub="what the engine did, in its own words" flush>
       <ol className="log">
         {transcript.map((t, i) => (
           <li key={i}>
             <span>{String(i + 1).padStart(2, "0")}</span>
-            <div>{plainSentence(t.replace(ENGINE_MACHINE_NAME, PUMP.short))}</div>
+            <div>{plainSentence(t.replace(ENGINE_MACHINE_NAME, machine))}</div>
           </li>
         ))}
       </ol>

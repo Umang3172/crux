@@ -117,7 +117,7 @@ export default function MachinePage() {
   return (
     <div className="page">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to="/machines">Machines</Link>
+        <Link to="/plant">Plant</Link>
         <ChevronRight size={12} aria-hidden />
         <span>{m.name}</span>
       </nav>

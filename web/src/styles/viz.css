@@ -553,3 +553,75 @@
     animation: none;
   }
 }
+
+.twin-blade.paddle {
+  fill: var(--panel-3);
+  stroke-width: 1.6;
+}
+
+/* A machine at a glance */
+.glyph {
+  flex: none;
+}
+.glyph-base {
+  fill: var(--line-2);
+}
+.glyph-body {
+  fill: var(--panel-3);
+  stroke: var(--line-2);
+  stroke-width: 1.2;
+}
+.glyph-hole {
+  fill: var(--panel);
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.glyph-fin {
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.glyph-shaft {
+  fill: var(--line-2);
+}
+.glyph-ball {
+  fill: var(--panel);
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+.glyph-blade {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.glyph-hub {
+  fill: var(--text-2);
+}
+.glyph-wave {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.glyph-rotor.spin {
+  animation: glyph-spin 3.2s linear infinite;
+}
+@keyframes glyph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.glyph.tone-warn .glyph-body {
+  stroke: var(--warn);
+}
+.glyph.tone-danger .glyph-body {
+  stroke: var(--danger);
+}
+.glyph.tone-accent .glyph-body {
+  stroke: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .glyph-rotor.spin {
+    animation: none;
+  }
+}

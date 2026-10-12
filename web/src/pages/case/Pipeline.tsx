@@ -26,7 +26,7 @@ function stages(model: CaseModel | null, entry: CaseEntry): Stage[] {
     // An agent run still going: the case exists, and nothing else is known here yet.
     return [
       { id: "capture", label: "Capture", note: "taken", icon: icon(<AudioWaveform size={15} />), state: "done" },
-      { id: "agents", label: "Agents at work", note: "calls shown as they happen", icon: icon(<Workflow size={15} />), state: "now" },
+      { id: "agents", label: "Crux investigating", note: "each step shown as it happens", icon: icon(<Workflow size={15} />), state: "now" },
       { id: "verdict", label: "Verdict", note: "not yet", icon: icon(<CircleCheck size={15} />), state: "todo" },
       { id: "report", label: "Report", note: "", icon: icon(<FileText size={15} />), state: "todo" },
       { id: "handoff", label: "Hand-off", note: "", icon: icon(<ClipboardCheck size={15} />), state: "todo" },
@@ -86,7 +86,7 @@ export function PipelineCard({ model, entry }: { model: CaseModel | null; entry:
   const list = stages(model, entry);
   return (
     <Card>
-      <ol className="pipe" aria-label="The case's pipeline">
+      <ol className="pipe" aria-label="Where this investigation is">
         {list.map((s) => (
           <li key={s.id} className={cx("pipe-node", s.state, s.person && "person")} aria-current={s.state === "now" ? "step" : undefined}>
             <span className="pipe-dot">{s.icon}</span>

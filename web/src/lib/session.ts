@@ -14,6 +14,8 @@ export type Answerer = "virtual instrument" | "person";
 export type CaseEntry = {
   id: string;
   kind: Investigator;
+  /** The plant machine the case is on (lib/plant.ts). */
+  machine?: string;
   params: RunParams;
   /** The fault that was fed in is an answer key: hidden until a person reveals it. */
   revealed: boolean;

@@ -4,17 +4,6 @@
 
 import type { FaultKind, OffListFault, RunParams } from "../api/types";
 
-export const PLANT_NAME = "Demo plant · Line 2";
-
-/** The machine every case here runs on: the engine's physics model of a pump. */
-export const PUMP = {
-  id: "p2",
-  name: "Cooling-water pump P-2",
-  short: "pump P-2",
-  type: "Centrifugal pump, 1,800 rpm",
-  source: "physics model · synthetic",
-};
-
 /** The server's own name for that model; the console shows the plant's name for it instead. */
 export const ENGINE_MACHINE_NAME = /MechNova bench rig/g;
 
@@ -29,6 +18,8 @@ export type Scenario = {
   title: string;
   line: string;
   investigator: Investigator;
+  /** The plant machine it runs on (lib/plant.ts). */
+  machine: string;
   params: RunParams;
   shows: string;
 };
@@ -39,30 +30,34 @@ export const SCENARIOS: Scenario[] = [
     title: "One measurement decides",
     line: "The first reading fits a healthy pump and a worn inner ring almost equally. Crux asks for the one measurement that separates them.",
     investigator: "engine",
+    machine: "p2",
     params: { fault: "inner_race", severity: 0.5, seed: 6, extra_noise: 0.45 },
-    shows: "Engine with a person",
+    shows: "Engine with a technician",
   },
   {
     id: "off-list",
     title: "A cause that is not on the list",
-    line: "Impacts no listed fault predicts. The critic writes a new suspect and the physics tests it.",
+    line: "Impacts no listed fault predicts. Crux's AI writes a new suspect and the physics tests it.",
     investigator: "agents",
+    machine: "p2",
     params: { fault: "rolling_element", severity: 1.0, seed: 1, extra_noise: 0.45 },
-    shows: "Investigator and critic",
+    shows: "Two AI investigators",
   },
   {
     id: "documents",
     title: "The answer is in the machine's notes",
-    line: "A rhythm no bearing part makes. The critic looks it up in the documents on file and cites the passage.",
+    line: "A rhythm no bearing part makes. Crux's AI looks it up in the machine's documents and cites the passage.",
     investigator: "agents",
+    machine: "p2",
     params: { fault: "aux_pump", severity: 1.0, seed: 1, extra_noise: 0.05 },
     shows: "Document look-up",
   },
   {
     id: "no-cause",
     title: "Nothing explains it",
-    line: "An impact that neither the list nor the documents account for. The agents close the case without naming a cause.",
+    line: "An impact that neither the list nor the documents account for. Crux closes the investigation without naming a cause.",
     investigator: "agents",
+    machine: "p2",
     params: { fault: "unlisted_impact", severity: 1.0, seed: 1, extra_noise: 0.05 },
     shows: "An honest “no cause yet”",
   },
@@ -85,21 +80,37 @@ export const ON_LIST: FaultKind[] = ["healthy", "imbalance", "misalignment", "lo
 export const OFF_LIST: OffListFault[] = ["rolling_element", "aux_pump", "unlisted_impact"];
 export const isOnList = (f: string): f is FaultKind => (ON_LIST as string[]).includes(f);
 
+export type Reading = { by: Investigator; params: RunParams };
+
 /**
- * The autonomous run: nine pinned synthetic faults, one of each kind the pump
- * model can be given, sent to the agents one after another.
+ * The readings each modelled machine sends, one per shift, in this order. The
+ * settings are pinned, so a shift replays the same way. Most go to the AI
+ * investigators; the first on pump P-2 goes to the engine alone, which stops
+ * and asks a technician for a measurement. A machine that is waiting on a
+ * person sends nothing new until that person has acted.
  */
-export const FAULT_SET: RunParams[] = [
-  { fault: "healthy", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "imbalance", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "misalignment", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "looseness", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "outer_race", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "inner_race", severity: 0.5, seed: 6, extra_noise: 0.45 },
-  { fault: "rolling_element", severity: 1.0, seed: 1, extra_noise: 0.45 },
-  { fault: "aux_pump", severity: 1.0, seed: 1, extra_noise: 0.05 },
-  { fault: "unlisted_impact", severity: 1.0, seed: 1, extra_noise: 0.05 },
-];
+export const READINGS: Record<string, Reading[]> = {
+  p2: [
+    { by: "engine", params: { fault: "inner_race", severity: 0.5, seed: 6, extra_noise: 0.45 } },
+    { by: "agents", params: { fault: "aux_pump", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "healthy", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+  ],
+  p4: [
+    { by: "agents", params: { fault: "outer_race", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "unlisted_impact", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "healthy", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+  ],
+  f3: [
+    { by: "agents", params: { fault: "imbalance", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "healthy", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "looseness", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+  ],
+  b6: [
+    { by: "agents", params: { fault: "rolling_element", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "misalignment", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+    { by: "agents", params: { fault: "healthy", severity: 1.0, seed: 1, extra_noise: 0.05 } },
+  ],
+};
 
 export const severityLabel = (v: number) => SEVERITY.find((s) => s.value === v)?.label.toLowerCase() ?? `strength ${v}`;
 export const floorLabel = (v: number) => FLOOR.find((f) => f.value === v)?.label.toLowerCase() ?? `noise ${v}`;

@@ -58,13 +58,13 @@ export function RepairCard({ entry, cause, approvedBy }: { entry: CaseEntry; cau
   return (
     <Card title="Repair check" icon={<Wrench size={15} />} sub="Did the fix work? A new reading, investigated from scratch" tone={o?.tone === "ok" ? "ok" : undefined}>
       <p className="muted" style={{ maxWidth: "82ch" }}>
-        Crux never touches a machine. Here you stand in for the technician: say what the repair did, and the pump model takes a new reading of the pump in that state.
+        Crux never touches a machine. Here you stand in for the technician: say what the repair did, and the model takes a new reading of the machine in that state.
         {approvedBy && <> The work was approved by {approvedBy}.</>}
       </p>
       <div className="choices" style={{ marginTop: 12, gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
         {options.map((c) => (
           <button key={c.id} type="button" className={cx("choice", done?.choice === c.id && "on")} disabled={busy !== null || entry.lost} onClick={() => choose(c.id)}>
-            <b>{busy === c.id ? "Reading the pump…" : c.title}</b>
+            <b>{busy === c.id ? "Taking a new reading…" : c.title}</b>
             <span>{c.body}</span>
           </button>
         ))}

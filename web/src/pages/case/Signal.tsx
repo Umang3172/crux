@@ -32,7 +32,7 @@ export function SignalCard({ model, entry, picked, band, onBand }: { model: Case
   const p = entry.params;
   const drawable = isOnList(p.fault);
   const hypothesis = picked && isOnList(picked) ? picked : "healthy";
-  const run = { fault: p.fault as FaultKind, severity: p.severity, seed: p.seed, extra_noise: p.extra_noise };
+  const run = { fault: p.fault as FaultKind, severity: p.severity, seed: p.seed, extra_noise: p.extra_noise, rpm: p.rpm };
 
   const spec = useAsync(() => (drawable ? spectrum({ ...run, hypothesis: hypothesis as FaultKind, band }) : Promise.resolve(null)), [entry.id, hypothesis, band, drawable]);
   const cap = useAsync(() => (drawable ? capture(run) : Promise.resolve(null)), [entry.id, drawable]);
@@ -58,7 +58,7 @@ export function SignalCard({ model, entry, picked, band, onBand }: { model: Case
     >
       {!drawable ? (
         <Empty left title="No picture for this case">
-          The server draws this comparison only for a fault on the engine's own list. This case was given one that is not on it.
+          The server draws this comparison only for a fault on the engine's own list. This machine was given one that is not on it.
         </Empty>
       ) : spec.loading && !spec.data ? (
         <SkeletonRows rows={5} />

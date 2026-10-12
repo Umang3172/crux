@@ -9,7 +9,7 @@ import { useAsync, useCatalogue } from "../lib/hooks";
 import { answerWithInstrument, decodeKey, openRequest } from "../lib/instrument";
 import { shortId, signed } from "../lib/format";
 import { check, fault } from "../lib/plain";
-import { PUMP } from "../lib/scenarios";
+import { machineById } from "../lib/plant";
 import { markAnswered } from "../lib/session";
 import { Badge, Button, Callout, Card, ErrorState, SkeletonRows, SourceTag } from "../ui/kit";
 import "../app/shell.css";
@@ -19,6 +19,7 @@ export default function PhoneCheck() {
   const { id = "" } = useParams();
   const [search] = useSearchParams();
   const key = decodeKey(search.get("k") ?? "");
+  const machine = machineById(search.get("m") ?? undefined);
   const got = useAsync(() => getCase(id), [id]);
   const catalogue = useCatalogue();
   const [busy, setBusy] = useState(false);
@@ -54,7 +55,7 @@ export default function PhoneCheck() {
         </span>
         Crux
         <span className="push">
-          <Badge>case {shortId(id)}</Badge>
+          <Badge>{shortId(id)}</Badge>
         </span>
       </header>
 
@@ -72,20 +73,20 @@ export default function PhoneCheck() {
             <p>Someone answered this measurement first. Nothing was sent twice.</p>
           ) : (
             <p>
-              The reading <b className="num">{sent.value !== undefined ? signed(sent.value, 2) : ""}</b> is with Crux. It is testing every suspect again; the answer is on the case page.
+              The reading <b className="num">{sent.value !== undefined ? signed(sent.value, 2) : ""}</b> is with Crux. It is testing every suspect again; the answer is on the investigation's page.
             </p>
           )}
         </Card>
       ) : !req ? (
         <Card title="Nothing to measure" icon={<CircleCheck size={16} />}>
-          <p className="muted">This case is not waiting for a measurement{inv.outcome !== "open" ? ": it has been closed" : ""}.</p>
+          <p className="muted">This investigation is not waiting for a measurement{inv.outcome !== "open" ? ": it has been closed" : ""}.</p>
         </Card>
       ) : (
         <>
           <Card tone="accent" title="Crux needs one measurement" icon={<Crosshair size={16} />}>
             <h3 style={{ fontSize: "1.25rem", lineHeight: 1.25 }}>{check(req.test_id).name}</h3>
             <div className="row row-wrap" style={{ marginTop: 8 }}>
-              <Badge>{PUMP.name}</Badge>
+              {machine && <Badge>{machine.name}</Badge>}
               {cat && <Badge>{cat.effort_min} min</Badge>}
               {cat && <Badge>{cat.downtime === "none" ? "machine keeps running" : cat.downtime}</Badge>}
             </div>
@@ -119,8 +120,8 @@ export default function PhoneCheck() {
               </div>
               <span className="small dim">
                 {key
-                  ? "This pump is a physics model. Its own instrument takes the reading: a new simulated capture of the same pump in the same state. It answers from the fault it was given."
-                  : "This link carries no key for the pump model's instrument, so the reading cannot be taken from here. Open it from the code on the case page."}
+                  ? "This machine is a model. Its own instrument takes the reading: a new simulated capture of the same machine in the same state. It answers from the fault it was given."
+                  : "This link carries no key for the model's instrument, so the reading cannot be taken from here. Open it from the code on the investigation page."}
               </span>
               {error && <Callout tone="danger">{error}</Callout>}
             </div>

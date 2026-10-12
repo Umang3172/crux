@@ -118,12 +118,12 @@ export function DecisionCard({ model, entry, catalogue }: { model: CaseModel; en
             The reading came back at <b className="num">{signed(answer.reading ?? 0, 2)}</b>
             {mine ? (
               <>
-                , taken by {mine.by === "virtual instrument" ? "the pump model's own instrument" : "a person"} {mine.from === "phone" ? "on a phone" : "here"} at {clock(mine.at)}.
+                , taken by {mine.by === "virtual instrument" ? "the model's own instrument" : "a technician"} {mine.from === "phone" ? "on a phone" : "here"} at {clock(mine.at)}.
               </>
             ) : (
               "."
             )}{" "}
-            {mine?.by === "virtual instrument" && "The pump model answers from the fault it was given, so this stands in for a technician's reading."}
+            {mine?.by === "virtual instrument" && "The model answers from the fault it was given, so this stands in for a technician's reading."}
           </Callout>
         </div>
       )}
@@ -143,7 +143,7 @@ export function DecisionCard({ model, entry, catalogue }: { model: CaseModel; en
             </div>
             <div className="row row-wrap">
               <Button variant="primary" icon={<Cpu size={14} />} busy={busy === "instrument"} disabled={!canInstrument || busy !== null} onClick={takeWithInstrument}>
-                Take it with the pump model's instrument
+                Take it with the model's instrument
               </Button>
               <Button icon={<Smartphone size={14} />} onClick={() => setPhone((p) => !p)} disabled={!canInstrument}>
                 Send to a phone
@@ -152,16 +152,16 @@ export function DecisionCard({ model, entry, catalogue }: { model: CaseModel; en
             <div className="row row-wrap">
               <input className="input num" style={{ width: 150 }} inputMode="decimal" placeholder="or type a reading" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="A reading typed by a person" />
               <Button icon={<UserRound size={14} />} busy={busy === "person"} disabled={busy !== null || entry.lost} onClick={sendTyped}>
-                Hand it in as a person
+                Hand it in as a technician
               </Button>
             </div>
-            <span className="small dim">The pump is a physics model. Its instrument takes a new simulated capture of the same pump in the same state; it knows the fault it was given, and says so.</span>
+            <span className="small dim">This machine is a model. Its instrument takes a new simulated capture of the same machine in the same state; it knows the fault it was given, and says so.</span>
             {error && <Callout tone="danger">{error}</Callout>}
           </div>
           {phone && canInstrument && (
             <div className="col" style={{ alignItems: "center" }}>
               <div className="qr">
-                <QrCode value={phoneCheckUrl(entry.id, encodeKey(entry.params as RunParams & { fault: FaultKind }))} size={148} label="Open this measurement on a phone" />
+                <QrCode value={phoneCheckUrl(entry.id, encodeKey(entry.params as RunParams & { fault: FaultKind }), entry.machine ?? "p2")} size={148} label="Open this measurement on a phone" />
               </div>
               <span className="small dim" style={{ maxWidth: 170, textAlign: "center" }}>
                 Scan to take the reading on a phone. This page updates when it lands.

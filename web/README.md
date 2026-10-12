@@ -1,6 +1,7 @@
 # Web
 
-The Crux console: an operations view of the engine and the agents that drive it.
+The Crux console: a plant's machines, what Crux is doing about each, and what
+it needs from the people on site.
 Vite + React + TypeScript, plain CSS on design tokens, charts drawn in SVG. No
 component library and no charting library.
 
@@ -21,20 +22,58 @@ For the full thing locally, including the spectrum plot:
 make web-build && make serve-app     # http://localhost:8080
 ```
 
+## Who it is for
+
+Three people use a plant's maintenance console, and each starts somewhere else.
+"Viewing as" in the menu picks the first page and what the menu puts first; it
+hides nothing, and there are no accounts (a person approves by typing a name).
+
+| View | Who | First page |
+|---|---|---|
+| Control room | The monitoring team | **Plant**: every machine, where it stands, who has to act next |
+| Maintenance | Technicians | **My work**: the measurements Crux is waiting for, the approved repairs, the checks after a repair, the machines that can only be scanned |
+| Manager | Whoever signs off | **Summary**: the work waiting for a name, each area's state, what Crux did |
+
+## The plant
+
+`lib/plant.ts` holds a demo site: three areas and the machines in them. The
+layout and the names are made up and the page says so. What each machine can
+do is real, because each is looked after in one of four ways the server
+supports:
+
+| Way | What it is | Its workflow |
+|---|---|---|
+| Investigated on demand | The engine's rotating-machine model at that machine's speed; a fault is fed in | Reading, investigate, measure, approve, repair, verify |
+| Watched over its life | A part followed from new, from the server's own list | Watch, alarm, forecast, work order, approve, outcome |
+| Live sensor | A sensor streaming to the server | Stream, capture, investigate, approve, repair, verify |
+| Phone scan | Nothing fitted; a phone video is the only reading | Scan, confirm speed, screen, measure next |
+
+The engine has one machine model. The modelled machines share it and differ in
+speed only (`rpm` on the routes that take a capture); each keeps its own
+history on the server. A pump and a fan are two drawings of the same model, and
+each machine's page says so.
+
+**Simulate a shift** sends a reading from every modelled machine that is free,
+and they are investigated side by side. A machine with a measurement, a
+sign-off or a repair outstanding sends nothing new until that person has acted,
+so the three views have to be used in turn to move the plant on.
+
 ## What it shows
 
 | Page | What is on it | Routes it calls |
 |---|---|---|
-| Overview | This browser's cases by how they ended, the case queue, the agents' latest tool calls, pinned scenarios, the autonomous run drawn call by call, the machine running | `/health`, `/machine`, `/maintenance/machines`, `/maintenance/tickets`, `/ingest/{id}`, `/investigations`, `/agent/stream` |
-| Cases, Case | A whole investigation on one page: where it is in its pipeline, the agents at work on it (live while the run streams, a record afterwards), the verdict, the measurement the engine asked for with what each suspect predicts it reads, the machine with the named part marked, the virtual experiments side by side, every suspect, measured against simulated spectra, the evidence ledger, the report with its sentence check, the repair check, notes | `/investigations…`, `/agent/stream`, `/machine`, `/replay`, `/capture`, `/spectrum`, `/tests` |
-| Agents | The two agents, the tools each was given and what each takes, the limits on a run, which model does each job | `/agent/about`, `/health` |
-| Proof | The evaluation run's figures, each with its source | none: `src/data/evaluation.ts` |
-| Machines, Machine | The pump model drawn with its parts turning; a part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/machine`, `/maintenance/…`, `/ingest/{id}` |
-| Work orders | Work orders drafted from forecast alarms, with cited evidence and approval by name; what a repair found | `/maintenance/tickets…`, `/fleet/outcome` |
-| Lens scans | A phone video read for motion and sound | `/lens/…` |
-| Network | This site's forecasting model, an update waiting for a decision, lessons | `/fleet/…` |
+| Plant | Areas and machines: state, who acts next, where each is along its own workflow, the shift, what Crux is doing now | `/maintenance/machines`, `/maintenance/tickets`, `/lens/scans`, `/ingest/{id}`, `/investigations`, `/agent/stream` |
+| My work, Summary | The same cases, work orders and machines, arranged for a technician and for a manager | as above |
+| Machine | Where it stands, how it is looked after, the machine drawn with its parts turning, its investigations | `/machine` |
+| Investigations, Investigation | A whole investigation on one page: where it is in its pipeline, Crux's AI at work on it (live while the run streams, a record afterwards), the verdict, the measurement the engine asked for with what each suspect predicts it reads, the machine with the named part marked, the virtual experiments side by side, every suspect, measured against simulated spectra, the evidence ledger, the report with its sentence check, the repair check, notes | `/investigations…`, `/agent/stream`, `/machine`, `/replay`, `/capture`, `/spectrum`, `/tests` |
+| A watched life | A part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/maintenance/…` |
+| Work orders | Work orders drafted from alarms, with cited evidence and approval by name; what a repair found | `/maintenance/tickets…`, `/fleet/outcome` |
+| Phone scans | A phone video read for motion and sound | `/lens/…` |
+| Lessons and updates | This site's forecasting model, an update waiting for a decision, lessons | `/fleet/…` |
+| Track record | The evaluation run's figures, each with its source | none: `src/data/evaluation.ts` |
+| How Crux works | The two AI investigators, the tools each was given and what each takes, the limits on a run, which model does each job | `/agent/about`, `/health` |
 | System | Health, the model behind each AI job, the measurements catalogue, links to the API reference | `/health`, `/tests`, `/agent/about`, `/docs` |
-| Phone check | The open measurement on a phone, reached by a QR code on the case page | `/investigations/{id}`, `/replay`, `…/evidence` |
+| Phone check | The open measurement on a phone, reached by a QR code on the investigation's page | `/investigations/{id}`, `/replay`, `…/evidence` |
 
 ## Layout
 
@@ -42,13 +81,15 @@ make web-build && make serve-app     # http://localhost:8080
 src/
   api/        types and calls: the one door to the server
   app/        the shell: navigation, command palette (Cmd-K), new-case dialog, routes
-  lib/        session store, the case model, scenarios, formatting, plain words,
+  lib/        plant.ts (the site, its machines and where each stands), role.ts,
+              shift.ts, session store, the case model, formatting, plain words,
               liveruns.ts (runs as they stream) and playback.ts (showing one call by call)
   data/       the evaluation run's figures
   styles/     tokens.css (every colour and size), base.css, ui.css (the components),
-              viz.css (the moving drawings)
+              viz.css (the moving drawings), plant.css (areas, tiles, workflows)
   ui/         kit.tsx (components), charts.tsx (SVG charts), QrCode.tsx,
-              AgentStage.tsx (the agents at work), MachineTwin.tsx (the machine running)
+              AgentStage.tsx (Crux's AI at work), MachineTwin.tsx (the machine running),
+              MachineGlyph.tsx (a machine at a glance)
   pages/      one file per page; pages/case/ holds the case page's panels
 ```
 

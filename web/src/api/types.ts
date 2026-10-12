@@ -488,6 +488,8 @@ export type RunParams = {
   severity: number;
   seed: number;
   extra_noise: number;
+  /** Shaft speed. Left out, the model runs at its own nominal speed. */
+  rpm?: number;
 };
 
 /** The pump model's parts and how fast each moves for one turn of the shaft (`GET /machine`). */

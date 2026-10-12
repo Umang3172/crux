@@ -36,7 +36,7 @@ export default function Network() {
 
   return (
     <div className="page">
-      <PageHead title="Network" sub="What one site learns can help the next. An update from other sites is tested on this site's own past failures first, and a person decides whether to install it. Nothing installs itself." />
+      <PageHead title="Lessons and updates" sub="What one site learns can help the next. An update from other sites is tested on this site's own past failures first, and a person decides whether to install it. Nothing installs itself." />
 
       {status.error ? (
         <Card>

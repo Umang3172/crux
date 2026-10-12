@@ -8,6 +8,7 @@ import { openLauncher } from "../app/Launcher";
 import type { AgentAbout } from "../api/types";
 import { AI_JOBS, brainOf, fallbackReason } from "../lib/ai";
 import { modelOf } from "../lib/casemodel";
+import { machineOfCase } from "../lib/plant";
 import { shortId, stamp } from "../lib/format";
 import { useAbout, useHealth } from "../lib/hooks";
 import { shownSteps } from "../lib/liveruns";
@@ -49,12 +50,12 @@ function LatestRun({ entry, about }: { entry: CaseEntry; about: AgentAbout }) {
   const m = modelOf(entry);
   return (
     <Card
-      title="The latest run, on the stage"
+      title="Its latest investigation, step by step"
       icon={<Workflow size={15} />}
-      sub={`case ${shortId(entry.id)}${m ? ` · ${finding(m).toLowerCase()}` : ""}`}
+      sub={`${machineOfCase(entry).short}${m ? ` · ${finding(m).toLowerCase()}` : ""}`}
       actions={
         <Link to={`/cases/${entry.id}`} className="btn btn-sm">
-          Open the case
+          Open it
         </Link>
       }
       foot="A record of the run. Every packet is one tool call it made; violet is a model's call, blue is the engine's answer."
@@ -86,11 +87,11 @@ export default function Agents() {
   return (
     <div className="page">
       <PageHead
-        title="Agents"
-        sub="Two agents work a case through the engine's tools. Code decides whose turn it is and when a run ends. An agent can ask the physics anything; it cannot tell the physics what the answer is."
+        title="How Crux works"
+        sub="Crux has two AI investigators. They work a reading through the physics engine's tools: one asks what to measure and closes the investigation, the other looks for a cause the list lacks. Code decides whose turn it is. They can ask the physics anything; they cannot tell it what the answer is."
         actions={
           <Button variant="primary" icon={<Play size={14} />} onClick={() => openLauncher({ investigator: "agents" })}>
-            Run the agents on a case
+            Watch an investigation
           </Button>
         }
       />
@@ -102,7 +103,7 @@ export default function Agents() {
       ) : (
         <>
           <div className="stats">
-            <Stat label="Agents" value={a.agents.length} sub="each with its own tools" />
+            <Stat label="AI investigators" value={a.agents.length} sub="each with its own tools" />
             <Stat label="Tools" value={a.tools.length} sub={`${a.agents.reduce((n, x) => n + x.tools.length, 0) - a.tools.length} shared by both`} />
             <Stat label="Rounds per run" value={a.limits.rounds} unit="at most" sub="then code ends the run" />
             <Stat label="Model calls per run" value={a.limits.model_calls} unit="at most" sub={`and ${a.limits.seconds} s`} />
@@ -197,7 +198,7 @@ export default function Agents() {
             </Card>
 
             <div className="col" style={{ gap: "var(--s-5)" }}>
-              <Card title="What keeps the agents honest" icon={<ShieldCheck size={15} />}>
+              <Card title="What keeps the AI honest" icon={<ShieldCheck size={15} />}>
                 <ul className="col gap-3">
                   <li>
                     <b>Only physics moves a belief.</b> <span className="muted">Beliefs change through simulated likelihoods and measured evidence. A model's tool call can start an experiment; it cannot supply its result.</span>
@@ -249,17 +250,17 @@ export default function Agents() {
             </Callout>
           )}
 
-          <Card title="Runs in this session" icon={<Bot size={15} />} flush>
+          <Card title="Investigations it ran this session" icon={<Bot size={15} />} flush>
             {runs.length === 0 ? (
-              <Empty left title="The agents have not run yet">
-                Start one with “Run the agents on a case”, or send them the whole fault set from the overview.
+              <Empty left title="Nothing investigated by the AI yet">
+                Start one with “Watch an investigation”, or simulate a shift from the plant page.
               </Empty>
             ) : (
               <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Case</th>
+                      <th>Machine</th>
                       <th>Ended as</th>
                       <th>Model</th>
                       <th className="t-num">Rounds</th>
@@ -276,7 +277,7 @@ export default function Agents() {
                       return (
                         <tr key={c.id} className="hover">
                           <td className="mono">
-                            <Link to={`/cases/${c.id}`}>{shortId(c.id)}</Link>
+                            <Link to={`/cases/${c.id}`}>{machineOfCase(c).short}</Link> <span className="dim">{shortId(c.id)}</span>
                           </td>
                           <td className="strong">{m ? finding(m) : "–"}</td>
                           <td>

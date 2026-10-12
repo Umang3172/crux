@@ -41,7 +41,7 @@ export function SuspectsCard({
     <Card
       title="Suspects"
       icon={<ListTree size={15} />}
-      sub={`${model.suspects.length} tested on a virtual copy of the pump`}
+      sub={`${model.suspects.length} tested on a virtual copy of the machine`}
       flush
       foot="Only simulated likelihoods and measured evidence move a belief. A language model can add a suspect; it cannot score one."
     >

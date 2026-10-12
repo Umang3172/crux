@@ -3,22 +3,25 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CornerDownLeft, FolderOpen, Moon, Play, Plus, RotateCcw, Search, Zap } from "lucide-react";
-import { startBatch } from "../lib/autopilot";
+import { useRole } from "../lib/role";
+import { startShift } from "../lib/shift";
 import { modelOf } from "../lib/casemodel";
 import { shortId } from "../lib/format";
 import { launchScenario } from "../lib/launch";
 import { fault } from "../lib/plain";
+import { machineOfCase } from "../lib/plant";
 import { SCENARIOS } from "../lib/scenarios";
 import { resetSession, useSession } from "../lib/session";
 import { cx } from "../ui/kit";
 import { openLauncher } from "./Launcher";
-import { NAV } from "./nav";
+import { navFor } from "./nav";
 
 type Item = { id: string; group: string; label: string; hint?: string; icon: ReactNode; run: () => void | Promise<void> };
 
 export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onClose: () => void; onTheme: () => void }) {
   const navigate = useNavigate();
   const session = useSession();
+  const role = useRole();
   const [q, setQ] = useState("");
   const [at, setAt] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -27,26 +30,26 @@ export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onCl
   const items = useMemo<Item[]>(() => {
     const go = (to: string) => () => navigate(to);
     const all: Item[] = [
-      { id: "new", group: "Run", label: "New case…", icon: <Plus size={15} />, run: () => openLauncher() },
+      { id: "new", group: "Run", label: "Investigate a machine…", icon: <Plus size={15} />, run: () => openLauncher() },
       {
-        id: "batch",
+        id: "shift",
         group: "Run",
-        label: "Autonomous run: send the fault set to the agents",
+        label: "Simulate a shift: a reading from every modelled machine",
         icon: <Zap size={15} />,
         run: () => {
-          navigate("/");
-          void startBatch();
+          navigate("/plant");
+          void startShift();
         },
       },
       ...SCENARIOS.map((s) => ({
         id: `s-${s.id}`,
         group: "Run",
-        label: `Scenario: ${s.title}`,
+        label: `Guided: ${s.title}`,
         hint: s.shows,
         icon: <Play size={15} />,
         run: async () => navigate(`/cases/${await launchScenario(s)}`),
       })),
-      ...NAV.flatMap((g) => g.items.map((n) => ({ id: `n-${n.to}`, group: "Go to", label: n.label, icon: <n.icon size={15} />, run: go(n.to) }))),
+      ...navFor(role).flatMap((g) => g.items.map((n) => ({ id: `n-${n.to}`, group: "Go to", label: n.label, icon: <n.icon size={15} />, run: go(n.to) }))),
       ...[...session.cases]
         .reverse()
         .slice(0, 8)
@@ -54,9 +57,9 @@ export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onCl
           const m = modelOf(c);
           return {
             id: `c-${c.id}`,
-            group: "Recent cases",
-            label: `Case ${shortId(c.id)}${m?.leader && m.status === "concluded" ? ` · ${fault(m.leader.kind).name}` : ""}`,
-            hint: c.kind === "agents" ? "agents" : "engine",
+            group: "Recent investigations",
+            label: `${machineOfCase(c).short} · ${shortId(c.id)}${m?.leader && m.status === "concluded" ? ` · ${fault(m.leader.kind).name}` : ""}`,
+            hint: c.kind === "agents" ? "Crux's AI" : "engine",
             icon: <FolderOpen size={15} />,
             run: go(`/cases/${c.id}`),
           };
@@ -68,7 +71,7 @@ export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onCl
         label: "Reset this browser's session",
         icon: <RotateCcw size={15} />,
         run: () => {
-          if (window.confirm("Start a fresh session? This browser forgets its cases.")) {
+          if (window.confirm("Start a fresh session? This browser forgets its investigations.")) {
             resetSession();
             navigate("/");
           }
@@ -77,7 +80,7 @@ export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onCl
     ];
     const needle = q.trim().toLowerCase();
     return needle ? all.filter((i) => `${i.label} ${i.hint ?? ""} ${i.group}`.toLowerCase().includes(needle)) : all;
-  }, [q, session.cases, navigate, onTheme]);
+  }, [q, session.cases, navigate, onTheme, role]);
 
   useEffect(() => {
     if (open) {
@@ -122,7 +125,7 @@ export function CommandPalette({ open, onClose, onTheme }: { open: boolean; onCl
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey}>
         <div className="palette-input">
           <Search size={16} className="dim" aria-hidden />
-          <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages, scenarios and cases…" aria-label="Search" />
+          <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages, machines' investigations and guided runs…" aria-label="Search" />
           <span className="kbd">esc</span>
         </div>
         <div className="palette-list" ref={list}>

@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router";
-import { Building2, Menu, Moon, Plus, Search, ShieldAlert, Sun } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { Building2, HardHat, LayoutDashboard, Menu, Moon, MonitorDot, Plus, Search, ShieldAlert, Sun } from "lucide-react";
 import { onWaking } from "../api/client";
 import { brainOf } from "../lib/ai";
 import { modelOf } from "../lib/casemodel";
 import { shortId } from "../lib/format";
 import { useHealth, useHotkey, useTheme } from "../lib/hooks";
-import { PLANT_NAME } from "../lib/scenarios";
+import { SITE } from "../lib/plant";
+import { ROLES, setRole, useRole, type Role } from "../lib/role";
 import { openHazards, patchCase, useSession } from "../lib/session";
 import { Button, cx } from "../ui/kit";
 import { CommandPalette } from "./CommandPalette";
 import { Launcher, openLauncher } from "./Launcher";
-import { NAV } from "./nav";
+import { navFor } from "./nav";
+import "../styles/plant.css";
 import "./shell.css";
+
+const ROLE_ICON: Record<Role, React.ReactNode> = {
+  control: <MonitorDot size={15} />,
+  crew: <HardHat size={15} />,
+  manager: <LayoutDashboard size={15} />,
+};
 
 function Mark() {
   // The crux: two lines of evidence crossing at the one point that decides.
@@ -30,6 +38,9 @@ export function Shell() {
   const health = useHealth();
   const session = useSession();
   const location = useLocation();
+  const navigate = useNavigate();
+  const role = useRole();
+  const nav = navFor(role);
   const [theme, toggleTheme] = useTheme();
   const [palette, setPalette] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -38,11 +49,12 @@ export function Shell() {
   useEffect(() => onWaking(setWaking), []);
   useEffect(() => {
     setDrawer(false);
-    const here = NAV.flatMap((g) => g.items).find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)));
+    const here = nav.flatMap((g) => g.items).find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)));
     document.title = here ? `${here.label} · Crux` : "Crux";
     // A new page starts at its top, wherever the last one was scrolled to.
     window.scrollTo(0, 0);
-  }, [location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, role]);
   useHotkey(
     (e) => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k",
     () => setPalette((p) => !p),
@@ -56,19 +68,38 @@ export function Shell() {
     <div className="app">
       {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
       <aside className={cx("side", drawer && "open")}>
-        <Link to="/" className="brand" aria-label="Crux console, overview">
+        <Link to="/" className="brand" aria-label="Crux console, home">
           <Mark />
           Crux <em>Console</em>
         </Link>
         <div className="plant">
           <Building2 size={16} aria-hidden />
           <div className="grow">
-            <b className="truncate">{PLANT_NAME}</b>
+            <b className="truncate">{SITE.name}</b>
             <span className="dim">Demo data, labelled where it shows</span>
           </div>
         </div>
+        <div className="roles" role="group" aria-label="Viewing as">
+          <span>Viewing as</span>
+          {ROLES.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className={role === r.id ? "on" : undefined}
+              aria-pressed={role === r.id}
+              title={r.who}
+              onClick={() => {
+                setRole(r.id);
+                navigate("/");
+              }}
+            >
+              {ROLE_ICON[r.id]}
+              {r.label}
+            </button>
+          ))}
+        </div>
         <nav className="nav" aria-label="Main">
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div className="nav-group" key={g.group}>
               <span>{g.group}</span>
               {g.items.map((n) => (
@@ -76,7 +107,7 @@ export function Shell() {
                   <n.icon size={16} aria-hidden />
                   {n.label}
                   {n.to === "/cases" && session.cases.length > 0 && (
-                    <span className={cx("nav-count", waitingCount > 0 && "warn")} title={waitingCount > 0 ? `${waitingCount} waiting for a measurement` : "Cases in this browser"}>
+                    <span className={cx("nav-count", waitingCount > 0 && "warn")} title={waitingCount > 0 ? `${waitingCount} waiting for a measurement` : "Investigations in this browser"}>
                       {waitingCount > 0 ? waitingCount : session.cases.length}
                     </span>
                   )}
@@ -89,7 +120,7 @@ export function Shell() {
           <Link to="/system" className="ai-pill" title="Which model runs each job">
             <span className={cx("ai-dot", brain.live && "live")} aria-hidden />
             <span className="grow">
-              <small>Agents run on</small>
+              <small>Crux's AI runs on</small>
               <b className="truncate">{health.data ? brain.name : health.error ? "engine unreachable" : "…"}</b>
             </span>
           </Link>
@@ -107,7 +138,7 @@ export function Shell() {
           <div className="row push">
             <Button variant="ghost" icon={theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"} />
             <Button variant="primary" icon={<Plus size={15} />} onClick={() => openLauncher()}>
-              New case
+              Investigate a machine
             </Button>
           </div>
         </header>
@@ -140,10 +171,10 @@ function HazardBanner({ id, text }: { id: string; text: string }) {
     <div className="banner" role="alert">
       <ShieldAlert size={18} aria-hidden />
       <div className="grow">
-        <b>Hazard reported on case {shortId(id)}.</b> {text}
+        <b>Hazard reported on investigation {shortId(id)}.</b> {text}
       </div>
       <Link to={`/cases/${id}`} className="btn btn-sm">
-        Open the case
+        Open it
       </Link>
       <input className="input input-sm" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to acknowledge the hazard" />
       <Button size="sm" variant="danger" disabled={!by.trim()} onClick={() => patchCase(id, { hazardAck: { by: by.trim(), at: Date.now() } })}>

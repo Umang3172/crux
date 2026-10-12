@@ -5,6 +5,7 @@ import { Bot, Cpu } from "lucide-react";
 import { STATUS_LABEL, STATUS_TONE, modelOf, type CaseModel } from "../lib/casemodel";
 import { pct, shortId, stamp } from "../lib/format";
 import { check, fault } from "../lib/plain";
+import { machineOfCase } from "../lib/plant";
 import type { CaseEntry } from "../lib/session";
 import { Badge, Meter } from "../ui/kit";
 
@@ -43,7 +44,7 @@ export function CaseTable({ rows, brief }: { rows: CaseRow[]; brief?: boolean })
       <table className="table">
         <thead>
           <tr>
-            <th>Case</th>
+            <th>Machine</th>
             <th>State</th>
             <th>Finding</th>
             <th style={{ minWidth: 130 }}>Belief</th>
@@ -61,8 +62,8 @@ export function CaseTable({ rows, brief }: { rows: CaseRow[]; brief?: boolean })
               onClick={() => navigate(`/cases/${entry.id}`)}
               onKeyDown={(e) => e.key === "Enter" && navigate(`/cases/${entry.id}`)}
             >
-              <td className="mono nowrap">
-                {shortId(entry.id)}
+              <td className="nowrap">
+                <b>{machineOfCase(entry).short}</b> <span className="mono dim small">{shortId(entry.id)}</span>
                 {entry.lost && (
                   <span className="dim" title="The server no longer holds this case">
                     {" "}
@@ -93,7 +94,7 @@ export function CaseTable({ rows, brief }: { rows: CaseRow[]; brief?: boolean })
               <td className="nowrap">
                 <span className="row gap-1">
                   {entry.kind === "agents" ? <Bot size={14} className="t-model" aria-hidden /> : <Cpu size={14} className="t-accent" aria-hidden />}
-                  {entry.kind === "agents" ? "Agents" : "Engine + person"}
+                  {entry.kind === "agents" ? "Crux's AI" : "Engine + technician"}
                 </span>
               </td>
               {!brief && <td className="t-num">{model.ledger.length}</td>}

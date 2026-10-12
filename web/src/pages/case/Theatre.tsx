@@ -47,7 +47,7 @@ export function TheatreCard({
   const spectra = useAsync(
     () =>
       drawable
-        ? Promise.all(tiles.map((t) => spectrum({ fault: p.fault as FaultKind, severity: p.severity, seed: p.seed, extra_noise: p.extra_noise, hypothesis: t.kind as FaultKind, band })))
+        ? Promise.all(tiles.map((t) => spectrum({ fault: p.fault as FaultKind, severity: p.severity, seed: p.seed, extra_noise: p.extra_noise, rpm: p.rpm, hypothesis: t.kind as FaultKind, band })))
         : Promise.resolve([] as (Spectrum | null)[]),
     [entry.id, band, kinds, drawable],
   );
@@ -67,13 +67,13 @@ export function TheatreCard({
     <Card
       title="Virtual experiments"
       icon={<FlaskConical size={15} />}
-      sub={`${tiles.length} suspects, each simulated on the pump model`}
+      sub={`${tiles.length} suspects, each simulated on the machine's model`}
       actions={
         <Button size="sm" icon={<RotateCcw size={12} />} onClick={replay} disabled={!ready || playing}>
           Run the reveal again
         </Button>
       }
-      foot="Each tile lays one suspect's simulated spectrum over the measured one. The simulations ran on the server when the case opened; the reveal replays them in the order of belief. Choose a tile to see it large below."
+      foot="Each tile lays one suspect's simulated spectrum over the measured one. The simulations ran on the server when the reading came in; the reveal replays them in the order of belief. Choose a tile to see it large below."
     >
       {!ready ? (
         <SkeletonRows rows={3} />

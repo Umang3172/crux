@@ -1,4 +1,4 @@
-// "New case": feed a fault to the pump model and choose who investigates it.
+// "Investigate a machine": choose a modelled machine, give it a fault, and choose who investigates.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
@@ -6,10 +6,11 @@ import { Bot, Dices, FlaskConical, Play, UserRound } from "lucide-react";
 import type { RunParams } from "../api/types";
 import { openAgentsCase, openEngineCase } from "../lib/launch";
 import { fault as faultText } from "../lib/plain";
+import { MODELLED } from "../lib/plant";
 import { FLOOR, OFF_LIST, ON_LIST, SEVERITY, isOnList, type AnyFault, type Investigator } from "../lib/scenarios";
 import { Button, Callout, Dialog, Seg, cx } from "../ui/kit";
 
-type Preset = { investigator?: Investigator; fault?: AnyFault | "hidden" };
+type Preset = { investigator?: Investigator; fault?: AnyFault | "hidden"; machine?: string };
 
 let state: { open: boolean; preset: Preset } = { open: false, preset: {} };
 const listeners = new Set<() => void>();
@@ -29,6 +30,7 @@ const pick = <T,>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)]
 export function Launcher() {
   const { open, preset } = useSyncExternalStore(subscribe, () => state, () => state);
   const navigate = useNavigate();
+  const [machine, setMachine] = useState("p2");
   const [who, setWho] = useState<Investigator>("agents");
   const [fault, setFault] = useState<AnyFault | "hidden">("hidden");
   const [severity, setSeverity] = useState<(typeof SEVERITY)[number]["id"]>("severe");
@@ -41,6 +43,7 @@ export function Launcher() {
 
   useEffect(() => {
     if (!open) return;
+    setMachine(preset.machine ?? "p2");
     setWho(preset.investigator ?? "agents");
     setFault(preset.fault ?? "hidden");
     setError(null);
@@ -67,8 +70,8 @@ export function Launcher() {
     try {
       const id =
         who === "agents"
-          ? await openAgentsCase(params, { note: note.trim() || undefined, revealed: !hidden })
-          : await openEngineCase(params, { revealed: !hidden });
+          ? await openAgentsCase(params, { machine, note: note.trim() || undefined, revealed: !hidden })
+          : await openEngineCase(params, { machine, revealed: !hidden });
       set({ open: false, preset: {} });
       navigate(`/cases/${id}`);
     } catch (e) {
@@ -85,41 +88,56 @@ export function Launcher() {
       open={open}
       onClose={close}
       wide
-      title="New case"
-      sub="Feed a fault to the pump model and choose who investigates it."
+      title="Investigate a machine"
+      sub="Choose a machine, give its model a fault, and choose who investigates the reading."
       foot={
         <>
-          <span className="small dim grow">The pump is a physics model, so its readings are synthetic.</span>
+          <span className="small dim grow">These machines run on the engine's model, so their readings are synthetic.</span>
           <Button variant="ghost" onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button variant="primary" icon={<Play size={14} />} busy={busy} onClick={start}>
-            {who === "agents" ? "Send to the agents" : "Open the case"}
+            {who === "agents" ? "Send to Crux's AI" : "Open the investigation"}
           </Button>
         </>
       }
     >
       <div className="col gap-4">
         <div className="field">
+          <span className="label">Which machine</span>
+          <div className="choices" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
+            {MODELLED.map((m) => (
+              <button key={m.id} type="button" className={cx("choice", machine === m.id && "on")} onClick={() => setMachine(m.id)}>
+                <b>{m.name}</b>
+                <span>
+                  {m.type}
+                  {m.rpm ? ` · ${m.rpm.toLocaleString("en-GB")} rpm` : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
           <span className="label">Who investigates</span>
           <div className="choices" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <button type="button" className={cx("choice", who === "agents" && "on")} onClick={() => setWho("agents")}>
               <b className="row">
-                <Bot size={15} /> The agents, on their own
+                <Bot size={15} /> Crux's AI, on its own
               </b>
-              <span>An investigator and a critic drive the engine's tools. The pump model's instrument answers any measurement they ask for.</span>
+              <span>Two AI investigators work the reading through the engine's tools. The model's own instrument answers any measurement they ask for.</span>
             </button>
             <button type="button" className={cx("choice", who === "engine" && "on")} disabled={offListChosen} onClick={() => setWho("engine")} style={offListChosen ? { opacity: 0.5 } : undefined}>
               <b className="row">
-                <UserRound size={15} /> The engine, with you
+                <UserRound size={15} /> The engine, with a technician
               </b>
-              <span>{offListChosen ? "A fault off the engine's list needs the agents: only they can write a new suspect." : "The engine runs the experiments. When it needs a measurement it asks you."}</span>
+              <span>{offListChosen ? "A fault off the engine's list needs the AI investigators: only they can write a new suspect." : "The engine runs the experiments. When it needs a measurement it stops and asks a technician."}</span>
             </button>
           </div>
         </div>
 
         <div className="field">
-          <span className="label">What is wrong with the pump</span>
+          <span className="label">What is wrong with it</span>
           <div className="choices">
             <button type="button" className={cx("choice", fault === "hidden" && "on")} onClick={() => chooseFault("hidden")}>
               <b className="row">

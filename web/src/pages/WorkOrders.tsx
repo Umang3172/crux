@@ -10,6 +10,7 @@ import { brainOf } from "../lib/ai";
 import { clock, hours, num, pct, shortId } from "../lib/format";
 import { useAsync } from "../lib/hooks";
 import { fault } from "../lib/plain";
+import { machineOfCase } from "../lib/plant";
 import { useSession } from "../lib/session";
 import { Badge, Button, Callout, Card, Empty, ErrorState, LinkButton, PageHead, Seg, SkeletonRows, Stat, cx } from "../ui/kit";
 import { rowsOf } from "./parts";
@@ -25,7 +26,7 @@ export function WorkOrders() {
 
   return (
     <div className="page">
-      <PageHead title="Work orders" sub="Crux recommends; a person approves. A work order from a forecast alarm is drafted and stored by the server. A case's recommendation is approved on the case." />
+      <PageHead title="Work orders" sub="Crux recommends; a person approves. A work order from an alarm on a watched machine is drafted and stored by the server. The work an investigation recommends is approved on the investigation, or from the manager's summary." />
 
       <Card title="From forecast alarms" icon={<ClipboardList size={15} />} sub="drafted by the server" flush>
         {list.error ? (
@@ -33,8 +34,8 @@ export function WorkOrders() {
         ) : !list.data ? (
           <SkeletonRows />
         ) : list.data.length === 0 ? (
-          <Empty icon={<ClipboardList size={18} />} title="No work order yet" action={<LinkButton to="/machines">Open a machine</LinkButton>}>
-            Open a machine's life, move the clock past its alarm, and draft one from there.
+          <Empty icon={<ClipboardList size={18} />} title="No work order yet" action={<LinkButton to="/plant">Open the plant</LinkButton>}>
+            Open a watched machine's life, move the clock past its alarm, and draft one from there.
           </Empty>
         ) : (
           <div className="table-wrap">
@@ -75,7 +76,7 @@ export function WorkOrders() {
         )}
       </Card>
 
-      <Card title="From cases" icon={<BadgeCheck size={15} />} sub="recommendations in this browser's session" flush>
+      <Card title="From investigations" icon={<BadgeCheck size={15} />} sub="recommendations in this browser's session" flush>
         {handoffs.length === 0 ? (
           <Empty left title="No case has named a fault yet">
             When a case names a cause, its recommended action waits here for a person's approval.
@@ -85,7 +86,7 @@ export function WorkOrders() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Case</th>
+                  <th>Machine</th>
                   <th>Cause named</th>
                   <th>Approval</th>
                   <th>Repair check</th>
@@ -95,7 +96,7 @@ export function WorkOrders() {
                 {handoffs.map(({ entry, model }) => (
                   <tr key={entry.id} className="hover">
                     <td className="mono">
-                      <Link to={`/cases/${entry.id}`}>{shortId(entry.id)}</Link>
+                      <Link to={`/cases/${entry.id}`}>{machineOfCase(entry).short}</Link> <span className="dim">{shortId(entry.id)}</span>
                     </td>
                     <td className="strong">
                       {fault(model.leader!.kind).name} <span className="dim num">· {pct(model.leader!.belief)}</span>

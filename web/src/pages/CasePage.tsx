@@ -14,7 +14,8 @@ import { useAbout, useAsync, useCatalogue, useLiveCase, useMachineModel } from "
 import { shownSteps, useLiveRun } from "../lib/liveruns";
 import { fault } from "../lib/plain";
 import { usePlayback } from "../lib/playback";
-import { PUMP, isOnList, scenario } from "../lib/scenarios";
+import { MODE, machineOfCase, machinePath } from "../lib/plant";
+import { isOnList, scenario } from "../lib/scenarios";
 import { patchCase, useCaseEntry, type CaseEntry } from "../lib/session";
 import { AgentStage } from "../ui/AgentStage";
 import { MachineTwin, type TwinFrequencies } from "../ui/MachineTwin";
@@ -105,8 +106,8 @@ function Case({ id }: { id: string | undefined }) {
     return (
       <div className="page">
         <Card>
-          <Empty icon={<FolderSearch size={18} />} title="This case is not in this browser's session" action={<LinkButton to="/cases">All cases</LinkButton>}>
-            Each browser keeps the cases it opened. A case opened somewhere else, or before the session was reset, is not listed here.
+          <Empty icon={<FolderSearch size={18} />} title="This investigation is not in this browser's session" action={<LinkButton to="/cases">All investigations</LinkButton>}>
+            Each browser keeps the investigations it opened. One opened somewhere else, or before the session was reset, is not listed here.
           </Empty>
         </Card>
       </div>
@@ -114,6 +115,7 @@ function Case({ id }: { id: string | undefined }) {
   }
 
   const sc = scenario(entry.scenario);
+  const machineOn = machineOfCase(entry);
   const brain = entry.run ? runBrain(entry.run.model, entry.run.live) : null;
   const leader = model?.leader ?? null;
   const show = model && !watching ? model : null;
@@ -121,7 +123,7 @@ function Case({ id }: { id: string | undefined }) {
 
   const stage = isAgents && (
     <Card
-      title={watching ? "The agents at work" : "The run, replayed"}
+      title={watching ? "Crux investigating" : "The investigation, replayed"}
       icon={<Workflow size={15} />}
       tone={watching ? "model" : undefined}
       sub={streaming ? "live" : entry.run ? `${entry.run.tool_calls.length} tool calls in ${entry.run.rounds} rounds` : undefined}
@@ -152,8 +154,8 @@ function Case({ id }: { id: string | undefined }) {
   );
 
   const machine = twin.data && (
-    <Card title="The machine" icon={<Cog size={15} />} sub="its parts turning at their real ratios to the shaft" actions={<SourceTag source={PUMP.source} />}>
-      <MachineTwin model={twin.data} rpm={model?.rpm ?? twin.data.nominal_rpm} part={named} sensor={show?.status === "waiting" ? "asked" : "idle"} hz={ledgerHz(show)} />
+    <Card title={machineOn.name} icon={<Cog size={15} />} sub="its parts turning at their real ratios to the shaft" actions={<SourceTag source={MODE.model.source} />}>
+      <MachineTwin model={twin.data} kind={machineOn.kind === "fan" ? "fan" : "pump"} rpm={model?.rpm ?? machineOn.rpm ?? twin.data.nominal_rpm} part={named} sensor={show?.status === "waiting" ? "asked" : "idle"} hz={ledgerHz(show)} />
       {named !== "none" && leader && (
         <p className="small muted" style={{ marginTop: 10 }}>
           The verdict names <b style={{ color: "var(--warn)" }}>{fault(leader.kind).partName}</b>. {fault(leader.kind).story}
@@ -165,28 +167,30 @@ function Case({ id }: { id: string | undefined }) {
   const head = (
     <>
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to="/cases">Cases</Link>
+        <Link to="/cases">Investigations</Link>
         <ChevronRight size={12} aria-hidden />
-        <span className="mono">Case {shortId(entry.id)}</span>
+        <Link to={machinePath(machineOn)}>{machineOn.name}</Link>
+        <ChevronRight size={12} aria-hidden />
+        <span className="mono">{shortId(entry.id)}</span>
       </nav>
       <header className="case-head">
         <div className="grow">
-          <h1>{PUMP.name}</h1>
+          <h1>{machineOn.name}</h1>
           <div className="case-meta">
-            <span className="mono">Case {shortId(entry.id)}</span>
-            <SourceTag source={PUMP.source} />
+            <span className="mono">Investigation {shortId(entry.id)}</span>
+            <SourceTag source={MODE.model.source} />
             {isAgents ? (
               <Badge tone="model" dot>
-                agents{brain ? ` · ${brain.name}` : ""}
+                Crux's AI{brain ? ` · ${brain.name}` : ""}
               </Badge>
             ) : (
               <Badge tone="accent" dot>
-                engine, with a person
+                engine, with a technician
               </Badge>
             )}
             <span>opened {stamp(entry.createdAt)}</span>
-            {sc && <span className="dim">· scenario “{sc.title}”</span>}
-            {entry.batch && <span className="dim">· part of an autonomous run</span>}
+            {sc && <span className="dim">· guided: “{sc.title}”</span>}
+            {entry.batch && <span className="dim">· from a simulated shift</span>}
           </div>
         </div>
         {show ? (
@@ -199,14 +203,14 @@ function Case({ id }: { id: string | undefined }) {
           !entry.failed && (
             <span className="status-lg tone-accent">
               <LoaderCircle size={15} className="spin" />
-              {running ? "The agents are working" : "Showing the run"}
+              {running ? "Crux is investigating" : "Showing the investigation"}
             </span>
           )
         )}
       </header>
       {stuck && (
         <Callout tone="warn" icon={<ServerCrash size={15} />}>
-          This run did not finish in this browser: the page was reloaded while the agents were working, and the server sends a run only once. Start it again from New case.
+          This investigation did not finish in this browser: the page was reloaded while Crux was working, and the server sends a run only once. Start it again from Investigate a machine.
         </Callout>
       )}
       {entry.failed && (
@@ -249,7 +253,7 @@ function Case({ id }: { id: string | undefined }) {
 
       {entry.lost && (
         <Callout tone="warn" icon={<ServerCrash size={15} />}>
-          The server no longer holds this case: it keeps cases in memory and has restarted since. What you see is the last state this browser read, and it cannot be changed.
+          The server no longer holds this investigation: it keeps them in memory and has restarted since. What you see is the last state this browser read, and it cannot be changed.
         </Callout>
       )}
       {show.hazard && (
@@ -271,8 +275,8 @@ function Case({ id }: { id: string | undefined }) {
         <Stat
           label="Investigated by"
           icon={isAgents ? <Bot size={13} /> : <Cpu size={13} />}
-          value={<span style={{ fontSize: "1.25rem" }}>{isAgents ? "Agents" : "Engine"}</span>}
-          sub={isAgents ? `${entry.run?.tool_calls.length ?? 0} tool calls, ${entry.run?.rounds ?? 0} rounds` : "a person answers its requests"}
+          value={<span style={{ fontSize: "1.25rem" }}>{isAgents ? "Crux's AI" : "Engine"}</span>}
+          sub={isAgents ? `${entry.run?.tool_calls.length ?? 0} tool calls, ${entry.run?.rounds ?? 0} rounds` : "a technician answers its requests"}
         />
       </div>
 
@@ -300,7 +304,7 @@ function Case({ id }: { id: string | undefined }) {
         </div>
 
         <aside className="col rail" style={{ gap: "var(--s-5)" }}>
-          {isAgents && entry.run ? <AgentTrace run={entry.run} about={about.data} tookMs={entry.tookMs} current={pb.play.playing || !ended ? pb.play.at : undefined} /> : <EngineLog transcript={show.transcript} />}
+          {isAgents && entry.run ? <AgentTrace run={entry.run} about={about.data} tookMs={entry.tookMs} current={pb.play.playing || !ended ? pb.play.at : undefined} /> : <EngineLog transcript={show.transcript} machine={machineOn.short} />}
           {isAgents && <ChecksCard model={show} />}
           <MemoryCard model={show} />
           <NotesCard entry={entry} model={show} />

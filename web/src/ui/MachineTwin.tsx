@@ -51,8 +51,11 @@ export function MachineTwin({
   sensor = "idle",
   hz,
   compact,
+  kind = "pump",
 }: {
   model: MachineModel;
+  /** What the rotor turns in. The model is the same either way; only the drawing differs. */
+  kind?: "pump" | "fan";
   rpm: number;
   /** The part a verdict has named. Nothing is coloured without one. */
   part?: Part;
@@ -155,7 +158,9 @@ export function MachineTwin({
           {sensor === "asked" ? "measurement asked for here" : "sensor"}
         </text>
 
-        {/* seal-flush pump, belt-driven from the shaft */}
+        {/* seal-flush pump, belt-driven from the shaft: part of a pump set */}
+        {(kind === "pump" || part === "aux") && (
+          <>
         <line x1={329} y1={164} x2={318} y2={106} className="twin-belt" />
         <line x1={339} y1={164} x2={338} y2={104} className="twin-belt" />
         <circle cx={334} cy={CY} r={6} className="twin-inner" />
@@ -170,16 +175,24 @@ export function MachineTwin({
         <text x={306} y={78} className="twin-note" textAnchor="middle">
           seal-flush pump
         </text>
+          </>
+        )}
 
         {/* pump: casing seen from the front, impeller inside */}
         <rect x={440} y={148} width={14} height={40} rx={2} className="twin-part" />
-        <path d="M534 100 V72 H580 V124" className="twin-part" />
-        <rect x={528} y={64} width={58} height={10} rx={2} className="twin-part" />
+        {kind === "fan" ? (
+          <path d="M512 106 H592 V150 H570" className="twin-part" />
+        ) : (
+          <>
+            <path d="M534 100 V72 H580 V124" className="twin-part" />
+            <rect x={528} y={64} width={58} height={10} rx={2} className="twin-part" />
+          </>
+        )}
         <circle cx={512} cy={CY} r={62} className={cx("twin-part", part === "impeller" && "named")} />
         <circle cx={512} cy={CY} r={52} className="twin-inner" />
         <g transform={`translate(512 ${CY}) rotate(${shaft % 360})`}>
           {Array.from({ length: Math.max(1, model.blade_count) }, (_, i) => (
-            <path key={i} d="M9 0 Q28 -22 46 -6" transform={`rotate(${(i * 360) / Math.max(1, model.blade_count)})`} className={cx("twin-blade", part === "impeller" && "named")} />
+            <path key={i} d={kind === "fan" ? "M9 0 L44 -10 L46 4 Z" : "M9 0 Q28 -22 46 -6"} transform={`rotate(${(i * 360) / Math.max(1, model.blade_count)})`} className={cx("twin-blade", kind === "fan" && "paddle", part === "impeller" && "named")} />
           ))}
           <circle r={9} className="twin-shaft" />
           {part === "impeller" && <circle cx={36} cy={-10} r={4} className="twin-defect" />}
@@ -187,7 +200,7 @@ export function MachineTwin({
         {part === "impeller" && orderHit > 0 && <circle cx={512} cy={CY} r={62 + orderHit * 8} className="twin-pulse" opacity={orderHit * 0.8} />}
         {part === "coupling" && orderHit > 0 && <rect x={274} y={142} width={52} height={52} rx={6} className="twin-pulse" opacity={orderHit * 0.8} />}
         <text x={512} y={272} className="twin-label">
-          Pump · {model.blade_count} blades
+          {kind === "fan" ? "Fan" : "Pump"} · {model.blade_count} blades
         </text>
 
         {/* the bearing, cut open */}
@@ -245,9 +258,11 @@ export function MachineTwin({
               inner-ring pass <b className="num">{num(k.bpfi, 2)}×</b>
               {hz?.bpfi !== undefined && <span className="dim num"> · {num(hz.bpfi, 1)} Hz</span>}
             </span>
-            <span className="twin-fact" data-tip={`Belt ratio ${model.auxiliary_pump.belt_ratio} to 1, ${model.auxiliary_pump.lobes} lobes`}>
-              seal-flush pump <b className="num">{num(model.auxiliary_pump.passes_per_shaft_turn, 1)}×</b>
-            </span>
+            {kind === "pump" && (
+              <span className="twin-fact" data-tip={`Belt ratio ${model.auxiliary_pump.belt_ratio} to 1, ${model.auxiliary_pump.lobes} lobes`}>
+                seal-flush pump <b className="num">{num(model.auxiliary_pump.passes_per_shaft_turn, 1)}×</b>
+              </span>
+            )}
           </>
         )}
         <span className="twin-slow">

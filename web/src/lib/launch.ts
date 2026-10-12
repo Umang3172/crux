@@ -5,19 +5,31 @@
 import { ApiError } from "../api/client";
 import { agentReplay, agentStream, startCase } from "../api/crux";
 import type { FaultKind, RunParams } from "../api/types";
+import { machineById } from "./plant";
 import { isOnList, type Scenario } from "./scenarios";
 import { beginLive, endLive, pushStep } from "./liveruns";
 import { addCase, getSession, patchCase } from "./session";
 
-type Opts = { scenario?: string; batch?: string; note?: string; revealed?: boolean; watch?: boolean };
+type Opts = { machine?: string; scenario?: string; batch?: string; note?: string; revealed?: boolean; watch?: boolean };
+
+/** The server remembers closed cases per plant and machine; each machine here is its own entry. */
+const plantKey = (machine: string) => `${getSession().plant}-${machine}`;
+/** A modelled machine runs at its own speed. */
+const onMachine = (params: RunParams, machine: string): RunParams => {
+  const rpm = machineById(machine)?.rpm;
+  return rpm ? { ...params, rpm } : params;
+};
 
 export async function openEngineCase(params: RunParams, opts: Opts = {}): Promise<string> {
   if (!isOnList(params.fault)) throw new Error("Only the agents can take a fault that is not on the engine's list.");
   const t0 = performance.now();
-  const inv = await startCase({ ...params, fault: params.fault as FaultKind, plant: getSession().plant });
+  const machine = opts.machine ?? "p2";
+  params = onMachine(params, machine);
+  const inv = await startCase({ ...params, fault: params.fault as FaultKind, plant: plantKey(machine) });
   addCase({
     id: inv.id,
     kind: "engine",
+    machine,
     params,
     revealed: !!opts.revealed,
     scenario: opts.scenario,
@@ -36,9 +48,11 @@ export async function openEngineCase(params: RunParams, opts: Opts = {}): Promis
  */
 export function launchAgents(params: RunParams, opts: Opts = {}): { opened: Promise<string>; finished: Promise<string> } {
   const t0 = performance.now();
-  const body = { ...params, plant: getSession().plant, note: opts.note ?? "" };
+  const machine = opts.machine ?? "p2";
+  params = onMachine(params, machine);
+  const body = { ...params, plant: plantKey(machine), note: opts.note ?? "" };
   const took = () => Math.round(performance.now() - t0);
-  const entry = (id: string) => ({ id, kind: "agents" as const, params, revealed: !!opts.revealed, scenario: opts.scenario, batch: opts.batch, note: opts.note, watch: opts.watch ?? true });
+  const entry = (id: string) => ({ id, kind: "agents" as const, machine, params, revealed: !!opts.revealed, scenario: opts.scenario, batch: opts.batch, note: opts.note, watch: opts.watch ?? true });
   let id: string | null = null;
   let resolveOpened!: (id: string) => void;
   let rejectOpened!: (e: Error) => void;
@@ -88,4 +102,4 @@ export function launchAgents(params: RunParams, opts: Opts = {}): { opened: Prom
 export const openAgentsCase = (params: RunParams, opts: Opts = {}): Promise<string> => launchAgents(params, opts).opened;
 
 export const launchScenario = (s: Scenario) =>
-  s.investigator === "agents" ? openAgentsCase(s.params, { scenario: s.id }) : openEngineCase(s.params, { scenario: s.id });
+  s.investigator === "agents" ? openAgentsCase(s.params, { scenario: s.id, machine: s.machine }) : openEngineCase(s.params, { scenario: s.id, machine: s.machine });
