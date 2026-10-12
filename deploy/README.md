@@ -53,6 +53,20 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" \
   --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/${GITHUB_REPO}"
 
+# In a workflow the deployer itself starts the build, which a person's login
+# does by hand: create builds, upload the source to the project's Cloud Build
+# bucket, bill the API calls to the project, and run the build as itself.
+for role in roles/cloudbuild.builds.editor roles/serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None
+done
+gcloud storage buckets describe "gs://${PROJECT_ID}_cloudbuild" >/dev/null 2>&1 \
+  || gcloud storage buckets create "gs://${PROJECT_ID}_cloudbuild" --project="$PROJECT_ID"
+gcloud storage buckets add-iam-policy-binding "gs://${PROJECT_ID}_cloudbuild" \
+  --member="serviceAccount:${DEPLOYER}" --role=roles/storage.admin
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" \
+  --member="serviceAccount:${DEPLOYER}" --role=roles/iam.serviceAccountUser
+
 echo
 echo "GCP_WORKLOAD_IDENTITY_PROVIDER ="
 echo "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/providers/github"
@@ -64,7 +78,8 @@ echo "GCP_SERVICE_ACCOUNT = ${DEPLOYER}"
 > This is the single most common way a Workload Identity setup is left wide open.
 
 Then add the printed values as repository secrets (Settings → Secrets and
-variables → Actions):
+variables → Actions). On a repository owned by a person rather than an
+organisation, only the owner can:
 
 | Secret | Value |
 |---|---|
