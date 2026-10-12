@@ -9,7 +9,7 @@ import { useHealth, useHotkey, useTheme } from "../lib/hooks";
 import { SITE } from "../lib/plant";
 import { ROLES, setRole, useRole, type Role } from "../lib/role";
 import { openHazards, patchCase, useSession } from "../lib/session";
-import { Button, cx } from "../ui/kit";
+import { Button, Toasts, cx } from "../ui/kit";
 import { CommandPalette } from "./CommandPalette";
 import { Launcher, openLauncher } from "./Launcher";
 import { navFor } from "./nav";
@@ -159,6 +159,7 @@ export function Shell() {
       </div>
 
       <Launcher />
+      <Toasts />
       <CommandPalette open={palette} onClose={() => setPalette(false)} onTheme={toggleTheme} />
     </div>
   );

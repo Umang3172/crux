@@ -23,6 +23,7 @@ const Network = lazy(() => import("../pages/Network"));
 const System = lazy(() => import("../pages/System"));
 const PhoneCheck = lazy(() => import("../pages/PhoneCheck"));
 const NotFound = lazy(() => import("../pages/NotFound"));
+const Go = lazy(() => import("../pages/Go"));
 
 const page = (el: ReactNode) => <Suspense fallback={null}>{el}</Suspense>;
 
@@ -52,6 +53,7 @@ export const router = createHashRouter([
       { path: "proof", element: page(<Proof />) },
       { path: "agents", element: page(<Agents />) },
       { path: "system", element: page(<System />) },
+      { path: "go/:what", element: page(<Go />) },
       { path: "*", element: page(<NotFound />) },
     ],
   },
