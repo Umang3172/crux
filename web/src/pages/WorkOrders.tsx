@@ -1,128 +1,408 @@
-// This browser's work orders: where each one stands, and a way to open it.
-// They live in the browser that drafted them, so each visitor has their own list.
+// Work orders. The server drafts one from a forecast alarm; a case's
+// recommendation is approved on the case itself and listed here.
 
-import { Link, useSearchParams } from "react-router";
-import { useDataNote } from "../app/DataNote";
-import { machineDef } from "../demo/stories";
-import { useWorld, type WorkOrder, type WorkOrderStage } from "../demo/world";
-import { clock, stamp } from "../lib/format";
-import { Button, ButtonLink } from "../ui/Button";
-import { Empty } from "../ui/States";
-import { isStage, OUTCOME, STAGE_LABEL, stageOf, stagesFor } from "./workorder/model";
-import s from "./WorkOrders.module.css";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+import { BadgeCheck, Camera, ChevronRight, ClipboardList, ShieldAlert } from "lucide-react";
+import { approveTicket, outcome as sendOutcome, ticketStillUrl, tickets as fetchTickets } from "../api/crux";
+import type { Lesson, Ticket } from "../api/types";
+import { brainOf } from "../lib/ai";
+import { clock, hours, num, pct, shortId } from "../lib/format";
+import { useAsync } from "../lib/hooks";
+import { fault } from "../lib/plain";
+import { useSession } from "../lib/session";
+import { Badge, Button, Callout, Card, Empty, ErrorState, LinkButton, PageHead, Seg, SkeletonRows, Stat, cx } from "../ui/kit";
+import { rowsOf } from "./parts";
+import "./pages.css";
 
-/** What the order is waiting for, or how it ended. */
-function waitingFor(o: WorkOrder): string {
-  switch (stageOf(o)) {
-    case "plan":
-      return "Waiting for approval";
-    case "repair":
-      return o.kind === "case" ? "Waiting for the repair" : "A recording can't be repaired";
-    case "check":
-      return o.repair ? OUTCOME[o.repair.result.outcome].head : "Waiting for the check";
-    case "found":
-      return "Waiting for what was found";
-    default:
-      return o.found ? (o.found.right ? "Crux was right" : "Crux was wrong") : "";
-  }
+const writer = (by: string) => (by === "template" || !by ? "a template" : brainOf(by).live ? brainOf(by).name : by);
+
+export function WorkOrders() {
+  const navigate = useNavigate();
+  const list = useAsync(() => fetchTickets(), []);
+  const session = useSession();
+  const handoffs = rowsOf(session.cases).filter((r) => r.model.status === "concluded" && r.model.leader && r.model.leader.kind !== "healthy");
+
+  return (
+    <div className="page">
+      <PageHead title="Work orders" sub="Crux recommends; a person approves. A work order from a forecast alarm is drafted and stored by the server. A case's recommendation is approved on the case." />
+
+      <Card title="From forecast alarms" icon={<ClipboardList size={15} />} sub="drafted by the server" flush>
+        {list.error ? (
+          <ErrorState error={list.error} onRetry={list.reload} />
+        ) : !list.data ? (
+          <SkeletonRows />
+        ) : list.data.length === 0 ? (
+          <Empty icon={<ClipboardList size={18} />} title="No work order yet" action={<LinkButton to="/machines">Open a machine</LinkButton>}>
+            Open a machine's life, move the clock past its alarm, and draft one from there.
+          </Empty>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Machine</th>
+                  <th>Part</th>
+                  <th>Fix within</th>
+                  <th>State</th>
+                  <th>Written by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.data.map((t) => (
+                  <tr key={t.id} className="hover link" tabIndex={0} onClick={() => navigate(`/work-orders/${t.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/work-orders/${t.id}`)}>
+                    <td className="mono">{t.id}</td>
+                    <td className="strong">{t.machine_name}</td>
+                    <td>{t.part_label}</td>
+                    <td className="num">{t.fix_within_h ? `${hours(t.fix_within_h[0])} to ${hours(t.fix_within_h[1])}` : "–"}</td>
+                    <td>
+                      {t.hazard && (
+                        <>
+                          <Badge tone="danger">hazard</Badge>{" "}
+                        </>
+                      )}
+                      <Badge tone={t.status === "approved" ? "ok" : "warn"} dot>
+                        {t.status === "approved" ? `approved by ${t.approved_by}` : "waiting for approval"}
+                      </Badge>
+                    </td>
+                    <td className="muted">{writer(t.written_by)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="From cases" icon={<BadgeCheck size={15} />} sub="recommendations in this browser's session" flush>
+        {handoffs.length === 0 ? (
+          <Empty left title="No case has named a fault yet">
+            When a case names a cause, its recommended action waits here for a person's approval.
+          </Empty>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Case</th>
+                  <th>Cause named</th>
+                  <th>Approval</th>
+                  <th>Repair check</th>
+                </tr>
+              </thead>
+              <tbody>
+                {handoffs.map(({ entry, model }) => (
+                  <tr key={entry.id} className="hover">
+                    <td className="mono">
+                      <Link to={`/cases/${entry.id}`}>{shortId(entry.id)}</Link>
+                    </td>
+                    <td className="strong">
+                      {fault(model.leader!.kind).name} <span className="dim num">· {pct(model.leader!.belief)}</span>
+                    </td>
+                    <td>
+                      {entry.approved ? (
+                        <Badge tone="ok" dot>
+                          approved by {entry.approved.by} · {clock(entry.approved.at)}
+                        </Badge>
+                      ) : (
+                        <Badge tone="warn" dot>
+                          waiting for approval
+                        </Badge>
+                      )}
+                    </td>
+                    <td>{entry.repair ? <Badge tone={entry.repair.result.outcome === "verified" ? "ok" : "neutral"}>{entry.repair.result.outcome.replace(/_/g, " ")}</Badge> : <span className="dim">not checked yet</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
 }
 
-/** The class of the stage, as a tag head would carry it: green once verified, ink when closed, yellow while open. */
-const toneOf = (o: WorkOrder): "ok" | "ink" | "attention" =>
-  o.repair?.result.outcome === "verified" ? "ok" : o.stage === "closed" ? "ink" : "attention";
+export function WorkOrderPage() {
+  const { id } = useParams();
+  const list = useAsync(() => fetchTickets(), [id]);
+  const [cited, setCited] = useState<string[]>([]);
+  const [by, setBy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState<Ticket | null>(null);
 
-export default function WorkOrders() {
-  const world = useWorld();
-  const [params, setParams] = useSearchParams();
-  useDataNote("Work orders are kept in this browser: every visitor has their own list, and Reset demo clears it.");
+  const t = approved ?? list.data?.find((x) => x.id === id) ?? null;
 
-  const asked = params.get("stage");
-  const filter: WorkOrderStage | null = isStage(asked) ? asked : null;
-  const orders = [...world.workOrders].sort((a, b) => b.createdAt - a.createdAt);
-  const stages = stagesFor("case");
-  const count = (st: WorkOrderStage) => orders.filter((o) => stageOf(o) === st).length;
-  const shown = filter ? orders.filter((o) => stageOf(o) === filter) : orders;
+  async function approve() {
+    if (!t) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setApproved(await approveTicket(t.id, by.trim()));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  if (orders.length === 0) {
+  if (list.error) {
     return (
-      <div className={s.page}>
-        <h1 className={s.title}>Work orders</h1>
-        <Empty title="No work orders in this browser yet">
-          <div className={s.stack}>
-            <p>A work order is drafted when a case ends with a cause named, or from a forecast on a recorded bearing. Finish a case, and the plan to fix it appears here.</p>
-            <div className={s.actions}>
-              <ButtonLink to="/" kind="primary">
-                Start from the plant
-              </ButtonLink>
-              <ButtonLink to="/try">Break the pump yourself</ButtonLink>
-            </div>
-          </div>
-        </Empty>
+      <div className="page">
+        <ErrorState error={list.error} onRetry={list.reload} />
+      </div>
+    );
+  }
+  if (!list.data) {
+    return (
+      <div className="page">
+        <Card>
+          <SkeletonRows rows={6} />
+        </Card>
+      </div>
+    );
+  }
+  if (!t) {
+    return (
+      <div className="page">
+        <Card>
+          <Empty icon={<ClipboardList size={18} />} title="No such work order on this server" action={<LinkButton to="/work-orders">All work orders</LinkButton>}>
+            The server keeps work orders in memory, so one drafted before a restart is gone.
+          </Empty>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className={s.page}>
-      <header className={s.head}>
-        <h1 className={s.title}>Work orders</h1>
-        <p className={s.lede}>Kept in this browser. Each one is a plan to repair a machine, approved by a person, checked afterwards, and closed once what was found is on record.</p>
-      </header>
+    <div className="page">
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link to="/work-orders">Work orders</Link>
+        <ChevronRight size={12} aria-hidden />
+        <span className="mono">{t.id}</span>
+      </nav>
+      <PageHead
+        title={`${t.part_label}, ${t.machine_name}`}
+        sub={`Drafted at running hour ${num(t.at_h, 1)} by ${writer(t.written_by)}. Every sentence cites the evidence it rests on.`}
+        actions={
+          <Badge tone={t.status === "approved" ? "ok" : "warn"} dot>
+            {t.status === "approved" ? `approved by ${t.approved_by}` : "waiting for approval"}
+          </Badge>
+        }
+      />
 
-      <div className={s.filters} role="group" aria-label="Show work orders at a stage">
-        <button type="button" aria-pressed={filter === null} onClick={() => setParams({}, { replace: true })}>
-          All <span className={s.count}>{orders.length}</span>
-        </button>
-        {stages.map((st) => (
-          <button key={st.id} type="button" aria-pressed={filter === st.id} onClick={() => setParams({ stage: st.id }, { replace: true })}>
-            {STAGE_LABEL[st.id]} <span className={s.count}>{count(st.id)}</span>
-          </button>
-        ))}
+      {t.hazard && (
+        <Callout tone="danger" icon={<ShieldAlert size={15} />}>
+          A hazard was reported on this machine. Make it safe under the site's procedure before anything else.
+        </Callout>
+      )}
+
+      <div className="stats">
+        <Stat label="Fix within" value={<span style={{ fontSize: "1.25rem" }}>{t.fix_within_h ? `${hours(t.fix_within_h[0])} to ${hours(t.fix_within_h[1])}` : "–"}</span>} sub={t.likely_h !== null ? `most likely ${hours(t.likely_h)}; a range for planning` : undefined} />
+        <Stat label="Next planned stop" value={<span style={{ fontSize: "1.25rem" }}>{t.stop_in_h !== null ? `in ${hours(t.stop_in_h)}` : "–"}</span>} sub="as entered when it was drafted" />
+        <Stat label="Risk before that stop" value={t.risk_before_stop !== null ? pct(t.risk_before_stop) : "–"} sub="chance it reaches the danger line first" />
+        <Stat label="Written by" value={<span style={{ fontSize: "1.25rem" }}>{writer(t.written_by)}</span>} sub={t.removed.length > 0 ? `${t.removed.length} sentence${t.removed.length > 1 ? "s" : ""} removed by the check` : "nothing was removed by the check"} />
       </div>
 
-      {shown.length === 0 ? (
-        <div className={s.none}>
-          <p>No work orders at this stage.</p>
-          <Button kind="quiet" onClick={() => setParams({}, { replace: true })}>
-            Show all
-          </Button>
-        </div>
-      ) : (
-        <table className={s.table}>
-          <caption className="visually-hidden">This browser's work orders, newest first</caption>
-          <thead>
-            <tr>
-              <th scope="col">Machine</th>
-              <th scope="col">Work order</th>
-              <th scope="col">Stage</th>
-              <th scope="col">Approved by</th>
-              <th scope="col">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((o) => (
-              <tr key={o.id}>
-                <td data-label="Machine">{machineDef(o.machine)?.name ?? o.machine}</td>
-                <td data-label="Work order">
-                  <Link className={s.link} to={`/work-order/${o.id}`}>
-                    {o.title || `Work order ${o.id}`}
-                  </Link>
-                  <span className={s.id}>{o.id}</span>
-                </td>
-                <td data-label="Stage">
-                  <span className={s.stage}>
-                    <span className={s.swatch} data-tone={toneOf(o)} aria-hidden="true" />
-                    {STAGE_LABEL[stageOf(o)]}
+      <div className="split">
+        <div className="col" style={{ gap: "var(--s-5)" }}>
+          <Card title="The work order" icon={<ClipboardList size={15} />}>
+            <ol className="col gap-3">
+              {t.sentences.map((s, i) => (
+                <li key={i}>
+                  {s.text}{" "}
+                  <span className="row gap-1 row-wrap" style={{ display: "inline-flex", verticalAlign: "middle" }}>
+                    {s.cites.map((c) => (
+                      <button key={c} type="button" className={cx("chip", cited.includes(c) && "on")} onClick={() => setCited(s.cites)}>
+                        {c}
+                      </button>
+                    ))}
                   </span>
-                  <span className={s.note}>{waitingFor(o)}</span>
-                </td>
-                <td data-label="Approved by">{o.approvedBy ? `${o.approvedBy}${o.approvedAt ? `, ${clock(o.approvedAt)}` : ""}` : "Not yet"}</td>
-                <td data-label="Created">{stamp(o.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                </li>
+              ))}
+            </ol>
+            {t.removed.length > 0 && (
+              <div className="col" style={{ marginTop: 14 }}>
+                <h3>Removed by the check</h3>
+                {t.removed.map((r, i) => (
+                  <div className="removed" key={i}>
+                    <s>{r.text}</s>
+                    <span>The evidence it cites does not back it.</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 16 }}>
+              <Callout tone="accent">{t.safety}</Callout>
+            </div>
+          </Card>
+
+          <Card title="Evidence it cites" icon={<ClipboardList size={15} />} flush>
+            <table className="table compact">
+              <thead>
+                <tr>
+                  <th style={{ width: 54 }}>Id</th>
+                  <th>Statement</th>
+                  <th>Kind</th>
+                </tr>
+              </thead>
+              <tbody>
+                {t.evidence.map((e) => (
+                  <tr key={e.id} className={cited.includes(e.id) ? "on" : undefined}>
+                    <td>
+                      <span className={cx("chip", cited.includes(e.id) && "on")}>{e.id}</span>
+                    </td>
+                    <td>{e.statement}</td>
+                    <td>
+                      <Badge tone={e.kind === "forecast" ? "warn" : e.kind === "sensor" ? "neutral" : "accent"} plain>
+                        {e.kind}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          {t.camera && (
+            <Card title="Camera look" icon={<Camera size={15} />} sub={`${t.camera.camera} · inspected by ${t.camera.inspected_by}`}>
+              <Callout tone="model">What a camera or a model saw is unconfirmed until a person checks it. {t.camera.note}</Callout>
+              {t.has_still && <img className="still" style={{ marginTop: 12 }} src={ticketStillUrl(t.id)} alt="The still the camera look was made from" />}
+              {t.camera.retake && <p className="t-warn small" style={{ marginTop: 8 }}>Retake asked for: {t.camera.retake}</p>}
+              <table className="table compact" style={{ marginTop: 12 }}>
+                <thead>
+                  <tr>
+                    <th>Looked for</th>
+                    <th>Result</th>
+                    <th>Where</th>
+                    <th>Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(t.camera.checklist.length ? t.camera.checklist : t.camera.findings).map((f, i) => (
+                    <tr key={i}>
+                      <td className="strong">{f.item}</td>
+                      <td>
+                        <Badge tone={f.status === "present" ? (f.hazard ? "danger" : "warn") : "neutral"}>{f.status.replace(/_/g, " ")}</Badge>
+                      </td>
+                      <td className="muted">{f.where || "–"}</td>
+                      <td className="muted">{f.evidence || f.what}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
+
+        <aside className="col rail" style={{ gap: "var(--s-5)" }}>
+          <Card title="Approval" icon={<BadgeCheck size={15} />} tone={t.status === "approved" ? "ok" : "warn"}>
+            {t.status === "approved" ? (
+              <p>
+                Approved by <b>{t.approved_by}</b>. The machine is isolated and locked out under the site's own procedure before anyone works on it.
+              </p>
+            ) : (
+              <div className="col gap-3">
+                <p className="muted">Nothing happens until a person puts their name to it.</p>
+                <input className="input" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name" />
+                <Button variant="primary" block busy={busy} disabled={!by.trim()} onClick={approve}>
+                  Approve this work order
+                </Button>
+                {error && <Callout tone="danger">{error}</Callout>}
+              </div>
+            )}
+          </Card>
+          {t.status === "approved" && <Found ticket={t} />}
+          {t.notes.length > 0 && (
+            <Card title="Notes" flush>
+              <ul className="list">
+                {t.notes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </aside>
+      </div>
     </div>
+  );
+}
+
+/** After the repair: what was found, so the next case on a machine like this starts with it. */
+function Found({ ticket }: { ticket: Ticket }) {
+  const [found, setFound] = useState("");
+  const [right, setRight] = useState<"yes" | "no">("yes");
+  const [by, setBy] = useState(ticket.approved_by);
+  const [major, setMajor] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ lesson: Lesson; sent_to_hub: boolean; alert: string | null } | null>(null);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      setSaved(await sendOutcome({ ticket_id: ticket.id, found: found.trim(), right: right === "yes", by: by.trim(), major }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <Card title="Lesson saved" icon={<BadgeCheck size={15} />} tone="ok">
+        <b>{saved.lesson.title}</b>
+        <dl className="defs" style={{ marginTop: 10 }}>
+          <dt>When</dt>
+          <dd>{saved.lesson.when}</dd>
+          <dt>Do</dt>
+          <dd>{saved.lesson.do}</dd>
+          {saved.lesson.avoid && (
+            <>
+              <dt>Avoid</dt>
+              <dd>{saved.lesson.avoid}</dd>
+            </>
+          )}
+          <dt>Written by</dt>
+          <dd>{saved.lesson.source}</dd>
+        </dl>
+        <p className="small dim" style={{ marginTop: 10 }}>
+          {saved.sent_to_hub ? "Sent to the other sites." : "Kept at this site: no hub is connected to this server."}
+          {saved.alert && ` ${saved.alert}`}
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="What was found" icon={<ClipboardList size={15} />} sub="after the repair">
+      <div className="col gap-3">
+        <textarea className="textarea" placeholder="What the technician found when the machine was opened." value={found} onChange={(e) => setFound(e.target.value)} aria-label="What was found" />
+        <div className="field">
+          <span className="label">Was Crux right?</span>
+          <Seg
+            value={right}
+            onChange={setRight}
+            block
+            options={[
+              { id: "yes", label: "Yes" },
+              { id: "no", label: "No" },
+            ]}
+            label="Was Crux right"
+          />
+        </div>
+        <label className="row small">
+          <input type="checkbox" checked={major} onChange={(e) => setMajor(e.target.checked)} /> A major failure: warn the other sites now
+        </label>
+        <input className="input" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name" />
+        <Button block busy={busy} disabled={!found.trim() || !by.trim()} onClick={send}>
+          Record it
+        </Button>
+        {error && <Callout tone="danger">{error}</Callout>}
+      </div>
+    </Card>
   );
 }

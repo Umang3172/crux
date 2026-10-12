@@ -1,6 +1,8 @@
 # Web
 
-The investigation view. Vite + React + TypeScript + uPlot, no component library.
+The Crux console: an operations view of the engine and the agents that drive it.
+Vite + React + TypeScript, plain CSS on design tokens, charts drawn in SVG. No
+component library and no charting library.
 
 ```bash
 npm install
@@ -19,46 +21,76 @@ For the full thing locally, including the spectrum plot:
 make web-build && make serve-app     # http://localhost:8080
 ```
 
-## What it does
+## What it shows
 
-It is built for the thirty seconds a judge spends on the deployed link. The page
-opens a case on arrival and plays the investigation back one engine state at a
-time: beliefs moving, the ledger growing, the moment the agent stops and asks a
-person for a measurement, then the verdict and what would overturn it.
+| Page | What is on it | Routes it calls |
+|---|---|---|
+| Overview | This browser's cases by how they ended, the case queue, the agents' latest tool calls, pinned scenarios, the autonomous run, the machines | `/health`, `/maintenance/machines`, `/maintenance/tickets`, `/ingest/{id}`, `/investigations`, `/agent/replay` |
+| Cases, Case | A whole investigation on one page: the verdict, the measurement the engine asked for with what each suspect predicts it reads, every suspect, measured against simulated spectra, the evidence ledger, the agents' trace, the report with its sentence check, the repair check, notes | `/investigations…`, `/replay`, `/capture`, `/spectrum`, `/tests` |
+| Agents | The two agents, the tools each was given and what each takes, the limits on a run, which model does each job | `/agent/about`, `/health` |
+| Proof | The evaluation run's figures, each with its source | none: `src/data/evaluation.ts` |
+| Machines, Machine | A part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/maintenance/…`, `/ingest/{id}` |
+| Work orders | Work orders drafted from forecast alarms, with cited evidence and approval by name; what a repair found | `/maintenance/tickets…`, `/fleet/outcome` |
+| Lens scans | A phone video read for motion and sound | `/lens/…` |
+| Network | This site's forecasting model, an update waiting for a decision, lessons | `/fleet/…` |
+| System | Health, the model behind each AI job, the measurements catalogue, links to the API reference | `/health`, `/tests`, `/agent/about`, `/docs` |
+| Phone check | The open measurement on a phone, reached by a QR code on the case page | `/investigations/{id}`, `/replay`, `…/evidence` |
 
-| File | |
-|---|---|
-| `api.ts` | Types mirroring `api/app.py::serialise`, and the calls |
-| `run.ts` | Drives one case and cuts it into playable steps |
-| `components/Beliefs.tsx` | The distribution across hypotheses |
-| `components/Ledger.tsx` | The append-only evidence timeline |
-| `components/RequestCard.tsx` | What it asked a human for, why, and what it cost |
-| `components/Spectrum.tsx` | Measured against the winning hypothesis, raw and envelope |
-| `components/Conclusion.tsx` | Root cause, action, what would change my mind |
-| `theme.css` | Tokens. The palette carries meaning — see the note at the top |
+## Layout
 
-## The one rule
+```
+src/
+  api/        types and calls: the one door to the server
+  app/        the shell: navigation, command palette (Cmd-K), new-case dialog, routes
+  lib/        session store, the case model, scenarios, formatting, plain words
+  data/       the evaluation run's figures
+  styles/     tokens.css (every colour and size), base.css, ui.css (the components)
+  ui/         kit.tsx (components), charts.tsx (SVG charts), QrCode.tsx
+  pages/      one file per page; pages/case/ holds the case page's panels
+```
 
-**Every frame is a state the API returned.** Playback controls the order things
-are revealed in, never their values. Getting a belief *trajectory* rather than
-just a verdict is why `run.ts` walks the real endpoints — `/replay` for the
-values the rig oracle produced, then `/investigations` and `.../evidence` to step
-through the same case one round at a time — instead of interpolating between two
-snapshots. Nothing in here computes a posterior, a correlation or an information
-gain. If the UI would have to calculate something to display it, that calculation
-belongs in the engine, where it is tested and can be argued with.
+## The rules it keeps
 
-The one assumption the UI states rather than reads is the opening frame: the
-engine starts from a uniform prior over its candidates
-(`Investigation.__init__`), and the API does not serialise priors. It is labelled
-as such on screen.
+**Every number on screen is one the server returned**, or one of the evaluation
+run's figures in `src/data/evaluation.ts`. Nothing here computes a posterior, a
+correlation or an information gain. If the UI would have to calculate something
+to display it, that calculation belongs in the engine, where it is tested and can
+be argued with.
+
+**Colour has one meaning each** (`styles/tokens.css`): blue is the engine's voice
+and the measurement it asks for; violet is anything a language model did or
+wrote; cyan is a simulation; green, amber and red are an outcome, something
+waiting on a person, and a hazard.
+
+**Two voices are never mixed.** The engine's sentences carry "the engine's
+words". A language model's sentences carry the model's name, and the ones the
+sentence check removed are shown struck out with the reason.
+
+**Synthetic is labelled synthetic, and a stand-in is labelled a stand-in.** The
+pump every case runs on is the engine's physics model. With no model credentials
+a scripted stand-in drives the agents' tools; every screen that shows its work
+says so.
+
+**Answer keys stay hidden.** Some responses carry what was fed in or how a
+recorded life ended. The console shows them only when a person asks ("Reveal",
+"Show what really happened").
+
+## Where state lives
+
+The server keeps cases in memory and shares them between visitors, and it returns
+an agent run once without storing it. So each browser keeps its own session in
+local storage (`lib/session.ts`): the cases it opened, the last state it read of
+each, and what people recorded on them. A case the server has since forgotten is
+still shown, marked as kept only in the browser. "Reset session" starts a new one
+with a new plant id, which also gives the pump a clean history of earlier cases.
 
 ## Still open
 
-- **The hypothesis constellation** — nodes sized by posterior, rivals shrinking.
-  Bars won for now: they read at a glance and they animate honestly. Revisit if
-  the deck needs a hero shot.
-- **The coached measurement** — the phone view, ER 2 watching sensor placement,
-  chips turning green. Gated on ADR-0005 and the 5 October kill switch.
-- **Live rig** — this view only replays synthetic captures. Pointing it at
-  `/ingest` is open work in `docs/TASKS.md`.
+- **Streaming an agent run.** The server returns a run when it has finished, so
+  the trace replays its record; it does not show it live.
+- **A work order for a case.** The server stores work orders only for forecast
+  alarms. A case's recommendation is approved on the case and the approval is
+  kept in the browser.
+- **Live rig.** The Machines page shows the sensor's status. Investigating a live
+  capture from the console is open work.
+- **Tests.** There are none for the UI; `npm run build` type-checks it.

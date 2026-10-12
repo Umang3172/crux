@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ApiError } from "../api/client";
-import { catalogue, getCase, health } from "../api/crux";
-import type { CatalogTest, Health, Investigation } from "../api/types";
+import { agentAbout, catalogue, getCase, health } from "../api/crux";
+import type { AgentAbout, CatalogTest, Health, Investigation } from "../api/types";
+import { patchCase, rememberInvestigation } from "./session";
 
 export type Async<T> = { data: T | null; error: ApiError | Error | null; loading: boolean; reload: () => void };
 
@@ -25,80 +26,144 @@ export function useAsync<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unkno
   return { data, error, loading, reload };
 }
 
-// Read once per page load: the catalogue and the model line-up don't change.
-let healthOnce: Promise<Health> | null = null;
-let catalogueOnce: Promise<CatalogTest[]> | null = null;
-
-export function useHealth() {
-  return useAsync(() => {
-    healthOnce ??= health().catch((e) => {
-      healthOnce = null;
+// Read once per page load: the catalogue, the model line-up and the agents'
+// tool lists do not change while the server runs.
+function once<T>(load: () => Promise<T>) {
+  let p: Promise<T> | null = null;
+  return () => {
+    p ??= load().catch((e) => {
+      p = null;
       throw e;
     });
-    return healthOnce;
-  }, []);
+    return p;
+  };
 }
+const healthOnce = once<Health>(health);
+const catalogueOnce = once<CatalogTest[]>(catalogue);
+const aboutOnce = once<AgentAbout>(agentAbout);
 
-export function useCatalogue() {
-  return useAsync(() => {
-    catalogueOnce ??= catalogue().catch((e) => {
-      catalogueOnce = null;
-      throw e;
-    });
-    return catalogueOnce;
-  }, []);
-}
+export const useHealth = () => useAsync(healthOnce, []);
+export const useCatalogue = () => useAsync(catalogueOnce, []);
+export const useAbout = () => useAsync(aboutOnce, []);
 
 /**
- * A case, kept fresh while it waits for a reading: the phone answers through
- * the server, so the case page learns of it by reading the case again.
+ * An engine case, kept in step with the server. While it waits for a reading
+ * it is read again every so often, because a phone answers through the server.
+ * A case the server no longer has is marked lost; its last known state stays.
  */
-export function useCase(id: string | undefined, poll: boolean, everyMs = 1500) {
-  const [inv, setInv] = useState<Investigation | null>(null);
-  const [error, setError] = useState<ApiError | Error | null>(null);
-  const live = useRef(true);
-
-  const load = useCallback(async () => {
-    if (!id) return;
+export function useLiveCase(id: string | undefined, enabled: boolean, poll: boolean) {
+  const [error, setError] = useState<Error | null>(null);
+  const load = useCallback(async (): Promise<Investigation | null> => {
+    if (!id) return null;
     try {
-      const next = await getCase(id);
-      if (live.current) {
-        setInv(next);
-        setError(null);
-      }
+      const inv = await getCase(id);
+      rememberInvestigation(inv);
+      setError(null);
+      return inv;
     } catch (e) {
-      if (live.current) setError(e as Error);
+      if (e instanceof ApiError && e.status === 404) patchCase(id, { lost: true });
+      else setError(e as Error);
+      return null;
     }
   }, [id]);
 
   useEffect(() => {
-    live.current = true;
-    setInv(null);
-    void load();
-    return () => {
-      live.current = false;
-    };
-  }, [load]);
+    if (enabled) void load();
+  }, [enabled, load]);
 
   useEffect(() => {
-    if (!poll || !id) return;
-    const t = window.setInterval(load, everyMs);
+    if (!enabled || !poll) return;
+    const t = window.setInterval(load, 1500);
     return () => window.clearInterval(t);
-  }, [poll, id, everyMs, load]);
+  }, [enabled, poll, load]);
 
-  return { inv, setInv, error, reload: load };
+  return { error, reload: load };
 }
 
-/** Respect the visitor's reduced-motion setting everywhere motion explains something. */
-export function useReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false,
-  );
-  useEffect(() => {
-    const m = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = () => setReduce(m.matches);
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
+/** The width of an element, for charts drawn to the pixel. */
+export function useWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
+  const ref = useRef<T | null>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const ro = new ResizeObserver((entries) => setWidth(Math.round(entries[0].contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
-  return reduce;
+  return [ref, width];
+}
+
+export function useHotkey(test: (e: KeyboardEvent) => boolean, run: () => void) {
+  const fn = useRef(run);
+  fn.current = run;
+  const match = useRef(test);
+  match.current = test;
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (match.current(e)) {
+        e.preventDefault();
+        fn.current();
+      }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+}
+
+export type Theme = "dark" | "light";
+const THEME_KEY = "crux.theme";
+
+function storedTheme(): Theme {
+  try {
+    const t = window.localStorage.getItem(THEME_KEY);
+    if (t === "dark" || t === "light") return t;
+  } catch {
+    /* fall through */
+  }
+  return "dark";
+}
+
+export function applyStoredTheme() {
+  document.documentElement.dataset.theme = storedTheme();
+  // index.html paints a ground colour before the bundle loads; from here the tokens own it.
+  document.documentElement.style.removeProperty("background");
+}
+
+export function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(storedTheme);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* the choice lasts for this page only */
+    }
+  }, [theme]);
+  return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
+}
+
+/** A value that climbs from 0 to `count`, one step at a time: used to replay a finished run in order. */
+export function useStepper(count: number, everyMs: number, key: string): [number, () => void, boolean] {
+  const [n, setN] = useState(count);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    setN(count);
+    setPlaying(false);
+  }, [count, key]);
+  useEffect(() => {
+    if (!playing) return;
+    if (n >= count) {
+      setPlaying(false);
+      return;
+    }
+    const t = window.setTimeout(() => setN((x) => x + 1), everyMs);
+    return () => window.clearTimeout(t);
+  }, [playing, n, count, everyMs]);
+  const play = useCallback(() => {
+    setN(0);
+    setPlaying(true);
+  }, []);
+  return [n, play, playing];
 }
