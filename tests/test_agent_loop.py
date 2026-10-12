@@ -507,3 +507,21 @@ def test_the_screen_is_told_which_agent_made_each_call():
     wrote = next(step for step in run["steps"] if step["tool"] == "propose_suspect")
     assert "Taken from K" in wrote["asked"]
     assert run["case"]["status"] == "concluded"
+
+
+def test_a_gemini_model_retries_when_capacity_is_short() -> None:
+    # Gemini on Google Cloud answers 429 when shared capacity runs short and the
+    # same call goes through moments later; one such answer must not hand the
+    # case to the offline stand-in.
+    from google.adk.models import Gemini
+
+    from hypothesis_engine.agents.investigator import GEMINI_ATTEMPTS, with_retries
+
+    model = with_retries("gemini-3.8-flash")
+    assert isinstance(model, Gemini)
+    assert model.model == "gemini-3.8-flash"
+    assert model.retry_options is not None
+    assert model.retry_options.attempts == GEMINI_ATTEMPTS > 1
+
+    stand_in = object()
+    assert with_retries(stand_in) is stand_in

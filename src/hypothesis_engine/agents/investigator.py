@@ -56,6 +56,16 @@ MAX_MODEL_CALLS = 30
 #: to revisit once a real Gemini case has been timed.
 MAX_SECONDS = 120.0
 
+#: Tries per Gemini request, the first included, and the first pause before a
+#: retry (it doubles, up to the cap). Gemini on Google Cloud answers 429
+#: RESOURCE_EXHAUSTED when shared capacity runs short, and the same call goes
+#: through moments later: on 13 Oct 2026 two runs failed within 11 s and the next
+#: completed. Without a retry one such answer hands the whole case to the
+#: offline stand-in. Four tries pause about 2 + 4 + 8 s, inside MAX_SECONDS.
+GEMINI_ATTEMPTS = 4
+GEMINI_FIRST_PAUSE_S = 2.0
+GEMINI_MAX_PAUSE_S = 8.0
+
 INSTRUCTION = """\
 You are the investigator on a rotating-machine fault case. The case id is {case_id}.
 You act only through the tools. The physics engine owns every belief: you can read beliefs, never set them.
@@ -149,6 +159,24 @@ def critic_for(model: Any) -> Any:
     return ScriptedCritic() if isinstance(model, ScriptedInvestigator) else model
 
 
+def with_retries(model: Any) -> Any:
+    """A Gemini model id as ADK's Gemini model, retrying when capacity is
+    short. Any other model (the offline stand-in, a test's) is used as given."""
+    if not isinstance(model, str):
+        return model
+    from google.adk.models import Gemini
+    from google.genai import types
+
+    return Gemini(
+        model=model,
+        retry_options=types.HttpRetryOptions(
+            attempts=GEMINI_ATTEMPTS,
+            initial_delay=GEMINI_FIRST_PAUSE_S,
+            max_delay=GEMINI_MAX_PAUSE_S,
+        ),
+    )
+
+
 def build_workflow(store: CaseStore, model: Any, max_rounds: int, run: InvestigationRun):
     """The graph: two agents, a gate that is plain code, and a finish."""
     from google.adk import Event, Workflow
@@ -166,14 +194,14 @@ def build_workflow(store: CaseStore, model: Any, max_rounds: int, run: Investiga
 
     investigator = LlmAgent(
         name="investigator",
-        model=model,
+        model=with_retries(model),
         instruction=INSTRUCTION,
         tools=[as_adk_tool(f) for f in tools.functions(INVESTIGATOR_TOOL_NAMES)],
         planner=planner(),
     )
     critic = LlmAgent(
         name="critic",
-        model=critic_for(model),
+        model=with_retries(critic_for(model)),
         instruction=CRITIC_INSTRUCTION,
         tools=[as_adk_tool(f) for f in tools.functions(CRITIC_TOOL_NAMES)],
         planner=planner(),
