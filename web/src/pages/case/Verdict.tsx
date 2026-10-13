@@ -1,16 +1,29 @@
-// Where the case stands, in the engine's own words. A language model's words
-// never appear in this card: they are in the report, under the model's name.
+// Where the investigation stands, in the engine's own words. A language
+// model's words never appear here: they are in the report, under its name.
 
+import { Link } from "react-router";
 import { CircleCheck, CircleHelp, Hourglass, LoaderCircle } from "lucide-react";
 import type { Conclusion, Report } from "../../api/types";
 import type { CaseModel } from "../../lib/casemodel";
 import { pct } from "../../lib/format";
 import { fault, plainSentence } from "../../lib/plain";
-import { Badge, Callout, Card, Meter } from "../../ui/kit";
+import { Badge, Callout, Card, Details, Meter, cx } from "../../ui/kit";
+import { Clamp, EngineWords } from "./bits";
 
 const line = (r: Report | null, part: string) => r?.lines.find((l) => l.part === part && l.by === "engine")?.text ?? null;
 
-export function VerdictCard({ model, conclusion, report }: { model: CaseModel; conclusion: Conclusion | null; report: Report | null }) {
+function Row({ label, children, strong }: { label: string; children: string; strong?: boolean }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd className={strong ? "strong" : undefined}>
+        <Clamp lines={2}>{children}</Clamp>
+      </dd>
+    </>
+  );
+}
+
+export function VerdictCard({ model, conclusion, report, className }: { model: CaseModel; conclusion: Conclusion | null; report: Report | null; className?: string }) {
   const leader = model.leader;
 
   if (model.status === "concluded" && leader) {
@@ -22,131 +35,104 @@ export function VerdictCard({ model, conclusion, report }: { model: CaseModel; c
     const limit = conclusion?.limit || line(report, "limit");
     const caveat = conclusion?.caveat || line(report, "caveat");
     const unseen = model.suspects.filter((s) => s.state === "unseen");
+    const flags = [limit && "limit", unseen.length > 0 && "cannot exclude", caveat && "caveat"].filter((x): x is string => !!x);
     return (
-      <Card tone="ok" title="Verdict" icon={<CircleCheck size={15} />} actions={<Badge tone="accent">the engine's words</Badge>}>
-        <div className="verdict">
-          <div>
+      <Card tone="ok" className={cx("vd", className)} title="Verdict" icon={<CircleCheck size={15} />} actions={<EngineWords />}>
+        <div className="vd-top">
+          <div className="grow">
             <div className="eyebrow">{healthy ? "Nothing to repair" : "Cause named"}</div>
-            <h3>{f.name}</h3>
-            <div className="row row-wrap small muted" style={{ marginTop: 6 }}>
+            <h3 className="vd-name">{f.name}</h3>
+            <div className="vd-sub">
               <span className="mono">{f.technical}</span>
-              {!healthy && <span>· {f.partName}</span>}
-              {leader.origin === "written" && <Badge tone="model">written during the case</Badge>}
+              {!healthy && <span>{f.partName}</span>}
+              {leader.origin === "written" && <Badge tone="model">written by the critic</Badge>}
             </div>
           </div>
-          <div className="verdict-belief">
-            <div className="row between">
-              <span className="big">{pct(leader.belief)}</span>
-              <span className="small dim" style={{ textAlign: "right" }}>
-                belief
-                <br />
-                bar {pct(model.concludeAt)}
-              </span>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <Meter value={leader.belief ?? 0} mark={model.concludeAt} tone="ok" large />
-            </div>
+          <div className="vd-belief" data-tip={`A verdict needs ${pct(model.concludeAt)}`}>
+            <b className="num">{pct(leader.belief)}</b>
+            <Meter value={leader.belief ?? 0} mark={model.concludeAt} tone="ok" />
           </div>
         </div>
 
         {leader.origin === "written" && (
-          <div style={{ marginTop: 16 }}>
-            <Callout tone="model">
-              This cause is not on the engine's list. The critic wrote it as a suspect during the case; the physics then simulated and scored it like any other.
-              {leader.source && (
-                <>
-                  {" "}
-                  It cites <b>{leader.source}</b>.
-                </>
-              )}
-            </Callout>
-          </div>
+          <Callout tone="model">
+            Not on the engine's list. The critic wrote it; the physics simulated and scored it.
+            {leader.source && (
+              <>
+                {" "}
+                It cites <b>{leader.source}</b>.
+              </>
+            )}{" "}
+            <Link to="?tab=work">See how</Link>
+          </Callout>
         )}
 
-        <dl className="voice">
-          {why && (
-            <>
-              <dt>Why</dt>
-              <dd>{plainSentence(why)}</dd>
-            </>
-          )}
-          {action && (
-            <>
-              <dt>What to do</dt>
-              <dd className="strong">{action}</dd>
-            </>
-          )}
-          {change && (
-            <>
-              <dt>Would change this</dt>
-              <dd>{plainSentence(change)}</dd>
-            </>
-          )}
-          {limit && (
-            <>
-              <dt>Limit</dt>
-              <dd>{limit}</dd>
-            </>
-          )}
-          {unseen.length > 0 && !limit && (
-            <>
-              <dt>Cannot exclude</dt>
-              <dd>A mild case of {unseen.map((s) => fault(s.kind).name.toLowerCase()).join(", ")} would look the same in this evidence.</dd>
-            </>
-          )}
-          {caveat && (
-            <>
-              <dt>Caveat</dt>
-              <dd>{caveat}</dd>
-            </>
-          )}
-        </dl>
+        {(why || action || change) && (
+          <dl className="vd-rows">
+            {why && <Row label="Why">{plainSentence(why)}</Row>}
+            {action && (
+              <Row label="What to do" strong>
+                {action}
+              </Row>
+            )}
+            {change && <Row label="Would change it">{plainSentence(change)}</Row>}
+          </dl>
+        )}
+
+        {flags.length > 0 && (
+          <Details
+            summary={
+              <>
+                Limits and caveats
+                {flags.map((x) => (
+                  <Badge key={x} tone="warn">
+                    {x}
+                  </Badge>
+                ))}
+              </>
+            }
+          >
+            <dl className="vd-rows">
+              {limit && <Row label="Limit">{limit}</Row>}
+              {unseen.length > 0 && <Row label="Cannot exclude">{`A mild case of ${unseen.map((s) => fault(s.kind).name.toLowerCase()).join(", ")} would look the same in this evidence.`}</Row>}
+              {caveat && <Row label="Caveat">{caveat}</Row>}
+            </dl>
+          </Details>
+        )}
       </Card>
     );
   }
 
   if (model.status === "unresolved") {
     return (
-      <Card title="Verdict" icon={<CircleHelp size={15} />} actions={<Badge tone="accent">the engine's words</Badge>}>
+      <Card className={cx("vd", className)} title="Verdict" icon={<CircleHelp size={15} />} actions={<EngineWords />}>
         <div className="eyebrow">No cause named</div>
-        <h3 style={{ fontSize: "1.5rem", fontWeight: 640, letterSpacing: "-0.02em", marginTop: 4 }}>Crux will not name a cause on this evidence</h3>
-        <p className="muted" style={{ marginTop: 10, maxWidth: "80ch" }}>
+        <h3 className="vd-name">Crux will not name a cause on this evidence</h3>
+        <Clamp lines={3} className="vd-reason">
           {model.unresolvedReason ?? "Nothing on the list reached the bar."}
-        </p>
-        <div style={{ marginTop: 16 }}>
-          <Callout tone="warn">Do not open the machine on a guess. The leading suspect below is where the evidence points, not a finding.</Callout>
-        </div>
+        </Clamp>
+        <Callout tone="warn">Do not open the machine on a guess.</Callout>
         <Leaders model={model} />
+        <p className="vd-note">Where the evidence points. Not a finding.</p>
       </Card>
     );
   }
 
   const waiting = model.status === "waiting";
-  const top = model.suspects.filter((s) => s.state === "leading" || s.state === "live").slice(0, 3);
+  const top = model.suspects.filter((s) => s.state === "leading" || s.state === "live");
   return (
-    <Card tone={waiting ? "warn" : "accent"} title="Verdict" icon={waiting ? <Hourglass size={15} /> : <LoaderCircle size={15} />} actions={<Badge tone="accent">the engine's words</Badge>}>
-      <div className="eyebrow">{waiting ? "Not settled yet" : "Investigating"}</div>
-      <h3 style={{ fontSize: "1.5rem", fontWeight: 640, letterSpacing: "-0.02em", marginTop: 4 }}>
-        {top.length > 1 ? "Too close to call on this reading" : "No suspect has reached the bar"}
-      </h3>
-      <p className="muted" style={{ marginTop: 10, maxWidth: "80ch" }}>
-        {top.length > 1 && (
-          <>
-            The evidence fits “{fault(top[0].kind).name}” at {pct(top[0].belief)} and “{fault(top[1].kind).name}” at {pct(top[1].belief)}.{" "}
-          </>
-        )}
-        A verdict needs {pct(model.concludeAt)} belief, so Crux names nothing{waiting ? " and asks for the measurement that would separate them." : "."}
-      </p>
+    <Card tone={waiting ? "warn" : "accent"} className={cx("vd", className)} title="Verdict" icon={waiting ? <Hourglass size={15} /> : <LoaderCircle size={15} />}>
+      <div className="eyebrow">{waiting ? "Not settled" : "Investigating"}</div>
+      <h3 className="vd-name">{top.length > 1 ? "Too close to call" : "No suspect has reached the bar"}</h3>
       <Leaders model={model} />
     </Card>
   );
 }
 
 function Leaders({ model }: { model: CaseModel }) {
-  const top = model.suspects.slice(0, 3);
   return (
     <div className="leaders">
-      {top.map((s, i) => (
+      {model.suspects.slice(0, 3).map((s, i) => (
         <div className="leader-row" key={s.kind}>
           <span className="truncate">
             <b>{fault(s.kind).name}</b> <span className="dim mono small">{fault(s.kind).technical}</span>

@@ -18,7 +18,7 @@ export function usePlant() {
   const scans = useAsync(() => fetchScans().catch(() => null), []);
   const sensor = useAsync(() => streamStatus(LIVE_SENSOR).catch(() => null), []);
 
-  const machines = plantMachines(lives.data?.machines);
+  const machines = plantMachines(lives.data?.machines, lives.data?.synthetic);
   const data: PlantData = { cases: session.cases, tickets: tickets.data, scans: scans.data, sensor: sensor.data, running: busyMachines(shift) };
   const rows: PlantRow[] = machines.map((m) => ({ m, st: statusOf(m, data) }));
   return { session, shift, machines, rows, data, lives: lives.data, tickets, reloadTickets: tickets.reload };

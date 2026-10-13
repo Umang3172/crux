@@ -8,7 +8,8 @@ import { report as fetchReport } from "../../api/crux";
 import type { Report, ReportPart } from "../../api/types";
 import { brainOf } from "../../lib/ai";
 import { plainSentence } from "../../lib/plain";
-import { Badge, Button, Callout, Card, Empty, SkeletonRows } from "../../ui/kit";
+import { Badge, Button, Callout, Card, Empty, Hint, SkeletonRows } from "../../ui/kit";
+import { EngineWords } from "./bits";
 
 const PART: Record<ReportPart, string> = {
   hazard: "Hazard",
@@ -18,7 +19,7 @@ const PART: Record<ReportPart, string> = {
   limit: "Limit",
   caveat: "Caveat",
   action: "What to do",
-  change: "Would change this",
+  change: "Would change it",
 };
 
 function Cites({ ids, onCite }: { ids: string[]; onCite: (ids: string[]) => void }) {
@@ -26,7 +27,7 @@ function Cites({ ids, onCite }: { ids: string[]; onCite: (ids: string[]) => void
   return (
     <span className="row gap-1 row-wrap" style={{ display: "inline-flex", marginLeft: 6, verticalAlign: "middle" }}>
       {ids.map((id) => (
-        <button key={id} type="button" className="chip" onClick={() => onCite(ids)} title="Show this entry in the ledger">
+        <button key={id} type="button" className="chip" onClick={() => onCite(ids)} title="Show it in the evidence ledger">
           {id}
         </button>
       ))}
@@ -59,13 +60,11 @@ function Lines({ r, onCite }: { r: Report; onCite: (ids: string[]) => void }) {
 function Removed({ r }: { r: Report }) {
   if (r.removed.length === 0) return null;
   return (
-    <div className="col" style={{ marginTop: 14 }}>
+    <div className="col report-removed">
       <div className="row">
         <ShieldCheck size={14} className="t-danger" aria-hidden />
         <h3>Removed by the check</h3>
-        <span className="dim small">
-          {r.removed.length} sentence{r.removed.length > 1 ? "s" : ""} the evidence does not back
-        </span>
+        <span className="dim small">{r.removed.length} the evidence does not back</span>
       </div>
       {r.removed.map((x, i) => (
         <div className="removed" key={i}>
@@ -100,35 +99,32 @@ export function ReportCard({ caseId, report, loading, lost, onCite }: { caseId: 
     <Card
       title="Report"
       icon={<FileText size={15} />}
-      sub={report ? (report.explained_by ? `explained by ${writer?.live ? writer.name : report.explained_by}` : "engine only") : undefined}
       actions={
         report && (
-          <Button size="sm" icon={<FlaskConical size={13} />} busy={busy} onClick={runDemo} disabled={lost}>
-            Test the sentence check
-          </Button>
+          <>
+            {report.explained_by ? <Badge tone="model">{writer?.live ? writer.name : report.explained_by}</Badge> : <EngineWords />}
+            <Hint label="About the sentence check">Every sentence a language model writes must cite evidence. The check removes any the evidence does not back, and shows why.</Hint>
+            <Button size="sm" icon={<FlaskConical size={13} />} busy={busy} onClick={runDemo} disabled={lost}>
+              Test the check
+            </Button>
+          </>
         )
       }
+      foot={report && !report.explained_by ? "No language model is on: these are the engine's sentences only." : undefined}
     >
       {loading && !report ? (
         <SkeletonRows rows={4} />
       ) : !report ? (
-        <Empty left title="No report on this server">
-          {lost ? "The server restarted and no longer holds this case, so it cannot write the report again." : "The report could not be read."}
-        </Empty>
+        <Empty left title={lost ? "Not on the server any more" : "The report could not be read"} />
       ) : (
         <>
           <Lines r={report} onCite={onCite} />
           {report.revisions > 0 && (
-            <p className="small dim" style={{ marginTop: 10 }}>
-              The model was sent back {report.revisions} time{report.revisions > 1 ? "s" : ""} to rewrite; {report.first_removed} sentence{report.first_removed === 1 ? "" : "s"} failed the check on the first draft.
+            <p className="small dim report-rev">
+              Sent back {report.revisions} time{report.revisions > 1 ? "s" : ""} to rewrite · {report.first_removed} sentence{report.first_removed === 1 ? "" : "s"} failed the first check
             </p>
           )}
           <Removed r={report} />
-          {!report.explained_by && (
-            <p className="small dim" style={{ marginTop: 12 }}>
-              No language model is on for explanations, so the engine's sentences are the whole report. When one is, each of its sentences must cite evidence and is checked before it is shown.
-            </p>
-          )}
         </>
       )}
 
@@ -139,14 +135,13 @@ export function ReportCard({ caseId, report, loading, lost, onCite }: { caseId: 
       )}
 
       {demo && (
-        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-          <div className="row row-wrap" style={{ marginBottom: 8 }}>
+        <div className="report-demo">
+          <div className="row row-wrap">
             <h3>The check at work</h3>
+            <Badge tone="warn">demonstration</Badge>
             <Badge tone="model">{demo.explained_by || "a test writer"}</Badge>
           </div>
-          <p className="small muted" style={{ marginBottom: 10 }}>
-            This is a demonstration, not part of the case: a writer that makes false claims on purpose was given the same evidence. What survived and what was thrown out is below.
-          </p>
+          <p className="small muted">Not part of this investigation: a writer told to make false claims got the same evidence.</p>
           <Lines r={{ ...demo, lines: demo.lines.filter((l) => l.by !== "engine") }} onCite={onCite} />
           <Removed r={demo} />
         </div>

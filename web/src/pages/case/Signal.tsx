@@ -3,7 +3,7 @@
 
 import { AudioWaveform } from "lucide-react";
 import { capture, spectrum } from "../../api/crux";
-import type { FaultKind } from "../../api/types";
+import type { Capture, FaultKind, RunParams, Spectrum } from "../../api/types";
 import type { CaseModel } from "../../lib/casemodel";
 import { num, rpm } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
@@ -11,7 +11,23 @@ import { fault } from "../../lib/plain";
 import { isOnList } from "../../lib/scenarios";
 import type { CaseEntry } from "../../lib/session";
 import { SpectrumChart, Waveform, type Marker } from "../../ui/charts";
-import { Card, Empty, Seg, SkeletonRows, SourceTag } from "../../ui/kit";
+import { Card, Empty, Hint, Seg, SkeletonRows, SourceTag } from "../../ui/kit";
+
+// The same request always draws the same picture, so a tab opened again does not ask twice.
+const spectra = new Map<string, Promise<Spectrum | null>>();
+const captures = new Map<string, Promise<Capture | null>>();
+const once = <T,>(store: Map<string, Promise<T>>, key: string, load: () => Promise<T>) => {
+  let p = store.get(key);
+  if (!p) {
+    p = load();
+    p.catch(() => store.delete(key));
+    store.set(key, p);
+  }
+  return p;
+};
+type SpecParams = RunParams & { fault: FaultKind; hypothesis: FaultKind; band: "raw" | "envelope" };
+export const spectrumOf = (p: SpecParams) => once(spectra, JSON.stringify(p), () => spectrum(p));
+const captureOf = (p: RunParams & { fault: FaultKind }) => once(captures, JSON.stringify(p), () => capture(p));
 
 /** The lines the engine predicted for this machine, read from its ledger. */
 function markers(model: CaseModel): Marker[] {
@@ -34,8 +50,8 @@ export function SignalCard({ model, entry, picked, band, onBand }: { model: Case
   const hypothesis = picked && isOnList(picked) ? picked : "healthy";
   const run = { fault: p.fault as FaultKind, severity: p.severity, seed: p.seed, extra_noise: p.extra_noise, rpm: p.rpm };
 
-  const spec = useAsync(() => (drawable ? spectrum({ ...run, hypothesis: hypothesis as FaultKind, band }) : Promise.resolve(null)), [entry.id, hypothesis, band, drawable]);
-  const cap = useAsync(() => (drawable ? capture(run) : Promise.resolve(null)), [entry.id, drawable]);
+  const spec = useAsync(() => (drawable ? spectrumOf({ ...run, hypothesis: hypothesis as FaultKind, band }) : Promise.resolve(null)), [entry.id, hypothesis, band, drawable]);
+  const cap = useAsync(() => (drawable ? captureOf(run) : Promise.resolve(null)), [entry.id, drawable]);
 
   return (
     <Card
@@ -53,45 +69,35 @@ export function SignalCard({ model, entry, picked, band, onBand }: { model: Case
             ]}
             label="Spectrum"
           />
+          <Hint label="About this chart">
+            Pick a suspect above to simulate another. Each trace is peak-held in 2 Hz bins and log-scaled to its own peak. Dashed lines are the frequencies the physics predicts at {rpm(model.rpm)}.
+          </Hint>
         </>
       }
+      foot={drawable && spec.data ? "Shape, not level: each trace is scaled to its own peak." : undefined}
     >
       {!drawable ? (
-        <Empty left title="No picture for this case">
-          The server draws this comparison only for a fault on the engine's own list. This machine was given one that is not on it.
-        </Empty>
+        <Empty left title="No picture for this reading" />
       ) : spec.loading && !spec.data ? (
         <SkeletonRows rows={5} />
       ) : !spec.data ? (
-        <Empty left title="This server does not draw spectra">
-          The comparison needs the route the deployed server adds; the API alone does not have it.
-        </Empty>
+        <Empty left title="No spectrum on this server" />
       ) : (
-        <>
-          <div className="row row-wrap between" style={{ marginBottom: 4 }}>
-            <span className="muted">
-              Simulated suspect: <b style={{ color: "var(--sim)" }}>{fault(hypothesis).name}</b> <span className="dim">· choose another above</span>
-            </span>
-          </div>
-          <SpectrumChart
-            freq={spec.data.freq_hz}
-            markers={markers(model)}
-            series={[
-              { id: "real", label: "Measured", values: spec.data.real, tone: "text", fill: true },
-              { id: "sim", label: `Simulated: ${fault(hypothesis).name.toLowerCase()}`, values: spec.data.simulated, tone: "sim" },
-            ]}
-          />
-          <p className="small dim" style={{ marginTop: 8 }}>
-            Each trace is peak-held in 2 Hz bins and log-scaled to its own peak, so the chart compares shape, not level. Dashed lines are the frequencies the physics predicts for this machine at {rpm(model.rpm)}.
-          </p>
-        </>
+        <SpectrumChart
+          freq={spec.data.freq_hz}
+          markers={markers(model)}
+          series={[
+            { id: "real", label: "Measured", values: spec.data.real, tone: "text", fill: true },
+            { id: "sim", label: `Simulated: ${fault(hypothesis).name.toLowerCase()}`, values: spec.data.simulated, tone: "sim" },
+          ]}
+        />
       )}
       {cap.data && (
-        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
-          <div className="row between small" style={{ marginBottom: 4 }}>
+        <div className="signal-wave">
+          <div className="row between small">
             <span className="muted">The capture, first {num(cap.data.waveform.length / cap.data.sample_rate_hz, 2)} s</span>
             <span className="dim num">
-              level {num(cap.data.rms, 2)} rms{cap.data.temperature_c !== null ? ` · housing ${num(cap.data.temperature_c, 1)} °C` : ""}
+              {num(cap.data.rms, 2)} rms{cap.data.temperature_c !== null ? ` · housing ${num(cap.data.temperature_c, 1)} °C` : ""}
             </span>
           </div>
           <Waveform values={cap.data.waveform} />

@@ -1,6 +1,6 @@
 // The agents at work, drawn as it happens: which agent holds the case, which
 // tool it calls, where the call goes and what comes back. Every packet on the
-// drawing is one recorded tool call; nothing moves that the run did not do.
+// drawing is one recorded tool call; nothing moves that the investigation did not do.
 //
 // Violet is a model's call. Blue is the engine's answer.
 
@@ -100,8 +100,8 @@ export function AgentStage({
   const used = (agent: string, tool: string) => steps.slice(0, Math.max(0, play.at)).some((s) => s.agent === agent && s.tool === tool);
 
   return (
-    <div className={cx("stage", compact && "compact")}>
-      <svg viewBox="0 0 760 292" role="img" aria-label="The agents, the tools they call and the engine that answers">
+    <div className={cx("stage", compact && "compact", !play.playing && !streaming && "paused")}>
+      <svg viewBox="0 0 760 292" role="img" aria-label="Crux's AI investigators, the tools they call and the engine that answers">
         {Object.entries(LEG)
           .filter(([id]) => id !== "invDocs")
           .map(([id, leg]) => (
@@ -154,11 +154,11 @@ export function AgentStage({
 
         <g className={cx("stage-node", "side", hot("instrument") && "hot")}>
           <rect x={35} y={237} width={150} height={30} rx={15} />
-          <text x={110} y={compact ? 258 : 256}>{compact ? "Instrument" : "The pump's instrument"}</text>
+          <text x={110} y={compact ? 258 : 256}>{compact ? "Instrument" : "Model's instrument"}</text>
         </g>
         <g className={cx("stage-node", "side", hot("memory") && "hot")}>
           <rect x={305} y={247} width={150} height={30} rx={15} />
-          <text x={380} y={compact ? 268 : 266}>Earlier cases</text>
+          <text x={380} y={compact ? 268 : 266}>{compact ? "History" : "Earlier investigations"}</text>
         </g>
         <g className={cx("stage-node", "side", hot("docs") && "hot")}>
           <rect x={575} y={237} width={150} height={30} rx={15} />
@@ -175,11 +175,11 @@ export function AgentStage({
 
       <div className="stage-cap" aria-live="polite">
         {!step ? (
-          <span className="dim">{streaming ? "The case is open. Waiting for the first call…" : "Press play to watch the run."}</span>
+          <span className="dim">{streaming ? "Waiting for the first call…" : "Press play to watch."}</span>
         ) : play.beat === "handoff" ? (
           <span>
-            <b>The gate</b> hands the case to the <b className={step.agent === "critic" ? "t-model" : "t-accent"}>{AGENT_NAME[step.agent]?.toLowerCase()}</b>
-            {step.agent === "critic" && <span className="dim"> · something in the capture is explained by no suspect</span>}
+            <b>The gate</b> hands over to the <b className={step.agent === "critic" ? "t-model" : "t-accent"}>{AGENT_NAME[step.agent]?.toLowerCase()}</b>
+            {step.agent === "critic" && <span className="dim"> · something no suspect explains</span>}
           </span>
         ) : (
           <>
@@ -189,8 +189,8 @@ export function AgentStage({
                 {AGENT_NAME[step.agent] ?? step.agent}
               </span>
               <code>{step.tool}</code>
-              {step.kind === "says" && <span className="dim small">narration, never evidence</span>}
-              {waiting && <span className="dim small">· waiting for the model…</span>}
+              {step.kind === "says" && <span className="dim small">narration, not evidence</span>}
+              {waiting && <span className="dim small">· waiting…</span>}
             </div>
             {!compact && <div className={step.kind === "says" ? "stage-said" : "stage-asked"}>{plainSentence(step.asked)}</div>}
             {answered && (
@@ -220,15 +220,15 @@ export function AgentStage({
 
       {!compact && controls && (
         <div className="stage-bar">
-          <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={controls.restart} aria-label="Play the run from the start" />
+          <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={controls.restart} aria-label="Replay from the start" />
           <Button size="sm" variant="ghost" icon={<SkipBack size={13} />} onClick={() => controls.seek(play.at - 1)} disabled={play.at <= 0} aria-label="Previous call" />
           <Button size="sm" icon={play.playing ? <Pause size={13} /> : <PlayIcon size={13} />} onClick={play.playing ? controls.pause : play.ended ? controls.restart : controls.start}>
             {play.playing ? "Pause" : play.ended ? "Replay" : "Play"}
           </Button>
           <Button size="sm" variant="ghost" icon={<SkipForward size={13} />} onClick={() => controls.seek(play.at + 1)} disabled={play.at >= steps.length - 1} aria-label="Next call" />
-          <input type="range" min={0} max={Math.max(0, steps.length - 1)} value={Math.max(0, play.at)} onChange={(e) => controls.seek(Number(e.target.value))} aria-label="Step through the run" />
+          <input type="range" min={0} max={Math.max(0, steps.length - 1)} value={Math.max(0, play.at)} onChange={(e) => controls.seek(Number(e.target.value))} aria-label="Step through the investigation" />
           <span className="num dim small nowrap">
-            call {Math.max(0, play.at + 1)} of {steps.length}
+            step {Math.max(0, play.at + 1)} of {steps.length}
             {streaming && "+"}
           </span>
         </div>

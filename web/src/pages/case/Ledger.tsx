@@ -1,12 +1,12 @@
-// The evidence ledger: every entry the case rests on, in the order it was
-// written, with where each came from.
+// The evidence ledger: every entry the investigation rests on, in the order it
+// was written, with where each came from.
 
 import { useEffect, useRef, useState } from "react";
 import { Database } from "lucide-react";
 import type { CaseModel } from "../../lib/casemodel";
 import { num } from "../../lib/format";
 import { plainSentence } from "../../lib/plain";
-import { Badge, Card, Seg, cx, type Tone } from "../../ui/kit";
+import { Badge, Card, Hint, Seg, cx, type Tone } from "../../ui/kit";
 
 export const SOURCE: Record<string, { label: string; tone: Tone }> = {
   sensor: { label: "sensor", tone: "neutral" },
@@ -25,7 +25,7 @@ export function LedgerCard({ model, cited }: { model: CaseModel; cited: string[]
     if (cited.length === 0) return;
     setFilter("all");
     // Wait for the filter to render before looking for the row.
-    const t = window.setTimeout(() => body.current?.querySelector("tr.on")?.scrollIntoView({ block: "center", behavior: "smooth" }), 30);
+    const t = window.setTimeout(() => body.current?.querySelector("tr.on")?.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
     return () => window.clearTimeout(t);
   }, [cited]);
 
@@ -37,24 +37,26 @@ export function LedgerCard({ model, cited }: { model: CaseModel; cited: string[]
       id="ledger"
       title="Evidence ledger"
       icon={<Database size={15} />}
-      sub={`${model.ledger.length} entries, append-only`}
       flush
       actions={
-        <Seg
-          value={filter}
-          onChange={setFilter}
-          label="Filter by source"
-          options={[
-            { id: "all", label: "All" },
-            { id: "sensor", label: `Sensor ${count("sensor")}` },
-            { id: "physics", label: `Physics ${count("physics")}` },
-            { id: "virtual_experiment", label: `Experiments ${count("virtual_experiment")}` },
-            { id: "human_measurement", label: `People ${count("human_measurement")}` },
-          ]}
-        />
+        <>
+          <Seg
+            value={filter}
+            onChange={setFilter}
+            label="Filter by source"
+            options={[
+              { id: "all", label: `All ${model.ledger.length}` },
+              { id: "sensor", label: `Sensor ${count("sensor")}` },
+              { id: "physics", label: `Physics ${count("physics")}` },
+              { id: "virtual_experiment", label: `Experiments ${count("virtual_experiment")}` },
+              { id: "human_measurement", label: `People ${count("human_measurement")}` },
+            ]}
+          />
+          <Hint label="About the ledger">Append-only. Every belief and every sentence in the report cites entries here.</Hint>
+        </>
       }
     >
-      <div className="table-wrap" style={{ maxHeight: 420, overflowY: "auto" }}>
+      <div className="table-wrap">
         <table className="table compact">
           <thead>
             <tr>
@@ -88,7 +90,7 @@ export function LedgerCard({ model, cited }: { model: CaseModel; cited: string[]
             {rows.length === 0 && (
               <tr>
                 <td colSpan={4} className="dim-cell">
-                  No entry from this source.
+                  None from this source.
                 </td>
               </tr>
             )}

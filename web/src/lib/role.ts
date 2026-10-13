@@ -7,8 +7,8 @@ import { useSyncExternalStore } from "react";
 export type Role = "control" | "crew" | "manager";
 
 export const ROLES: { id: Role; label: string; who: string; home: string }[] = [
-  { id: "control", label: "Control room", who: "The monitoring team: which machine needs someone, and what Crux is doing about it.", home: "Plant" },
-  { id: "crew", label: "Maintenance", who: "Technicians: the measurements Crux is asking for, and the repairs to do and check.", home: "My work" },
+  { id: "control", label: "Control room", who: "The monitoring team: which machine needs someone, and what Crux is doing.", home: "Plant" },
+  { id: "crew", label: "Maintenance", who: "Technicians: the measurements Crux needs, and the repairs to do and check.", home: "My work" },
   { id: "manager", label: "Manager", who: "Whoever signs off: the decisions waiting, and how the plant is doing.", home: "Summary" },
 ];
 
@@ -32,6 +32,9 @@ const subscribe = (l: () => void) => {
 };
 
 export const useRole = () => useSyncExternalStore(subscribe, () => role, () => role);
+
+/** The view right now, for code outside a component. */
+export const getRole = () => role;
 
 export function setRole(next: Role) {
   role = next;

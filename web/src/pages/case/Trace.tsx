@@ -1,5 +1,5 @@
-// What did the work. For an agent run: every tool call, by which agent, and
-// the physics' answer to it. For an engine case: the engine's own log.
+// What did the work. For an AI investigation: every tool call, by which
+// investigator, and the physics' answer to it. For the engine: its own log.
 
 import { Bot, CornerDownRight, ScrollText, Search, Sparkles } from "lucide-react";
 import type { AgentAbout, AgentRun, AgentStep } from "../../api/types";
@@ -8,7 +8,8 @@ import { num } from "../../lib/format";
 import { isOpeningRead } from "../../lib/liveruns";
 import { plainSentence } from "../../lib/plain";
 import { ENGINE_MACHINE_NAME } from "../../lib/scenarios";
-import { Badge, Card, cx } from "../../ui/kit";
+import { Badge, Card, Hint, cx } from "../../ui/kit";
+import { EngineWords } from "./bits";
 
 type Call = AgentStep & { args: Record<string, unknown>; n: number };
 type Turn = { agent: AgentStep["agent"]; calls: Call[] };
@@ -29,7 +30,7 @@ export function turnsOf(run: Pick<AgentRun, "steps" | "tool_calls">): Turn[] {
 }
 
 const WHY: Record<string, string> = {
-  critic: "called by the gate: something in the capture is explained by no suspect",
+  critic: "called by the gate: something no suspect explains",
 };
 
 export function AgentTrace({
@@ -53,52 +54,36 @@ export function AgentTrace({
   const turns = turnsOf(run);
   const brain = runBrain(run.model, run.live);
   const limit = upTo ?? Infinity;
+  const critics = turns.filter((t) => t.agent === "critic").length;
 
   return (
     <Card
+      className="worklog"
       title="Work log"
       icon={<Bot size={15} />}
-      sub="every step Crux's AI took, and the physics' answer"
       flush
-      foot={
-        running ? (
-          "Calls appear here as the server reports them."
-        ) : (
-          <>
-            {tookMs ? `The run took ${num(tookMs / 1000, 1)} s. ` : ""}
-            {about && `Limits: ${about.limits.rounds} rounds, ${about.limits.model_calls} model calls, ${about.limits.seconds} s.`}
-          </>
+      actions={
+        about && (
+          <Hint label="About the work log">
+            Every call Crux's AI made, and the physics' answer. Limits: {about.limits.rounds} rounds, {about.limits.model_calls} model calls, {about.limits.seconds} s.
+          </Hint>
         )
       }
+      foot={running ? "Calls appear as the server reports them." : undefined}
     >
       {!running && (
-        <>
-          <div className="trace-head">
-            <Badge tone={brain.live ? "ok" : "neutral"} dot title={run.model}>
-              {brain.name}
-            </Badge>
-            {!run.live && <Badge title={run.model}>no Gemini credentials on this server</Badge>}
-            {run.fallback && <Badge tone="warn">fell back: {run.fallback}</Badge>}
-            {run.stopped && <Badge tone="warn">stopped: {run.stopped}</Badge>}
-          </div>
-          <div className="budget">
-            <div>
-              <b>
-                {run.rounds}
-                {about && <span className="dim" style={{ fontWeight: 450 }}> of {about.limits.rounds}</span>}
-              </b>
-              <span>rounds</span>
-            </div>
-            <div>
-              <b>{run.tool_calls.length}</b>
-              <span>tool calls</span>
-            </div>
-            <div>
-              <b>{turns.filter((t) => t.agent === "critic").length}</b>
-              <span>critic turns</span>
-            </div>
-          </div>
-        </>
+        <div className="trace-head">
+          <Badge tone={brain.live ? "ok" : "neutral"} dot title={run.model}>
+            {brain.name}
+          </Badge>
+          {run.fallback && <Badge tone="warn">fell back: {run.fallback}</Badge>}
+          {run.stopped && <Badge tone="warn">stopped: {run.stopped}</Badge>}
+          <span className="trace-sum num">
+            {run.rounds}
+            {about ? ` of ${about.limits.rounds}` : ""} rounds · {run.tool_calls.length} calls · {critics} critic turn{critics === 1 ? "" : "s"}
+            {tookMs ? ` · ${num(tookMs / 1000, 1)} s` : ""}
+          </span>
+        </div>
       )}
       {turns.map((t, ti) => {
         const calls = t.calls.filter((c) => c.n <= limit);
@@ -110,7 +95,7 @@ export function AgentTrace({
                 {t.agent === "critic" ? <Search size={12} /> : <Bot size={12} />}
                 {t.agent === "critic" ? "Critic" : "Investigator"}
               </span>
-              <span className="turn-why">{WHY[t.agent] ?? (ti === 0 ? "opens the case" : "takes the case back")}</span>
+              <span className="turn-why">{WHY[t.agent] ?? (ti === 0 ? "opens" : "takes it back")}</span>
             </div>
             {calls.map((c) => (
               <Step key={c.n} call={c} now={c.n === current} />
@@ -123,7 +108,7 @@ export function AgentTrace({
         <div className="turn">
           <div className="turn-head">
             <span className="who" style={{ background: "var(--model-soft)", color: "var(--model)" }}>
-              <Sparkles size={12} /> The model's own notes
+              <Sparkles size={12} /> The model's notes
             </span>
           </div>
           {run.thoughts.map((t, i) => (
@@ -143,7 +128,7 @@ function Step({ call, now }: { call: Call; now?: boolean }) {
     return (
       <div className={cx("step", "says", now && "now")}>
         <div className="step-tool">
-          narrate <span className="dim" style={{ fontWeight: 450 }}>· shown as narration, never as evidence</span>
+          narrate <span className="dim" style={{ fontWeight: 450 }}>· not evidence</span>
         </div>
         <p className="step-say">{plainSentence(call.asked)}</p>
       </div>
@@ -161,7 +146,7 @@ function Step({ call, now }: { call: Call; now?: boolean }) {
       )}
       {hasArgs && (
         <details>
-          <summary>what the model sent</summary>
+          <summary>arguments sent</summary>
           <pre>{JSON.stringify(call.args, null, 2)}</pre>
         </details>
       )}
@@ -171,7 +156,7 @@ function Step({ call, now }: { call: Call; now?: boolean }) {
 
 export function EngineLog({ transcript, machine }: { transcript: string[]; machine: string }) {
   return (
-    <Card title="Engine log" icon={<ScrollText size={15} />} sub="what the engine did, in its own words" flush>
+    <Card className="enginelog" title="Engine log" icon={<ScrollText size={15} />} flush actions={<EngineWords />}>
       <ol className="log">
         {transcript.map((t, i) => (
           <li key={i}>

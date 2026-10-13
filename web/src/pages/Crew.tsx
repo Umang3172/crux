@@ -1,22 +1,25 @@
-// Maintenance: what a technician has to do. The measurements Crux is waiting
-// for, the repairs that are approved, the checks after a repair, and the
-// machines that can only be scanned.
+// Maintenance: a technician's inbox. One row per job, most urgent first, each
+// with one thing to do: the measurement Crux is waiting for, a repair that is
+// approved, a repair whose check did not pass, a work order to carry out.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { ClipboardList, Cpu, Crosshair, ScanLine, Timer, Wrench } from "lucide-react";
+import { ClipboardList, Cpu, Crosshair, ListTodo, RotateCcw, ScanLine, Timer, Wrench } from "lucide-react";
 import type { FaultKind, RunParams } from "../api/types";
+import { usePresence } from "../lib/glide";
 import { useCatalogue } from "../lib/hooks";
 import { answerWithInstrument } from "../lib/instrument";
 import { check, fault } from "../lib/plain";
-import { SITE, machineOfCase, machinePath } from "../lib/plant";
+import { SITE, machineOfCase, machinePath, standingOf } from "../lib/plant";
 import { isOnList } from "../lib/scenarios";
 import { markAnswered, rememberInvestigation } from "../lib/session";
 import { usePlant } from "../lib/useplant";
-import { Badge, Button, Callout, Card, Empty, LinkButton, PageHead, Stat } from "../ui/kit";
+import { Button, Callout, Card, CountUp, Details, Empty, Hint, LinkButton, PageHead, cx, toast } from "../ui/kit";
 import { rowsOf, type CaseRow } from "./parts";
 import "../styles/plant.css";
 import "./pages.css";
+
+type Job = { key: string; tone: "warn" | "danger" | "neutral"; icon: ReactNode; title: ReactNode; meta: ReactNode; act: ReactNode; more?: ReactNode };
 
 export default function Crew() {
   const { session, rows, tickets } = usePlant();
@@ -25,13 +28,13 @@ export default function Crew() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const found = (r: CaseRow) => r.model.status === "concluded" && !!r.model.leader && r.model.leader.kind !== "healthy";
   const measure = cases.filter((r) => r.model.status === "waiting");
-  const fixed = (r: CaseRow) => r.model.status === "concluded" && r.model.leader && r.model.leader.kind !== "healthy";
-  const repairs = cases.filter((r) => fixed(r) && r.entry.approved && !r.entry.repair);
+  const repairs = cases.filter((r) => found(r) && r.entry.approved && !r.entry.repair);
   const recheck = cases.filter((r) => r.entry.repair && r.entry.repair.result.outcome !== "verified");
-  const coming = cases.filter((r) => fixed(r) && !r.entry.approved);
+  const coming = cases.filter((r) => found(r) && !r.entry.approved);
   const orders = (tickets.data ?? []).filter((t) => t.status === "approved");
-  const scan = rows.filter((r) => r.m.mode === "camera");
+  const scans = rows.filter((r) => r.m.mode === "camera");
 
   async function take(r: CaseRow) {
     setBusy(r.entry.id);
@@ -41,6 +44,7 @@ export default function Crew() {
       const out = await answerWithInstrument(r.entry.id, r.entry.params as RunParams & { fault: FaultKind });
       rememberInvestigation(out.inv);
       if (!out.already && out.value !== undefined && test) markAnswered(r.entry.id, test, "virtual instrument", "here", out.value);
+      toast(out.already ? "Already answered elsewhere." : `Reading sent. Crux carries on with ${machineOfCase(r.entry).short}.`, out.already ? "accent" : "ok");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -48,161 +52,173 @@ export default function Crew() {
     }
   }
 
+  const jobs: Job[] = [
+    ...recheck.map((r) => ({
+      key: r.entry.id,
+      tone: "danger" as const,
+      icon: <RotateCcw size={15} />,
+      title: <Link to={`/cases/${r.entry.id}?tab=after`}>{fault(r.model.leader!.kind).name}</Link>,
+      meta: `${machineOfCase(r.entry).name} · check after repair: ${r.entry.repair!.result.outcome.replace(/_/g, " ")}`,
+      act: (
+        <LinkButton to={`/cases/${r.entry.id}?tab=after`} size="sm" variant="primary">
+          Check repair
+        </LinkButton>
+      ),
+    })),
+    ...measure.map((r) => {
+      const w = r.model.checks.find((c) => c.status === "waiting");
+      const cat = catalogue.data?.find((t) => t.id === w?.testId);
+      const to = `/cases/${r.entry.id}?tab=summary`;
+      const model = isOnList(r.entry.params.fault) && !r.entry.lost;
+      return {
+        key: r.entry.id,
+        tone: "warn" as const,
+        icon: <Crosshair size={15} />,
+        title: <Link to={to}>{w ? check(w.testId).name : "A measurement"}</Link>,
+        meta: [machineOfCase(r.entry).name, cat && `${cat.effort_min} min`, cat && (cat.downtime === "none" ? "keeps running" : cat.downtime)].filter(Boolean).join(" · "),
+        act: model ? (
+          <>
+            <Button size="sm" variant="primary" icon={<Cpu size={13} />} busy={busy === r.entry.id} disabled={busy !== null} onClick={() => take(r)} title="The machine is a model: its virtual instrument takes the reading">
+              Take model reading
+            </Button>
+            <LinkButton to={to} size="sm" variant="ghost">
+              Open
+            </LinkButton>
+          </>
+        ) : (
+          <LinkButton to={to} size="sm" variant="primary">
+            Take measurement
+          </LinkButton>
+        ),
+        more: cat && (
+          <Details summary="Steps">
+            <ol>
+              {cat.procedure.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ol>
+          </Details>
+        ),
+      };
+    }),
+    ...repairs.map((r) => ({
+      key: r.entry.id,
+      tone: "warn" as const,
+      icon: <Wrench size={15} />,
+      title: <Link to={`/cases/${r.entry.id}?tab=after`}>{fault(r.model.leader!.kind).name}</Link>,
+      meta: `${machineOfCase(r.entry).name} · approved by ${r.entry.approved?.by}`,
+      act: (
+        <LinkButton to={`/cases/${r.entry.id}?tab=after`} size="sm" variant="primary">
+          Record repair
+        </LinkButton>
+      ),
+    })),
+    ...orders.map((t) => ({
+      key: t.id,
+      tone: "neutral" as const,
+      icon: <ClipboardList size={15} />,
+      title: <Link to={`/work-orders/${t.id}`}>{t.part_label}</Link>,
+      meta: `${t.machine_name} · work order ${t.id}, approved by ${t.approved_by}`,
+      act: (
+        <LinkButton to={`/work-orders/${t.id}`} size="sm" variant="primary">
+          Open work order
+        </LinkButton>
+      ),
+    })),
+    ...scans
+      .filter(({ st }) => standingOf(st) === "person" && st.next)
+      .map(({ m, st }) => ({
+        key: m.id,
+        tone: "warn" as const,
+        icon: <ScanLine size={15} />,
+        title: <Link to={st.next!.to}>{st.label}</Link>,
+        meta: m.name,
+        act: (
+          <LinkButton to={st.next!.to} size="sm" variant="primary">
+            {st.next!.label}
+          </LinkButton>
+        ),
+      })),
+  ];
+  const shown = usePresence(jobs, (j) => j.key);
+
   return (
     <div className="page">
-      <PageHead eyebrow={`${SITE.name} · Maintenance`} title="My work" sub="What Crux needs from a technician: the one measurement it cannot take itself, the repairs a manager has approved, and a check after each repair to see whether it worked." />
-
-      <div className="stats">
-        <Stat label="Measurements to take" icon={<Crosshair size={13} />} value={measure.length} sub="Crux has stopped and is waiting" />
-        <Stat label="Repairs to do" icon={<Wrench size={13} />} value={repairs.length + orders.length} sub="approved by a manager" />
-        <Stat label="Repairs to look at again" value={recheck.length} sub="the check after the repair did not pass" />
-        <Stat label="Coming, once approved" icon={<Timer size={13} />} value={coming.length} sub="faults found, waiting for a sign-off" />
-      </div>
+      <PageHead eyebrow={`${SITE.name} · Maintenance`} title="My work" sub={jobs.length ? "Most urgent first." : undefined} />
 
       {error && <Callout tone="danger">{error}</Callout>}
 
       <div className="split-even">
         <div className="col" style={{ gap: "var(--s-5)" }}>
-          <Card title="Measurements Crux is asking for" icon={<Crosshair size={15} />} sub="it will not guess; one reading settles each" flush tone={measure.length ? "warn" : undefined}>
-            {measure.length === 0 ? (
-              <Empty left title="No measurement is waiting">
-                When Crux cannot tell two causes apart, it asks for the single reading that separates them, and it appears here with its steps.
+          <Card title="To do" icon={<ListTodo size={15} />} sub={jobs.length > 0 ? <CountUp value={jobs.length} /> : undefined} flush tone={jobs.length ? "warn" : undefined}>
+            {shown.length === 0 ? (
+              <Empty left title="Nothing to do" action={session.cases.length === 0 ? <LinkButton to="/go/shift" size="sm">Start a shift</LinkButton> : <LinkButton to="/plant" size="sm">Open plant</LinkButton>}>
+                Measurements and repairs Crux needs appear here.
               </Empty>
             ) : (
-              <ul className="todo">
-                {measure.map((r) => {
-                  const w = r.model.checks.find((c) => c.status === "waiting");
-                  const cat = catalogue.data?.find((t) => t.id === w?.testId);
-                  const m = machineOfCase(r.entry);
-                  return (
-                    <li key={r.entry.id}>
+              <ul className="inbox" data-tour="crew-todo">
+                {shown.map(({ item: j, key, leaving }) => (
+                  <li key={key} className={cx("job", leaving && "leaving")}>
+                    <div className="job-in">
+                      <span className={cx("job-icon", `tone-${j.tone}`)} aria-hidden>
+                        {j.icon}
+                      </span>
                       <div>
-                        <h3>
-                          {w ? check(w.testId).name : "A measurement"} <span className="muted">on {m.name}</span>
-                        </h3>
-                        <p>
-                          {cat && (
-                            <>
-                              {cat.effort_min} min · {cat.downtime === "none" ? "the machine keeps running" : cat.downtime} ·{" "}
-                            </>
-                          )}
-                          at {w ? check(w.testId).where : "the machine"}
-                        </p>
-                        {cat && <p style={{ marginTop: 4 }}>{cat.procedure.join(" · ")}</p>}
+                        <h3>{j.title}</h3>
+                        <div className="job-meta">{j.meta}</div>
+                        {j.more}
                       </div>
-                      <div className="col" style={{ alignItems: "stretch" }}>
-                        <LinkButton to={`/cases/${r.entry.id}`} variant="primary" size="sm">
-                          Open the request
-                        </LinkButton>
-                        {isOnList(r.entry.params.fault) && !r.entry.lost && (
-                          <Button size="sm" icon={<Cpu size={13} />} busy={busy === r.entry.id} disabled={busy !== null} onClick={() => take(r)} title="This machine is a model: its own instrument takes the reading">
-                            Take it with the model's instrument
-                          </Button>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-
-          <Card title="Repairs to do" icon={<Wrench size={15} />} sub="approved; record the repair and Crux checks it" flush>
-            {repairs.length + recheck.length + orders.length === 0 ? (
-              <Empty left title="No repair is waiting">
-                A repair comes here once a manager has put their name to it.
-              </Empty>
-            ) : (
-              <ul className="todo">
-                {[...recheck, ...repairs].map((r) => (
-                  <li key={r.entry.id}>
-                    <div>
-                      <h3>
-                        {fault(r.model.leader!.kind).name} <span className="muted">on {machineOfCase(r.entry).name}</span>
-                      </h3>
-                      <p>
-                        {r.entry.repair ? <span className="t-danger">The check after the repair did not pass: {r.entry.repair.result.outcome.replace(/_/g, " ")}.</span> : <>Approved by {r.entry.approved?.by}. After the repair, take a new reading and Crux investigates it from scratch.</>}
-                      </p>
+                      <div className="job-acts">{j.act}</div>
                     </div>
-                    <LinkButton to={`/cases/${r.entry.id}`} size="sm" variant="primary">
-                      {r.entry.repair ? "Open the job" : "Record the repair"}
-                    </LinkButton>
-                  </li>
-                ))}
-                {orders.map((t) => (
-                  <li key={t.id}>
-                    <div>
-                      <h3>
-                        {t.part_label} <span className="muted">on {t.machine_name}</span>
-                      </h3>
-                      <p>Work order {t.id}, approved by {t.approved_by}. When it is done, record what was found.</p>
-                    </div>
-                    <LinkButton to={`/work-orders/${t.id}`} size="sm" variant="primary">
-                      Open the work order
-                    </LinkButton>
                   </li>
                 ))}
               </ul>
             )}
           </Card>
-        </div>
 
-        <div className="col" style={{ gap: "var(--s-5)" }}>
-          <Card title="Waiting for a sign-off" icon={<ClipboardList size={15} />} sub="not yours yet" flush>
-            {coming.length === 0 ? (
-              <Empty left title="Nothing is waiting for approval" />
-            ) : (
-              <ul className="list">
+          {coming.length > 0 && (
+            <Card title="Next, once approved" icon={<Timer size={15} />} sub={coming.length} flush>
+              <ul className="quiet-list">
                 {coming.map((r) => (
                   <li key={r.entry.id}>
-                    <Link to={`/cases/${r.entry.id}`} className="strong">
-                      {fault(r.model.leader!.kind).name}
-                    </Link>
-                    <div className="small muted">{machineOfCase(r.entry).name} · a manager has to approve the work first</div>
+                    <div className="grow">
+                      <Link to={`/cases/${r.entry.id}`} className="strong">
+                        {fault(r.model.leader!.kind).name}
+                      </Link>
+                      <small>{machineOfCase(r.entry).name}</small>
+                    </div>
+                    <span className="owner manager">Manager</span>
                   </li>
                 ))}
               </ul>
-            )}
-          </Card>
+            </Card>
+          )}
+        </div>
 
-          <Card title="Machines with no sensor" icon={<ScanLine size={15} />} sub="a phone is the only reading" flush>
-            <ul className="todo">
-              {scan.map(({ m, st }) => (
+        <div className="col" style={{ gap: "var(--s-4)" }}>
+          <Card title="No sensor" icon={<ScanLine size={15} />} sub="phone scan only" flush>
+            <ul className="quiet-list">
+              {scans.map(({ m, st }) => (
                 <li key={m.id}>
-                  <div>
-                    <h3>
-                      <Link to={machinePath(m)} style={{ color: "inherit" }}>
-                        {m.name}
-                      </Link>
-                    </h3>
-                    <p>
-                      {st.label}: {st.detail}
-                    </p>
+                  <div className="grow">
+                    <Link to={machinePath(m)} className="strong">
+                      {m.name}
+                    </Link>
+                    <small>{st.label}</small>
                   </div>
                   <LinkButton to={`/lens?machine=${encodeURIComponent(m.name)}`} size="sm" icon={<ScanLine size={13} />}>
-                    Scan it
+                    Scan with phone
                   </LinkButton>
                 </li>
               ))}
             </ul>
           </Card>
-
-          <Card title="How a job reaches you">
-            <ol className="steps">
-              <li>
-                <span>Crux investigates a reading. If it cannot tell, it asks you for <b>one measurement</b>.</span>
-              </li>
-              <li>
-                <span>When it names a cause, a <b>manager approves</b> the work. Nothing reaches you before that.</span>
-              </li>
-              <li>
-                <span>You repair it, then take a new reading. Crux says whether the fault is <b>gone</b>.</span>
-              </li>
-            </ol>
-            <div style={{ marginTop: 12 }}>
-              <Badge plain>Crux never sends a command to a machine</Badge>
-            </div>
-          </Card>
+          <p className="foot-note">
+            Crux never sends a command to a machine.
+            <Hint label="How a job reaches you">
+              Crux investigates each reading. If it cannot tell two causes apart, it asks you for one measurement. When it names a cause, a manager approves the work; after your repair, a new reading checks it.
+            </Hint>
+          </p>
         </div>
       </div>
     </div>

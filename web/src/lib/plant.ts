@@ -15,10 +15,10 @@
 import type { Tone } from "../ui/kit";
 import type { MachineSummary, ScanRow, StreamStatus, Ticket } from "../api/types";
 import { modelOf, type CaseModel } from "./casemodel";
-import { fault } from "./plain";
+import { check, fault } from "./plain";
 import type { CaseEntry } from "./session";
 
-export const SITE = { name: "Demo plant", note: "A demonstration site: its layout and machine names are made up." };
+export const SITE = { name: "Demo plant", note: "A made-up demo site. Readings from modelled machines are synthetic." };
 
 export type Mode = "model" | "life" | "live" | "camera";
 export type Kind = "pump" | "fan" | "motor" | "bearing" | "drive";
@@ -36,12 +36,14 @@ export type PlantMachine = {
   rpm?: number;
   /** The server's id for a life or a live sensor. */
   ref?: string;
+  /** The server says this life is simulated, not recorded. */
+  synthetic?: boolean;
 };
 
 export const AREAS = [
-  { id: "utilities", name: "Utilities", line: "Water, air and steam for the lines" },
-  { id: "line2", name: "Line 2 · Packaging", line: "Filling, conveying and palletising" },
-  { id: "bench", name: "Workshop and test bench", line: "Machines on trial and parts run to the end of their life" },
+  { id: "utilities", name: "Utilities", line: "Water, air and steam" },
+  { id: "line2", name: "Line 2 · Packaging", line: "Filling to palletising" },
+  { id: "bench", name: "Workshop and test bench", line: "Trials and life tests" },
 ] as const;
 
 const FIXED: PlantMachine[] = [
@@ -55,16 +57,17 @@ const FIXED: PlantMachine[] = [
 ];
 
 /** The fixed machines, then one for each life the server has on file. */
-export function plantMachines(lives: MachineSummary[] | null | undefined): PlantMachine[] {
+export function plantMachines(lives: MachineSummary[] | null | undefined, synthetic?: boolean): PlantMachine[] {
   const fromServer: PlantMachine[] = (lives ?? []).map((m) => ({
     id: `life:${m.machine}`,
     name: m.name,
     short: m.name,
-    type: `${m.parts} part${m.parts === 1 ? "" : "s"} watched over ${Math.round(m.end_h)} h`,
+    type: `${m.parts} part${m.parts === 1 ? "" : "s"} · ${Math.round(m.end_h)} h of life`,
     area: "bench",
     mode: "life",
     kind: "bearing",
     ref: m.machine,
+    synthetic,
   }));
   return [...FIXED, ...fromServer];
 }
@@ -76,10 +79,10 @@ export const machineOfCase = (entry: Pick<CaseEntry, "machine"> | undefined) => 
 export const machinePath = (m: PlantMachine) => (m.mode === "life" && m.ref ? `/lives/${m.ref}` : `/machines/${m.id}`);
 
 export const MODE: Record<Mode, { label: string; source: string; care: string }> = {
-  model: { label: "Investigated on demand", source: "engine's model · synthetic", care: "A reading is taken and Crux investigates it: it tests every suspect on a model of the machine and asks for a measurement only when it cannot tell." },
-  life: { label: "Watched over its life", source: "watched by trend", care: "Crux follows the part's health from new. When its vibration stays well above its own normal an alarm fires, with a range for how long is left." },
-  live: { label: "Live sensor", source: "live sensor", care: "A sensor streams to the server. Once a full capture is in, the same investigation runs on the real reading." },
-  camera: { label: "No sensor: phone scan", source: "no sensor", care: "Nothing is fitted. A ten-second phone video is read for motion and sound, and Crux says what to measure next." },
+  model: { label: "Investigated on demand", source: "engine's model · synthetic", care: "Crux tests every suspect on a model of the machine, and asks for a measurement only when it cannot tell." },
+  life: { label: "Watched over its life", source: "watched by trend", care: "Crux follows the part's health from new. An alarm fires when vibration stays above its own normal." },
+  live: { label: "Live sensor", source: "live sensor", care: "A sensor streams here. A full capture gets the same investigation." },
+  camera: { label: "Phone scan only", source: "no sensor", care: "Nothing is fitted. A ten-second phone video is read for motion and sound." },
 };
 
 /** What happens to a machine, in order, for each way of looking after it. */
@@ -106,6 +109,8 @@ export type MachineStatus = {
   caseId?: string;
   /** Sorts the attention list: higher needs someone sooner. */
   rank: number;
+  /** What the person whose turn it is does next, and where. */
+  next?: { label: string; to: string };
 };
 
 export type PlantData = {
@@ -117,55 +122,65 @@ export type PlantData = {
   running?: Set<string>;
 };
 
+/** The investigation page opens on the part a person needs. */
+const onCase = (id: string, tab: "summary" | "work" | "after") => `/cases/${id}?tab=${tab}`;
+
 const latestCase = (cases: CaseEntry[], machine: string) => [...cases].filter((c) => (c.machine ?? "p2") === machine).sort((a, b) => b.createdAt - a.createdAt)[0];
 
 function fromCase(entry: CaseEntry, model: CaseModel | null): MachineStatus {
   const caseId = entry.id;
-  if (!model) return { label: "Crux is investigating", detail: "testing every suspect on the model", tone: "accent", step: 1, owner: "crux", busy: true, caseId, rank: 3 };
-  if (model.hazard && !entry.hazardAck) return { label: "Hazard reported", detail: "make it safe and call a supervisor", tone: "danger", step: 1, owner: "control", caseId, rank: 10 };
+  const busy: MachineStatus = { label: "Investigating", detail: "testing every suspect", tone: "accent", step: 1, owner: "crux", busy: true, caseId, rank: 3 };
+  if (!model) return busy;
+  if (model.hazard && !entry.hazardAck) return { label: "Hazard reported", detail: "make it safe; call a supervisor", tone: "danger", step: 1, owner: "control", caseId, rank: 10, next: { label: "Open investigation", to: onCase(caseId, "summary") } };
   if (model.status === "waiting") {
-    const check = model.checks.find((c) => c.status === "waiting");
-    return { label: "Needs a measurement", detail: check ? check.name : "one measurement decides", tone: "warn", step: 2, owner: "crew", caseId, rank: 8 };
+    const w = model.checks.find((c) => c.status === "waiting");
+    return { label: "Needs a measurement", detail: w ? check(w.testId).name : "one measurement decides", tone: "warn", step: 2, owner: "crew", caseId, rank: 8, next: { label: "Take measurement", to: onCase(caseId, "summary") } };
   }
-  if (model.status === "unresolved") return { label: "No cause named", detail: "the evidence does not carry a verdict; inspect before opening it", tone: "warn", step: 1, owner: "control", caseId, rank: 6 };
+  if (model.status === "unresolved") return { label: "No cause named", detail: "inspect before opening it", tone: "warn", step: 1, owner: "control", caseId, rank: 6, next: { label: "Open investigation", to: onCase(caseId, "summary") } };
   if (model.status === "concluded" && model.leader) {
     const name = fault(model.leader.kind).name;
-    if (model.leader.kind === "healthy") return { label: "Running normally", detail: "last check found nothing wrong", tone: "ok", step: 1, owner: null, caseId, rank: 0 };
+    if (model.leader.kind === "healthy") return { label: "Normal", detail: "nothing wrong at the last check", tone: "ok", step: 1, owner: null, caseId, rank: 0 };
     if (entry.repair) {
-      const ok = entry.repair.result.outcome === "verified";
-      return ok
-        ? { label: "Repaired and verified", detail: `${name.toLowerCase()}: the check after the repair passed`, tone: "ok", step: 5, owner: null, caseId, rank: 0 }
-        : { label: "Repair not verified", detail: entry.repair.result.outcome.replace(/_/g, " "), tone: "danger", step: 5, owner: "crew", caseId, rank: 9 };
+      return entry.repair.result.outcome === "verified"
+        ? { label: "Repair verified", detail: name.toLowerCase(), tone: "ok", step: 5, owner: null, caseId, rank: 0 }
+        : { label: "Repair not verified", detail: entry.repair.result.outcome.replace(/_/g, " "), tone: "danger", step: 5, owner: "crew", caseId, rank: 9, next: { label: "Check repair", to: onCase(caseId, "after") } };
     }
-    if (entry.approved) return { label: "Repair to do", detail: `${name.toLowerCase()}: approved by ${entry.approved.by}`, tone: "warn", step: 4, owner: "crew", caseId, rank: 7 };
-    return { label: "Fault found", detail: `${name.toLowerCase()}: the work waits for approval`, tone: "warn", step: 3, owner: "manager", caseId, rank: 7 };
+    if (entry.approved) return { label: "Repair to do", detail: `${name.toLowerCase()} · approved by ${entry.approved.by}`, tone: "warn", step: 4, owner: "crew", caseId, rank: 7, next: { label: "Record repair", to: onCase(caseId, "after") } };
+    // The finding is the state: what was found, waiting for a name.
+    return { label: name, detail: "fault found; waits for sign-off", tone: "warn", step: 3, owner: "manager", caseId, rank: 7, next: { label: "Review and approve", to: onCase(caseId, "work") } };
   }
-  return { label: "Crux is investigating", detail: "", tone: "accent", step: 1, owner: "crux", busy: true, caseId, rank: 3 };
+  return busy;
 }
 
 /** Where a machine stands, from the cases, work orders, scans and sensor status that exist. */
 export function statusOf(machine: PlantMachine, data: PlantData): MachineStatus {
   if (machine.mode === "model") {
     const entry = latestCase(data.cases, machine.id);
-    if (!entry) return { label: "Not checked yet", detail: "no reading has been investigated", tone: "neutral", step: -1, owner: null, rank: 1 };
-    if (data.running?.has(machine.id)) return { label: "Crux is investigating", detail: "testing every suspect on the model", tone: "accent", step: 1, owner: "crux", busy: true, caseId: entry.id, rank: 3 };
+    if (!entry) return { label: "Not checked", detail: "no reading investigated yet", tone: "neutral", step: -1, owner: null, rank: 1 };
+    if (data.running?.has(machine.id)) return { label: "Investigating", detail: "testing every suspect", tone: "accent", step: 1, owner: "crux", busy: true, caseId: entry.id, rank: 3 };
     return fromCase(entry, modelOf(entry));
   }
   if (machine.mode === "life") {
     const mine = (data.tickets ?? []).filter((t) => t.machine === machine.ref);
     const open = mine.find((t) => t.status === "draft");
-    if (open) return { label: "Work order to approve", detail: `${open.part_label}: drafted from its alarm`, tone: "warn", step: 4, owner: "manager", rank: 7 };
-    if (mine.length) return { label: "Work order approved", detail: `approved by ${mine[mine.length - 1].approved_by}`, tone: "ok", step: 5, owner: "crew", rank: 2 };
-    return { label: "Being watched", detail: "open it to see its health against the clock", tone: "neutral", step: 0, owner: null, rank: 1 };
+    if (open) return { label: "Work order drafted", detail: open.part_label, tone: "warn", step: 4, owner: "manager", rank: 7, next: { label: "Review work order", to: `/work-orders/${open.id}` } };
+    const done = mine.filter((t) => t.status === "approved").pop();
+    // An approved work order is a technician's job until its outcome is recorded on the work order.
+    if (done) return { label: "Work order approved", detail: `approved by ${done.approved_by}`, tone: "warn", step: 5, owner: "crew", rank: 5, next: { label: "Open work order", to: `/work-orders/${done.id}` } };
+    return { label: "Watched", detail: "health followed from new", tone: "neutral", step: 0, owner: null, rank: 1 };
   }
   if (machine.mode === "live") {
     const s = data.sensor;
-    if (s && s.seconds > 0) return { label: s.ready ? "Streaming: ready" : "Streaming", detail: `${Math.round(s.seconds)} s buffered`, tone: "ok", step: s.ready ? 1 : 0, owner: null, rank: 1 };
-    return { label: "Sensor silent", detail: "no sensor is sending to this server", tone: "neutral", step: -1, owner: null, rank: 0 };
+    if (s && s.seconds > 0) return { label: s.ready ? "Capture ready" : "Sensor streaming", detail: `${Math.round(s.seconds)} s buffered`, tone: "neutral", step: s.ready ? 1 : 0, owner: null, rank: 1 };
+    return { label: "Sensor silent", detail: "no sensor is sending", tone: "neutral", step: -1, owner: null, rank: 0 };
   }
   const scan = (data.scans ?? []).find((s) => s.machine === machine.name);
-  if (scan) return { label: scan.analysed ? "Scanned" : "Scan: confirm the speed", detail: scan.summary[0] ?? "a clip is on file", tone: scan.analysed ? "ok" : "warn", step: scan.analysed ? 2 : 1, owner: scan.analysed ? null : "crew", rank: scan.analysed ? 0 : 4 };
-  return { label: "Not monitored", detail: "no sensor: scan it with a phone", tone: "neutral", step: -1, owner: null, rank: 0 };
+  if (scan) {
+    return scan.analysed
+      ? { label: "Scanned", detail: scan.summary[0] ?? "a clip is on file", tone: "neutral", step: 2, owner: null, rank: 0 }
+      : { label: "Confirm the speed", detail: scan.summary[0] ?? "a clip is on file", tone: "warn", step: 1, owner: "crew", rank: 4, next: { label: "Confirm speed", to: `/lens/${scan.id}` } };
+  }
+  return { label: "No sensor", detail: "phone scan only", tone: "neutral", step: -1, owner: null, rank: 0 };
 }
 
 export const OWNER: Record<Exclude<Owner, null>, string> = {
@@ -173,4 +188,22 @@ export const OWNER: Record<Exclude<Owner, null>, string> = {
   control: "Control room",
   crew: "Maintenance",
   manager: "Manager",
+};
+
+/** Where a machine stands at a glance. Every machine is in exactly one. */
+export type Standing = "person" | "crux" | "ok" | "idle";
+
+export function standingOf(st: MachineStatus): Standing {
+  if (st.busy) return "crux";
+  if (st.owner && st.owner !== "crux" && st.rank >= 4) return "person";
+  // Green only where an investigation found nothing wrong, or a repair was checked.
+  if (st.tone === "ok") return "ok";
+  return "idle";
+}
+
+export const STANDING: Record<Standing, { label: string; tone: Tone }> = {
+  person: { label: "Needs a person", tone: "warn" },
+  crux: { label: "Crux investigating", tone: "accent" },
+  ok: { label: "Normal", tone: "ok" },
+  idle: { label: "Not investigated", tone: "neutral" },
 };

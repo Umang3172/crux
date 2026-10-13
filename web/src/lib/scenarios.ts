@@ -1,6 +1,6 @@
-// The demo plant, the pinned scenarios and the options a new case is built
-// from. Every scenario has fixed settings, so it replays the same run each
-// time and every number on screen comes from that run.
+// The pinned guided investigations, the readings a shift sends, and the options
+// a new investigation is built from. Settings are fixed, so each replays the
+// same way and every number on screen comes from that run.
 
 import type { FaultKind, OffListFault, RunParams } from "../api/types";
 
@@ -28,25 +28,25 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "one-check",
     title: "One measurement decides",
-    line: "The first reading fits a healthy pump and a worn inner ring almost equally. Crux asks for the one measurement that separates them.",
+    line: "Two causes fit equally. Crux asks for the one reading that separates them.",
     investigator: "engine",
     machine: "p2",
     params: { fault: "inner_race", severity: 0.5, seed: 6, extra_noise: 0.45 },
-    shows: "Engine with a technician",
+    shows: "Engine and technician",
   },
   {
     id: "off-list",
-    title: "A cause that is not on the list",
-    line: "Impacts no listed fault predicts. Crux's AI writes a new suspect and the physics tests it.",
+    title: "A cause not on the list",
+    line: "Crux's AI writes a new suspect; the physics tests it.",
     investigator: "agents",
     machine: "p2",
     params: { fault: "rolling_element", severity: 1.0, seed: 1, extra_noise: 0.45 },
-    shows: "Two AI investigators",
+    shows: "A written suspect",
   },
   {
     id: "documents",
     title: "The answer is in the machine's notes",
-    line: "A rhythm no bearing part makes. Crux's AI looks it up in the machine's documents and cites the passage.",
+    line: "Crux's AI finds the cause in the machine's documents and cites it.",
     investigator: "agents",
     machine: "p2",
     params: { fault: "aux_pump", severity: 1.0, seed: 1, extra_noise: 0.05 },
@@ -55,11 +55,11 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "no-cause",
     title: "Nothing explains it",
-    line: "An impact that neither the list nor the documents account for. Crux closes the investigation without naming a cause.",
+    line: "Crux closes the investigation without naming a cause.",
     investigator: "agents",
     machine: "p2",
     params: { fault: "unlisted_impact", severity: 1.0, seed: 1, extra_noise: 0.05 },
-    shows: "An honest “no cause yet”",
+    shows: "No cause named",
   },
 ];
 
@@ -83,11 +83,10 @@ export const isOnList = (f: string): f is FaultKind => (ON_LIST as string[]).inc
 export type Reading = { by: Investigator; params: RunParams };
 
 /**
- * The readings each modelled machine sends, one per shift, in this order. The
- * settings are pinned, so a shift replays the same way. Most go to the AI
- * investigators; the first on pump P-2 goes to the engine alone, which stops
- * and asks a technician for a measurement. A machine that is waiting on a
- * person sends nothing new until that person has acted.
+ * The readings each modelled machine sends, one per shift, in this order, with
+ * pinned settings. Most go to Crux's AI; the first on pump P-2 goes to the
+ * engine alone, which stops and asks a technician for a measurement. A machine
+ * waiting on a person sends nothing new until that person has acted.
  */
 export const READINGS: Record<string, Reading[]> = {
   p2: [

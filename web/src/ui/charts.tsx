@@ -1,9 +1,9 @@
 // Charts, drawn in SVG at the pixel size of their container. Each takes the
 // server's numbers as they are; none smooths, fits or invents a point.
 
-import { useMemo, useState } from "react";
-import { useWidth } from "../lib/hooks";
-import { num, signed } from "../lib/format";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useReducedMotion, useWidth } from "../lib/hooks";
+import { num, pct, signed } from "../lib/format";
 
 const TONE_VAR: Record<string, string> = {
   text: "var(--text)",
@@ -165,28 +165,140 @@ export function SpectrumChart({
 
 export type Expected = { kind: string; label: string; value: number; tone?: string; faded?: boolean };
 
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** A number that glides to its new value, so a change is seen. It jumps when motion is reduced. */
+function useGlide(target: number, ms: number): number {
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(target);
+  const at = useRef(target);
+  useEffect(() => {
+    const start = at.current;
+    if (reduced || Math.abs(start - target) < 1e-4) {
+      at.current = target;
+      setShown(target);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / ms);
+      at.current = start + (target - start) * (1 - (1 - k) ** 3);
+      setShown(at.current);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms, reduced]);
+  return shown;
+}
+
+/** One suspect's belief beside its prediction: a bar against the verdict's bar, and where it stood before the last reading. */
+function BeliefMark({ x, width, cy, value, was, bar, tone, textX, bare, strong }: { x: number; width: number; cy: number; value: number; was?: number | null; bar?: number; tone: string; textX: number; bare: boolean; strong: boolean }) {
+  const v = useGlide(value, 560);
+  const moved = was !== null && was !== undefined && Math.abs(was - value) >= 0.005;
+  return (
+    <g>
+      {!bare && (
+        <>
+          <rect x={x} y={cy - 3} width={width} height={6} rx={3} fill="var(--panel-3)" />
+          {moved && <rect x={x + clamp01(Math.min(was, v)) * width} y={cy - 3} width={Math.abs(clamp01(was) - clamp01(v)) * width} height={6} fill="var(--text-3)" opacity={0.28} />}
+          <rect x={x} y={cy - 3} width={clamp01(v) * width} height={6} rx={3} style={{ fill: TONE_VAR[tone], transition: "fill 320ms" }} />
+          {moved && (
+            <line x1={x + clamp01(was) * width} x2={x + clamp01(was) * width} y1={cy - 6} y2={cy + 6} stroke="var(--text-3)" strokeWidth={1.5} strokeLinecap="round">
+              <title>Before the last reading: {pct(was)}</title>
+            </line>
+          )}
+          {bar !== undefined && (
+            <line x1={x + bar * width} x2={x + bar * width} y1={cy - 7} y2={cy + 7} stroke="var(--text-2)" strokeWidth={2} strokeLinecap="round">
+              <title>A verdict needs {pct(bar)}</title>
+            </line>
+          )}
+        </>
+      )}
+      <text x={textX} y={cy + 4} textAnchor="end" className="chart-value" style={strong ? { fill: "var(--text)", fontWeight: 650 } : undefined}>
+        {pct(v)}
+      </text>
+    </g>
+  );
+}
+
 /**
  * What each suspect predicts the requested measurement will read, with the
  * measurement's own spread, and where the reading landed once it came back.
+ * Given beliefs, each row also carries that suspect's belief against the bar a
+ * verdict needs, so a reading and what it did to the beliefs are seen together.
+ * Every number drawn is the server's.
  */
-export function DecisionAxis({ expected, sigma, reading, readingLabel }: { expected: Expected[]; sigma: number; reading?: number | null; readingLabel?: string }) {
+export function DecisionAxis({
+  expected,
+  sigma,
+  reading,
+  readingLabel,
+  beliefs,
+  was,
+  bar,
+  leader,
+  settled,
+  land,
+}: {
+  expected: Expected[];
+  sigma: number;
+  reading?: number | null;
+  readingLabel?: string;
+  /** Each suspect's belief, 0 to 1. It glides when it changes. */
+  beliefs?: Record<string, number | null | undefined>;
+  /** Each suspect's belief before the last reading, marked faintly. */
+  was?: Record<string, number | null | undefined>;
+  /** The belief a verdict needs. */
+  bar?: number;
+  /** The suspect in the lead: its row is drawn strong. */
+  leader?: string | null;
+  /** The leader has been named as the cause. */
+  settled?: boolean;
+  /** Draw the reading arriving: the moment it is handed in. */
+  land?: boolean;
+}) {
   const [ref, w] = useWidth<HTMLDivElement>();
-  const rowH = 30;
-  const labelW = Math.min(210, Math.max(120, w * 0.3));
-  const pad = { r: 16, t: 24, b: 26 };
+  const narrow = w > 0 && w < 540;
+  const withBeliefs = !!beliefs;
+  const rowH = narrow ? 50 : 36;
+  const pad = narrow ? { t: 30, b: 26 } : { t: 44, b: 26 };
+  const labelW = narrow ? 0 : Math.min(196, Math.max(132, w * 0.25));
+  const beliefW = withBeliefs && !narrow ? Math.min(220, Math.max(150, w * 0.26)) : 0;
+  const x0 = narrow ? 6 : labelW + 6;
+  const x1 = narrow ? w - 10 : withBeliefs ? w - beliefW - 24 : w - 16;
   const values = expected.map((e) => e.value).concat(reading ?? []);
   const lo = Math.min(...values) - 2 * sigma;
   const hi = Math.max(...values) + 2 * sigma;
-  const iw = Math.max(0, w - labelW - pad.r);
-  const x = (v: number) => labelW + ((v - lo) / (hi - lo || 1)) * iw;
+  const x = (v: number) => x0 + ((v - lo) / (hi - lo || 1)) * Math.max(0, x1 - x0);
   const height = pad.t + expected.length * rowH + pad.b;
   const base = pad.t + expected.length * rowH;
+  const trackX = w - beliefW + 4;
+  const trackW = Math.max(0, beliefW - 52);
+  const xr = reading === null || reading === undefined ? null : x(reading);
+  const labelLeft = xr !== null && xr > x1 - 110;
 
   return (
     <div ref={ref} className="chart">
       {w > 0 && (
         <svg width={w} height={height} role="img" aria-label="What each suspect predicts this measurement will read">
-          {ticks(lo, hi, 6).map((t) => (
+          {!narrow && (
+            <g className="chart-tick" style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <text x={0} y={12}>
+                Suspect
+              </text>
+              <text x={(x0 + x1) / 2} y={12} textAnchor="middle">
+                Predicted reading
+              </text>
+              {withBeliefs && (
+                <text x={trackX} y={12}>
+                  Belief
+                </text>
+              )}
+            </g>
+          )}
+          {ticks(lo, hi, narrow ? 4 : 6).map((t) => (
             <g key={t}>
               <line x1={x(t)} x2={x(t)} y1={pad.t - 4} y2={base} stroke="var(--line)" />
               <text x={x(t)} y={base + 16} textAnchor="middle" className="chart-tick">
@@ -195,27 +307,50 @@ export function DecisionAxis({ expected, sigma, reading, readingLabel }: { expec
             </g>
           ))}
           {expected.map((e, i) => {
-            const cy = pad.t + i * rowH + rowH / 2;
+            const top = pad.t + i * rowH;
+            const cy = narrow ? top + 33 : top + rowH / 2;
+            const ly = narrow ? top + 15 : cy + 4;
             const colour = TONE_VAR[e.tone ?? "text"];
+            const lead = !!leader && e.kind === leader;
+            const vx = x(e.value + sigma) + 6;
+            const valueLeft = vx + 34 > x1;
             return (
-              <g key={e.kind} opacity={e.faded ? 0.45 : 1}>
-                <text x={0} y={cy + 4} className="chart-label">
-                  {e.label}
-                </text>
-                <rect x={x(e.value - sigma)} y={cy - 7} width={Math.max(1, x(e.value + sigma) - x(e.value - sigma))} height={14} rx={3} fill={colour} opacity={0.16} />
-                <line x1={x(e.value - sigma)} x2={x(e.value + sigma)} y1={cy} y2={cy} stroke={colour} strokeWidth={1.5} />
-                <circle cx={x(e.value)} cy={cy} r={4.5} fill={colour} stroke="var(--panel)" strokeWidth={1.5} />
-                <text x={x(e.value + sigma) + 6} y={cy + 4} className="chart-value">
-                  {signed(e.value, 2)}
-                </text>
+              <g key={e.kind}>
+                <rect x={0} y={top + 2} width={w} height={rowH - 4} rx={6} fill="var(--ok-soft)" opacity={settled && lead ? 1 : 0} style={{ transition: "opacity 420ms" }} />
+                <g opacity={e.faded ? 0.45 : 1}>
+                  <text x={narrow ? 0 : 0} y={ly} className="chart-label" style={lead ? { fontWeight: 680 } : undefined}>
+                    {e.label}
+                  </text>
+                  <rect x={x(e.value - sigma)} y={cy - 7} width={Math.max(1, x(e.value + sigma) - x(e.value - sigma))} height={14} rx={3} fill={colour} opacity={0.16} />
+                  <line x1={x(e.value - sigma)} x2={x(e.value + sigma)} y1={cy} y2={cy} stroke={colour} strokeWidth={1.5} />
+                  <circle cx={x(e.value)} cy={cy} r={4.5} fill={colour} stroke="var(--panel)" strokeWidth={1.5} />
+                  <text x={valueLeft ? x(e.value - sigma) - 6 : vx} y={cy + 4} textAnchor={valueLeft ? "end" : "start"} className="chart-value">
+                    {signed(e.value, 2)}
+                  </text>
+                  {beliefs && (
+                    <BeliefMark
+                      x={trackX}
+                      width={trackW}
+                      cy={narrow ? ly - 4 : cy}
+                      value={beliefs[e.kind] ?? 0}
+                      was={was?.[e.kind]}
+                      bar={bar}
+                      tone={lead ? (settled ? "ok" : "accent") : "muted"}
+                      textX={w}
+                      bare={narrow}
+                      strong={lead}
+                    />
+                  )}
+                </g>
               </g>
             );
           })}
-          {reading !== null && reading !== undefined && (
-            <g>
-              <line x1={x(reading)} x2={x(reading)} y1={pad.t - 6} y2={base} stroke="var(--ok)" strokeWidth={2} />
-              <rect x={x(reading) - 3} y={pad.t - 12} width={6} height={6} fill="var(--ok)" transform={`rotate(45 ${x(reading)} ${pad.t - 9})`} />
-              <text x={Math.min(w - 4, Math.max(labelW, x(reading)))} y={11} textAnchor={x(reading) > w - 120 ? "end" : "start"} dx={x(reading) > w - 120 ? -8 : 8} className="chart-read">
+          {xr !== null && reading !== null && reading !== undefined && (
+            <g className={land ? "axis-read land" : "axis-read"}>
+              <line x1={xr} x2={xr} y1={pad.t - 4} y2={base} stroke="var(--text)" strokeWidth={2} pathLength={1} className="axis-read-line" />
+              <path d={`M${xr} ${pad.t - 15}l5 5l-5 5l-5 -5z`} fill="var(--text)" className="axis-read-head" />
+              {land && <circle cx={xr} cy={pad.t - 10} r={6} fill="none" stroke="var(--text)" strokeWidth={1.5} className="axis-read-ring" />}
+              <text x={xr} y={pad.t - 20} textAnchor={labelLeft ? "end" : "start"} dx={labelLeft ? -8 : 8} className="chart-value axis-read-label" style={{ fill: "var(--text)", fontWeight: 650 }}>
                 {readingLabel ?? "reading"} {signed(reading, 2)}
               </text>
             </g>
@@ -282,7 +417,7 @@ export function LifeChart({
             <g>
               <rect x={x(band.at + band.lo)} y={pad.t} width={Math.max(2, x(band.at + band.hi) - x(band.at + band.lo))} height={ih} fill="var(--accent)" opacity={0.1} />
               <line x1={x(band.at + band.mid)} x2={x(band.at + band.mid)} y1={pad.t} y2={pad.t + ih} stroke="var(--accent)" strokeDasharray="4 3" />
-              <text x={x(band.at + band.mid)} y={pad.t - 8} textAnchor="middle" className="chart-mark" fill="var(--accent)">
+              <text x={x(band.at + band.mid)} y={alarm !== null && alarm <= upTo && Math.abs(x(band.at + band.mid) - x(alarm)) < 52 ? pad.t + 12 : pad.t - 8} textAnchor="middle" className="chart-mark" fill="var(--accent)">
                 forecast
               </text>
             </g>

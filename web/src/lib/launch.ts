@@ -21,7 +21,7 @@ const onMachine = (params: RunParams, machine: string): RunParams => {
 };
 
 export async function openEngineCase(params: RunParams, opts: Opts = {}): Promise<string> {
-  if (!isOnList(params.fault)) throw new Error("Only the agents can take a fault that is not on the engine's list.");
+  if (!isOnList(params.fault)) throw new Error("Only Crux's AI can take a fault that is not on the engine's list.");
   const t0 = performance.now();
   const machine = opts.machine ?? "p2";
   params = onMachine(params, machine);
@@ -72,7 +72,7 @@ export function launchAgents(params: RunParams, opts: Opts = {}): { opened: Prom
   })
     .then((run) => {
       const caseId = run.case?.case_id ?? id;
-      if (!caseId) throw new Error(run.stopped ?? "The agents did not open a case.");
+      if (!caseId) throw new Error(run.stopped ?? "Crux's AI did not open an investigation.");
       patchCase(caseId, { run, tookMs: took() });
       endLive(caseId);
       return caseId;
@@ -81,7 +81,7 @@ export function launchAgents(params: RunParams, opts: Opts = {}): { opened: Prom
       if (!id && e instanceof ApiError && (e.status === 404 || e.status === 405)) {
         const run = await agentReplay(body);
         const caseId = run.case?.case_id;
-        if (!caseId) throw new Error(run.stopped ?? "The agents did not open a case.");
+        if (!caseId) throw new Error(run.stopped ?? "Crux's AI did not open an investigation.");
         addCase({ ...entry(caseId), run, tookMs: took() });
         beginLive(caseId);
         run.steps.forEach((step, index) => pushStep(caseId, index, step));

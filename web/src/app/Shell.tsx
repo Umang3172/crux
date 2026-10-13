@@ -1,26 +1,24 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { Building2, HardHat, LayoutDashboard, Menu, Moon, MonitorDot, Plus, Search, ShieldAlert, Sun } from "lucide-react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link, Outlet, useLocation, useNavigate, useNavigation } from "react-router";
+import { Building2, Compass, Menu, Moon, Plus, Search, ShieldAlert, Sun } from "lucide-react";
 import { onWaking } from "../api/client";
 import { brainOf } from "../lib/ai";
 import { modelOf } from "../lib/casemodel";
-import { shortId } from "../lib/format";
-import { useHealth, useHotkey, useTheme } from "../lib/hooks";
-import { SITE } from "../lib/plant";
-import { ROLES, setRole, useRole, type Role } from "../lib/role";
+import { useHealth, useTheme } from "../lib/hooks";
+import { SITE, machineOfCase } from "../lib/plant";
+import { ROLES, setRole, useRole } from "../lib/role";
 import { openHazards, patchCase, useSession } from "../lib/session";
-import { Button, Toasts, cx } from "../ui/kit";
+import { Button, CountUp, Hint, Toasts, cx, toast } from "../ui/kit";
 import { CommandPalette } from "./CommandPalette";
+import { GoHint, MOD_KEY, ShortcutsDialog, useShortcuts } from "./keys";
 import { Launcher, openLauncher } from "./Launcher";
-import { navFor } from "./nav";
+import { Tour } from "../tour/Tour";
+import { beginTour } from "../tour/steps";
+import { LivePill } from "./LiveNow";
+import { isHere, navFor } from "./nav";
+import { preloadPages } from "./pages";
 import "../styles/plant.css";
 import "./shell.css";
-
-const ROLE_ICON: Record<Role, React.ReactNode> = {
-  control: <MonitorDot size={15} />,
-  crew: <HardHat size={15} />,
-  manager: <LayoutDashboard size={15} />,
-};
 
 function Mark() {
   // The crux: two lines of evidence crossing at the one point that decides.
@@ -38,27 +36,40 @@ export function Shell() {
   const health = useHealth();
   const session = useSession();
   const location = useLocation();
+  const navigation = useNavigation();
   const navigate = useNavigate();
   const role = useRole();
   const nav = navFor(role);
   const [theme, toggleTheme] = useTheme();
   const [palette, setPalette] = useState(false);
+  const [keys, setKeys] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [waking, setWaking] = useState(false);
+  const togglePalette = useCallback(() => setPalette((p) => !p), []);
+  const closePalette = useCallback(() => setPalette(false), []);
+  const closeKeys = useCallback(() => setKeys(false), []);
+  const waitingForLetter = useShortcuts({ palette: togglePalette, help: () => setKeys(true) });
 
   useEffect(() => onWaking(setWaking), []);
   useEffect(() => {
+    // Once the first page is up, fetch the others in the background.
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => preloadPages());
+    else setTimeout(preloadPages, 1200);
+  }, []);
+  useEffect(() => {
     setDrawer(false);
-    const here = nav.flatMap((g) => g.items).find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)));
+    const here = nav.flatMap((g) => g.items).find((n) => isHere(n, location.pathname));
     document.title = here ? `${here.label} · Crux` : "Crux";
     // A new page starts at its top, wherever the last one was scrolled to.
     window.scrollTo(0, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, role]);
-  useHotkey(
-    (e) => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k",
-    () => setPalette((p) => !p),
-  );
+  useEffect(() => {
+    if (!drawer) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [drawer]);
 
   const brain = brainOf(health.data?.models.investigator);
   const waitingCount = session.cases.filter((c) => modelOf(c)?.status === "waiting").length;
@@ -68,119 +79,153 @@ export function Shell() {
     <div className="app">
       {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
       <aside className={cx("side", drawer && "open")}>
-        <Link to="/" className="brand" aria-label="Crux console, home">
+        <Link to="/" viewTransition className="brand" aria-label="Crux, home">
           <Mark />
-          Crux <em>Console</em>
+          Crux
         </Link>
-        <div className="plant">
-          <Building2 size={16} aria-hidden />
-          <div className="grow">
-            <b className="truncate">{SITE.name}</b>
-            <span className="dim">Demo data, labelled where it shows</span>
+
+        <div className="side-context">
+          <div className="site">
+            <Building2 size={14} aria-hidden />
+            <span className="truncate">{SITE.name}</span>
+            <Hint label="About this plant">{SITE.note}</Hint>
+          </div>
+          <div className="views" role="group" aria-labelledby="views-label">
+            <div className="views-label">
+              <span id="views-label">Viewing as</span>
+              <Hint label="About views">A view, not a login. It sets the first page and the menu order, and hides nothing.</Hint>
+            </div>
+            <div className="views-tabs">
+              {ROLES.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={cx(role === r.id && "on")}
+                  aria-pressed={role === r.id}
+                  title={r.who}
+                  onClick={() => {
+                    if (role === r.id) return;
+                    setRole(r.id);
+                    navigate("/", { viewTransition: true });
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="roles" role="group" aria-label="Viewing as">
-          <span>Viewing as</span>
-          {ROLES.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className={role === r.id ? "on" : undefined}
-              aria-pressed={role === r.id}
-              title={r.who}
-              onClick={() => {
-                setRole(r.id);
-                navigate("/");
-              }}
-            >
-              {ROLE_ICON[r.id]}
-              {r.label}
-            </button>
-          ))}
-        </div>
+
         <nav className="nav" aria-label="Main">
-          {nav.map((g) => (
-            <div className="nav-group" key={g.group}>
-              <span>{g.group}</span>
-              {g.items.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "on" : undefined)}>
-                  <n.icon size={16} aria-hidden />
-                  {n.label}
-                  {n.to === "/cases" && session.cases.length > 0 && (
-                    <span className={cx("nav-count", waitingCount > 0 && "warn")} title={waitingCount > 0 ? `${waitingCount} waiting for a measurement` : "Investigations in this browser"}>
-                      {waitingCount > 0 ? waitingCount : session.cases.length}
-                    </span>
-                  )}
-                </NavLink>
-              ))}
+          {nav.map((g, gi) => (
+            <div className="nav-group" key={g.group || gi}>
+              {g.group && <span>{g.group}</span>}
+              {g.items.map((n) => {
+                const on = isHere(n, location.pathname);
+                return (
+                  <Link key={n.to} to={n.to} viewTransition className={cx(on && "on")} aria-current={on ? "page" : undefined}>
+                    <n.icon size={16} aria-hidden />
+                    <span className="grow truncate">{n.label}</span>
+                    {n.to === "/cases" && session.cases.length > 0 && (
+                      <span className={cx("nav-count", waitingCount > 0 && "warn")} title={waitingCount > 0 ? `${waitingCount} waiting for a measurement` : `${session.cases.length} in this browser`}>
+                        <CountUp value={waitingCount > 0 ? waitingCount : session.cases.length} ms={300} />
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </nav>
+
         <div className="side-foot">
-          <Link to="/system" className="ai-pill" title="Which model runs each job">
+          <Link to="/system" viewTransition className="ai-note" title="Which model runs each AI job">
             <span className={cx("ai-dot", brain.live && "live")} aria-hidden />
-            <span className="grow">
-              <small>Crux's AI runs on</small>
-              <b className="truncate">{health.data ? brain.name : health.error ? "engine unreachable" : "…"}</b>
+            <span className="truncate">
+              Crux's AI · <b>{health.data ? brain.name : health.error ? "engine unreachable" : "…"}</b>
             </span>
           </Link>
+          <button type="button" className="kbd keys-btn" onClick={() => setKeys(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+            ?
+          </button>
         </div>
       </aside>
 
       <div className="main">
         <header className="top">
           <Button className="menu-btn" variant="ghost" icon={<Menu size={18} />} onClick={() => setDrawer(true)} aria-label="Open the menu" />
-          <button type="button" className="search" onClick={() => setPalette(true)}>
+          <button type="button" className="search" onClick={() => setPalette(true)} aria-label="Search and commands">
             <Search size={15} aria-hidden />
-            <span>Search or run a command</span>
-            <span className="kbd">⌘K</span>
+            <span className="search-text">Search or jump to…</span>
+            <span className="kbd">{MOD_KEY}K</span>
           </button>
-          <div className="row push">
+          <div className="top-end">
+            <LivePill />
+            <Button variant="ghost" className="tour-btn" icon={<Compass size={16} />} onClick={beginTour} aria-label="Take the tour">
+              <span className="long">Tour</span>
+            </Button>
             <Button variant="ghost" icon={theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"} />
-            <Button variant="primary" icon={<Plus size={15} />} onClick={() => openLauncher()}>
-              Investigate a machine
+            <Button variant="primary" className="top-primary" icon={<Plus size={15} />} onClick={() => openLauncher()}>
+              <span className="long">Investigate a machine</span>
+              <span className="short">Investigate</span>
             </Button>
           </div>
+          {(waking || navigation.state === "loading") && <div className={cx("progress top-progress", !waking && "later")} aria-hidden />}
         </header>
         {waking && (
-          <>
-            <div className="progress" />
-            <div className="waking" role="status">
-              Waking the engine. The first request after a quiet spell takes a few seconds.
-            </div>
-          </>
+          <div className="waking" role="status">
+            Waking the engine: a few seconds.
+          </div>
         )}
-        {hazards.map((h) => (
-          <HazardBanner key={h.id} id={h.id} text={h.text} />
-        ))}
+        {hazards.length > 0 && (
+          <div className="banners">
+            {hazards.map((h) => (
+              <HazardBanner key={h.id} id={h.id} text={h.text} machine={machineOfCase(session.cases.find((c) => c.id === h.id)).short} />
+            ))}
+          </div>
+        )}
         <main className="content">
-          <Outlet />
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 
       <Launcher />
+      <Tour />
       <Toasts />
-      <CommandPalette open={palette} onClose={() => setPalette(false)} onTheme={toggleTheme} />
+      <CommandPalette open={palette} onClose={closePalette} onTheme={toggleTheme} onKeys={() => setKeys(true)} theme={theme} />
+      <ShortcutsDialog open={keys} onClose={closeKeys} />
+      {waitingForLetter && <GoHint />}
     </div>
   );
 }
 
 /** A hazard someone reported stays on top of every page until a person puts their name to it. */
-function HazardBanner({ id, text }: { id: string; text: string }) {
+function HazardBanner({ id, text, machine }: { id: string; text: string; machine: string }) {
   const [by, setBy] = useState("");
+  const acknowledge = (e: FormEvent) => {
+    e.preventDefault();
+    const name = by.trim();
+    if (!name) return;
+    patchCase(id, { hazardAck: { by: name, at: Date.now() } });
+    toast(`Hazard on ${machine} acknowledged by ${name}`, "warn");
+  };
   return (
     <div className="banner" role="alert">
-      <ShieldAlert size={18} aria-hidden />
-      <div className="grow">
-        <b>Hazard reported on investigation {shortId(id)}.</b> {text}
-      </div>
-      <Link to={`/cases/${id}`} className="btn btn-sm">
-        Open it
-      </Link>
-      <input className="input input-sm" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to acknowledge the hazard" />
-      <Button size="sm" variant="danger" disabled={!by.trim()} onClick={() => patchCase(id, { hazardAck: { by: by.trim(), at: Date.now() } })}>
-        Acknowledge
-      </Button>
+      <ShieldAlert size={16} aria-hidden />
+      <p className="banner-text" title={text}>
+        <b>Hazard on {machine}.</b> {text}
+      </p>
+      <form className="banner-actions" onSubmit={acknowledge}>
+        <Link to={`/cases/${id}`} viewTransition className="btn btn-sm">
+          Open investigation
+        </Link>
+        <input className="input input-sm" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to acknowledge the hazard" />
+        <Button size="sm" variant="danger" type="submit" disabled={!by.trim()}>
+          Acknowledge hazard
+        </Button>
+      </form>
     </div>
   );
 }

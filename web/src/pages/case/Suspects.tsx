@@ -6,7 +6,7 @@ import type { CaseModel, SuspectRow, SuspectState } from "../../lib/casemodel";
 import { num, pct } from "../../lib/format";
 import { fault } from "../../lib/plain";
 import type { CaseEntry } from "../../lib/session";
-import { Badge, Card, Meter, cx, type Tone } from "../../ui/kit";
+import { Badge, Card, Hint, Meter, cx, type Tone } from "../../ui/kit";
 
 const STATE: Record<SuspectState, { label: string; tone: Tone; tip: string }> = {
   leading: { label: "leading", tone: "accent", tip: "The suspect the evidence favours most" },
@@ -41,22 +41,22 @@ export function SuspectsCard({
     <Card
       title="Suspects"
       icon={<ListTree size={15} />}
-      sub={`${model.suspects.length} tested on a virtual copy of the machine`}
       flush
-      foot="Only simulated likelihoods and measured evidence move a belief. A language model can add a suspect; it cannot score one."
+      actions={<Hint label="About the suspects">Each suspect was simulated on the machine's model. Only simulated likelihoods and measured evidence move a belief.</Hint>}
+      foot="A language model can add a suspect, never score one."
     >
       <div className="table-wrap">
-        <table className="table">
+        <table className="table suspects">
           <thead>
             <tr>
-              {onPick && <th style={{ width: 30, paddingRight: 0 }} aria-label="Show in the signal chart" />}
+              {onPick && <th style={{ width: 30, paddingRight: 0 }} aria-label="Show in the spectrum" />}
               <th>Suspect</th>
-              <th style={{ minWidth: 190 }}>Belief</th>
-              <th className="t-num" data-tip="How closely the simulated spectrum matches the measured one. A picture of the fit; beliefs come from the simulated likelihood.">
-                Sim. match
+              <th style={{ minWidth: 170 }}>Belief</th>
+              <th className="t-num" data-tip="How closely its simulated spectrum matches the measured one. A picture of the fit; beliefs come from the simulated likelihood.">
+                Match
               </th>
               <th>State</th>
-              <th>Evidence</th>
+              <th data-tip="Ledger entries for (+) and against (−) it">Evidence</th>
             </tr>
           </thead>
           <tbody>
@@ -95,7 +95,7 @@ function Row({
     <tr className={cx("hover", s.state === "ruled_out" && "faded", picked && "on")}>
       {onPick && (
         <td style={{ paddingRight: 0 }}>
-          {canPick && <button type="button" className={cx("pick", picked && "on")} onClick={() => onPick(s.kind)} aria-label={`Show ${f.name} in the signal chart`} aria-pressed={picked} />}
+          {canPick && <button type="button" className={cx("pick", picked && "on")} onClick={() => onPick(s.kind)} aria-label={`Show ${f.name} in the spectrum`} aria-pressed={picked} />}
         </td>
       )}
       <td>
@@ -115,13 +115,13 @@ function Row({
             {pct(s.belief)}
           </b>
         </div>
-        {moved && <div className="tiny dim num">was {pct(was)} before the last reading</div>}
+        {moved && <div className="tiny dim num" title="Before the last reading">was {pct(was)}</div>}
       </td>
       <td className="t-num dim-cell">{s.match === null ? "–" : num(s.match, 2)}</td>
       <td>
-        <Badge tone={st.tone} title={st.tip}>
-          {st.label}
-        </Badge>
+        <span data-tip={st.tip}>
+          <Badge tone={st.tone}>{st.label}</Badge>
+        </span>
       </td>
       <td>
         <div className="row gap-1 row-wrap">

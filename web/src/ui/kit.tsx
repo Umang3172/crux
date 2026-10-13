@@ -310,29 +310,65 @@ export function PageHead({
 /**
  * An explanation kept out of the way: a small mark that shows it on hover,
  * focus or tap. For what a first-time reader may want and a regular never does.
+ * The note exists only while it shows, and opens toward the side with room, so
+ * a closed one never widens the page.
  */
 export function Hint({ children, label = "More about this" }: { children: ReactNode; label?: string }) {
-  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [near, setNear] = useState(false);
+  const [side, setSide] = useState<"mid" | "start" | "end">("mid");
   const ref = useRef<HTMLSpanElement>(null);
+  const place = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const half = Math.min(300, window.innerWidth * 0.7) / 2;
+    const mid = r.left + r.width / 2;
+    setSide(mid - half < 8 ? "start" : mid + half > window.innerWidth - 8 ? "end" : "mid");
+  };
   useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    if (!pinned) return;
+    const away = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setPinned(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setPinned(false);
     document.addEventListener("mousedown", away);
     document.addEventListener("keydown", esc);
     return () => {
       document.removeEventListener("mousedown", away);
       document.removeEventListener("keydown", esc);
     };
-  }, [open]);
+  }, [pinned]);
+  const shown = pinned || near;
   return (
-    <span className={cx("hint", open && "open")} ref={ref}>
-      <button type="button" className="hint-btn" aria-label={label} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+    <span
+      className={cx("hint", shown && "open")}
+      ref={ref}
+      onMouseEnter={() => {
+        place();
+        setNear(true);
+      }}
+      onMouseLeave={() => setNear(false)}
+      onFocus={() => {
+        place();
+        setNear(true);
+      }}
+      onBlur={() => setNear(false)}
+    >
+      <button
+        type="button"
+        className="hint-btn"
+        aria-label={label}
+        aria-expanded={shown}
+        onClick={() => {
+          place();
+          setPinned((o) => !o);
+        }}
+      >
         <Info size={13} aria-hidden />
       </button>
-      <span className="hint-pop" role="tooltip">
-        {children}
-      </span>
+      {shown && (
+        <span className={cx("hint-pop", side)} role="tooltip">
+          {children}
+        </span>
+      )}
     </span>
   );
 }

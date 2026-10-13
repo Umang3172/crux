@@ -1,5 +1,5 @@
-// The side rail of a case: what is remembered about this machine, what people
-// wrote down, the measurements taken, and how the case was run.
+// The side of an investigation: what is remembered about this machine, what
+// people wrote down, the measurements taken, and the facts of the investigation.
 
 import { useState } from "react";
 import { Eye, History, MessageSquare, Ruler, Settings2 } from "lucide-react";
@@ -7,17 +7,20 @@ import { addNote } from "../../api/crux";
 import type { CaseModel } from "../../lib/casemodel";
 import { num, signed, stamp } from "../../lib/format";
 import { fault } from "../../lib/plain";
-import { floorLabel, severityLabel } from "../../lib/scenarios";
+import { floorLabel, scenario, severityLabel } from "../../lib/scenarios";
 import { getSession, patchCase, rememberInvestigation, type CaseEntry } from "../../lib/session";
-import { Badge, Button, Callout, Card, Empty } from "../../ui/kit";
+import { Badge, Button, Callout, Card, Empty, Hint, SourceTag, toast } from "../../ui/kit";
 
 export function MemoryCard({ model }: { model: CaseModel }) {
   return (
-    <Card title="Earlier on this machine" icon={<History size={15} />} flush foot="Shown to people and to Crux's AI. A record is never evidence and never changes a belief.">
+    <Card
+      title="Earlier on this machine"
+      icon={<History size={15} />}
+      flush
+      actions={<Hint label="About earlier investigations">Shown to people and to Crux's AI. A record is never evidence and never moves a belief.</Hint>}
+    >
       {model.history.length === 0 ? (
-        <Empty left title="No earlier case">
-          This is the first investigation on this machine in this session.
-        </Empty>
+        <Empty left title="No earlier investigation" />
       ) : (
         <ul className="list">
           {model.history.map((h) => (
@@ -53,7 +56,7 @@ export function ChecksCard({ model }: { model: CaseModel }) {
               ) : (
                 "no reading yet"
               )}
-              {c.by && <> · {c.by === "replay" ? "answered by the model's instrument" : `taken by ${c.by}`}</>}
+              {c.by && <> · {c.by === "replay" ? "by the model's instrument (simulated)" : `by ${c.by}`}</>}
               {c.minutes !== null && <> · {c.minutes} min</>}
             </div>
           </li>
@@ -68,7 +71,6 @@ export function NotesCard({ entry, model }: { entry: CaseEntry; model: CaseModel
   const [by, setBy] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [kept, setKept] = useState(false);
 
   async function add() {
     setBusy(true);
@@ -77,13 +79,14 @@ export function NotesCard({ entry, model }: { entry: CaseEntry; model: CaseModel
       const inv = await addNote(entry.id, text.trim(), by.trim() || "someone on site");
       if (entry.kind === "engine") rememberInvestigation(inv);
       else if (entry.run?.case) {
-        // An agent run is kept in this browser; its notes and hazard flag are brought up to date from the server's answer.
+        // An AI investigation is kept in this browser; its notes and hazard flag are brought up to date from the server's answer.
         patchCase(entry.id, { run: { ...entry.run, case: { ...entry.run.case, notes: inv.notes, hazard: inv.hazard } } });
       }
       // A newly reported hazard needs a new acknowledgement.
-      if (inv.hazard && inv.hazard !== model.hazard) patchCase(entry.id, { hazardAck: undefined });
+      const raised = !!inv.hazard && inv.hazard !== model.hazard;
+      if (raised) patchCase(entry.id, { hazardAck: undefined });
       setText("");
-      setKept(true);
+      toast(raised ? "Hazard flagged for a person" : "Note kept. No belief moved.", raised ? "danger" : "ok");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -92,7 +95,7 @@ export function NotesCard({ entry, model }: { entry: CaseEntry; model: CaseModel
   }
 
   return (
-    <Card title="Notes" icon={<MessageSquare size={15} />} sub="what someone saw, heard or smelt" flush>
+    <Card id="notes" title="Notes" icon={<MessageSquare size={15} />} flush>
       {model.notes.map((n) => (
         <div className="note" key={n.id}>
           <div>{n.text}</div>
@@ -107,46 +110,64 @@ export function NotesCard({ entry, model }: { entry: CaseEntry; model: CaseModel
           </div>
         </div>
       ))}
-      <div className="col" style={{ padding: 16, borderTop: model.notes.length ? "1px solid var(--line)" : undefined }}>
-        <textarea
-          className="textarea"
-          value={text}
-          maxLength={600}
-          onChange={(e) => {
-            setText(e.target.value);
-            setKept(false);
-          }}
-          placeholder="Add a note. It is kept and shown; it is not evidence."
-          aria-label="A note"
-        />
+      <form
+        className="col notes-form"
+        style={{ borderTop: model.notes.length ? "1px solid var(--line)" : undefined }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (text.trim()) void add();
+        }}
+      >
+        <textarea className="textarea" value={text} maxLength={600} onChange={(e) => setText(e.target.value)} placeholder="What you saw, heard or smelt" aria-label="A note" />
         <div className="row">
           <input className="input" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, for the note" />
-          <Button busy={busy} disabled={!text.trim() || entry.lost} onClick={add}>
+          <Button type="submit" busy={busy} disabled={!text.trim() || entry.lost}>
             Add note
           </Button>
         </div>
-        {kept && <span className="small t-ok">Kept. Not evidence: no belief moved.</span>}
         {error && <Callout tone="danger">{error}</Callout>}
-        <span className="small dim">A note that describes a hazard raises a flag for a person. Crux does not assess hazards; it passes them on.</span>
-      </div>
+        <span className="small dim">Not evidence. A note about a hazard raises a flag.</span>
+      </form>
     </Card>
   );
 }
 
 export function RunCard({ entry, model }: { entry: CaseEntry; model: CaseModel }) {
   const p = entry.params;
+  const sc = scenario(entry.scenario);
   return (
-    <Card title="This run" icon={<Settings2 size={15} />}>
+    <Card
+      title="This investigation"
+      icon={<Settings2 size={15} />}
+      actions={
+        <>
+          <SourceTag source="synthetic" />
+          <Hint label="About these facts">This machine is a model: a fault is fed in and its readings are synthetic. What was fed in is an answer key, so it stays hidden until someone asks.</Hint>
+        </>
+      }
+    >
       <dl className="defs">
-        <dt>Case</dt>
+        <dt>Id</dt>
         <dd className="mono">{entry.id}</dd>
         <dt>Opened</dt>
         <dd>{stamp(entry.createdAt)}</dd>
-        <dt>Investigated by</dt>
-        <dd>{entry.kind === "agents" ? "Crux's AI investigators, with nobody answering" : "the engine, with a technician answering"}</dd>
+        <dt>By</dt>
+        <dd>{entry.kind === "agents" ? "Crux's AI, nobody answering" : "the engine, a technician answering"}</dd>
+        {sc && (
+          <>
+            <dt>Guided</dt>
+            <dd>{sc.title}</dd>
+          </>
+        )}
+        {entry.batch && (
+          <>
+            <dt>From</dt>
+            <dd>a simulated shift</dd>
+          </>
+        )}
         <dt>Shaft speed</dt>
         <dd className="num">{num(model.rpm, 0)} rpm</dd>
-        <dt>Capture</dt>
+        <dt>Reading</dt>
         <dd>
           {severityLabel(p.severity)} · {floorLabel(p.extra_noise)} · seed <span className="mono">{p.seed}</span>
         </dd>
@@ -166,9 +187,6 @@ export function RunCard({ entry, model }: { entry: CaseEntry; model: CaseModel }
         <dt>Session</dt>
         <dd className="mono small">{getSession().plant}</dd>
       </dl>
-      <p className="small dim" style={{ marginTop: 12 }}>
-        This machine is a model: the fault is fed in and its readings are synthetic. What was fed in is an answer key, so it stays hidden until someone asks.
-      </p>
     </Card>
   );
 }

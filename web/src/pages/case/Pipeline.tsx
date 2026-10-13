@@ -1,100 +1,66 @@
-// Where the case is in its pipeline, from the first capture to the check after
-// the repair. Each stage's note is a count or a state the case itself holds.
+// Where the investigation is along a modelled machine's workflow, the same six
+// steps the plant shows. Each step's tip is a count or a state it holds.
 
-import { Activity, AudioWaveform, ChartColumn, CircleCheck, ClipboardCheck, Crosshair, FileText, FlaskConical, Sigma, Workflow, Wrench } from "lucide-react";
-import type { ReactNode } from "react";
 import type { CaseModel } from "../../lib/casemodel";
 import { num, pct } from "../../lib/format";
-import { fault } from "../../lib/plain";
+import { WORKFLOW } from "../../lib/plant";
 import type { CaseEntry } from "../../lib/session";
-import { Card, cx } from "../../ui/kit";
+import { cx } from "../../ui/kit";
 
-type State = "done" | "now" | "todo" | "skip" | "ok";
-type Stage = { id: string; label: string; note: string; icon: ReactNode; state: State; person?: boolean };
+type State = "done" | "now" | "todo" | "skip" | "ok" | "bad";
+type Step = { label: string; state: State; tip: string; person?: boolean };
 
-const REPAIR: Record<string, string> = {
-  verified: "repair verified",
-  still_there: "fault still there",
+const AFTER: Record<string, string> = {
+  verified: "verified",
+  still_there: "the fault is still there",
   something_else: "something else shows",
-  cause_gone: "that fault is gone",
+  cause_gone: "that fault is gone; the rest is open",
   cannot_tell: "not settled",
 };
 
-function stages(model: CaseModel | null, entry: CaseEntry): Stage[] {
-  const icon = (n: ReactNode) => n;
+export function stepsOf(model: CaseModel | null, entry: CaseEntry): Step[] {
+  const [reading, investigate, measure, approve, repair, verify] = WORKFLOW.model;
   if (!model) {
-    // An agent run still going: the case exists, and nothing else is known here yet.
     return [
-      { id: "capture", label: "Capture", note: "taken", icon: icon(<AudioWaveform size={15} />), state: "done" },
-      { id: "agents", label: "Crux investigating", note: "each step shown as it happens", icon: icon(<Workflow size={15} />), state: "now" },
-      { id: "verdict", label: "Verdict", note: "not yet", icon: icon(<CircleCheck size={15} />), state: "todo" },
-      { id: "report", label: "Report", note: "", icon: icon(<FileText size={15} />), state: "todo" },
-      { id: "handoff", label: "Hand-off", note: "", icon: icon(<ClipboardCheck size={15} />), state: "todo" },
-      { id: "repair", label: "Repair check", note: "", icon: icon(<Wrench size={15} />), state: "todo" },
+      { label: reading, state: "done", tip: "taken" },
+      { label: investigate, state: "now", tip: "Crux's AI at work" },
+      { label: measure, state: "todo", tip: "" },
+      { label: approve, state: "todo", tip: "" },
+      { label: repair, state: "todo", tip: "" },
+      { label: verify, state: "todo", tip: "" },
     ];
   }
-  const count = (s: string) => model.ledger.filter((l) => l.source === s).length;
   const closed = model.status === "concluded" || model.status === "unresolved";
-  const waiting = model.status === "waiting";
+  const named = model.status === "concluded" && !!model.leader && model.leader.kind !== "healthy";
   const answered = model.checks.filter((c) => c.status === "answered").length;
-  const named = model.status === "concluded" && model.leader && model.leader.kind !== "healthy";
-  const measure: State = model.checks.length === 0 ? (closed ? "skip" : "todo") : waiting ? "now" : "done";
-  const handoff: State = !closed ? "todo" : !named ? "skip" : entry.approved ? "done" : "now";
-  const repair: State = entry.repair ? (entry.repair.result.outcome === "verified" ? "ok" : "done") : named ? "todo" : closed ? "skip" : "todo";
-
+  const outcome = entry.repair?.result.outcome;
   return [
-    { id: "capture", label: "Capture", note: `${num(model.rpm, 0)} rpm`, icon: icon(<AudioWaveform size={15} />), state: "done" },
-    { id: "observe", label: "Observe", note: `${count("sensor")} readings`, icon: icon(<Activity size={15} />), state: "done" },
-    { id: "predict", label: "Predict", note: `${count("physics")} from the physics`, icon: icon(<Sigma size={15} />), state: "done" },
-    { id: "experiments", label: "Virtual experiments", note: `${model.experiments} suspects simulated`, icon: icon(<FlaskConical size={15} />), state: "done" },
-    { id: "beliefs", label: "Beliefs", note: `leader at ${pct(model.leader?.belief)}`, icon: icon(<ChartColumn size={15} />), state: "done" },
+    { label: reading, state: "done", tip: `${num(model.rpm, 0)} rpm` },
+    { label: investigate, state: model.status === "open" ? "now" : "done", tip: `${model.experiments} suspects simulated · leader ${pct(model.leader?.belief)}` },
     {
-      id: "measure",
-      label: "Measurement",
-      note: measure === "skip" ? "none was needed" : waiting ? "waiting on a person" : model.checks.length ? `${answered} of ${model.checks.length} taken` : "if the leaders are too close",
-      icon: icon(<Crosshair size={15} />),
-      state: measure,
+      label: measure,
+      state: model.status === "waiting" ? "now" : model.checks.length ? "done" : closed ? "skip" : "todo",
+      tip: model.status === "waiting" ? "waiting for a technician" : model.checks.length ? `${answered} of ${model.checks.length} taken` : closed ? "none needed" : "",
       person: true,
     },
-    {
-      id: "verdict",
-      label: "Verdict",
-      note: model.status === "concluded" && model.leader ? fault(model.leader.kind).name.toLowerCase() : model.status === "unresolved" ? "no cause named" : "needs 80% belief",
-      icon: icon(<CircleCheck size={15} />),
-      state: model.status === "concluded" ? "ok" : model.status === "unresolved" ? "done" : "todo",
-    },
-    { id: "report", label: "Report", note: closed ? "written and checked" : "", icon: icon(<FileText size={15} />), state: closed ? "done" : "todo" },
-    {
-      id: "handoff",
-      label: "Hand-off",
-      note: handoff === "skip" ? "nothing to approve" : entry.approved ? `approved by ${entry.approved.by}` : handoff === "now" ? "waiting for a name" : "",
-      icon: icon(<ClipboardCheck size={15} />),
-      state: handoff,
-      person: true,
-    },
-    {
-      id: "repair",
-      label: "Repair check",
-      note: entry.repair ? (REPAIR[entry.repair.result.outcome] ?? "") : repair === "skip" ? "nothing to repair" : "",
-      icon: icon(<Wrench size={15} />),
-      state: repair,
-    },
+    { label: approve, state: !closed ? "todo" : !named ? "skip" : entry.approved ? "done" : "now", tip: entry.approved ? `by ${entry.approved.by}` : named ? "waiting for a name" : closed ? "nothing to approve" : "", person: true },
+    { label: repair, state: !named ? (closed ? "skip" : "todo") : entry.repair ? "done" : entry.approved ? "now" : "todo", tip: entry.repair ? "recorded" : "", person: true },
+    { label: verify, state: !named ? (closed ? "skip" : "todo") : outcome ? (outcome === "verified" ? "ok" : "bad") : "todo", tip: outcome ? AFTER[outcome] ?? "" : "" },
   ];
 }
 
-export function PipelineCard({ model, entry }: { model: CaseModel | null; entry: CaseEntry }) {
-  const list = stages(model, entry);
+/** A thin strip: one segment a step, coloured by where the investigation is. */
+export function PipelineStrip({ model, entry }: { model: CaseModel | null; entry: CaseEntry }) {
+  const steps = stepsOf(model, entry);
+  const verified = entry.repair?.result.outcome === "verified";
   return (
-    <Card>
-      <ol className="pipe" aria-label="Where this investigation is">
-        {list.map((s) => (
-          <li key={s.id} className={cx("pipe-node", s.state, s.person && "person")} aria-current={s.state === "now" ? "step" : undefined}>
-            <span className="pipe-dot">{s.icon}</span>
-            <b>{s.label}</b>
-            <span>{s.note}</span>
-          </li>
-        ))}
-      </ol>
-    </Card>
+    <ol className={cx("strip", verified && "verified")} aria-label="Where this investigation is">
+      {steps.map((s) => (
+        <li key={s.label} className={cx("strip-step", s.state, s.person && "person")} aria-current={s.state === "now" ? "step" : undefined} data-tip={s.tip || undefined}>
+          <span className="strip-bar" aria-hidden />
+          <span className="strip-label">{s.label}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

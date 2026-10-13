@@ -648,6 +648,12 @@ button.chip:hover,
 .meter-fill.tone-warn {
   background: var(--warn);
 }
+.meter-fill.tone-danger {
+  background: var(--danger);
+}
+.meter-fill.tone-sim {
+  background: var(--sim);
+}
 .meter-mark {
   position: absolute;
   top: -3px;
@@ -919,20 +925,23 @@ button.chip:hover,
   text-align: left;
   text-transform: none;
   white-space: normal;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, -3px);
-  transition:
-    opacity var(--t-fast),
-    transform var(--t-fast),
-    visibility var(--t-fast);
+  transform: translateX(-50%);
+  animation: hint-in var(--t-fast) var(--ease);
 }
-.hint:hover .hint-pop,
-.hint:focus-within .hint-pop,
-.hint.open .hint-pop {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, 0);
+.hint-pop.start {
+  left: -4px;
+  transform: none;
+}
+.hint-pop.end {
+  left: auto;
+  right: -4px;
+  transform: none;
+}
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    margin-top: -3px;
+  }
 }
 
 /* Details: more on demand */

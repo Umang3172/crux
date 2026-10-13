@@ -206,6 +206,10 @@
 .stage-edge.on.answer {
   stroke: var(--accent);
 }
+/* A paused replay holds still: the lit edge shows where it stopped, without moving. */
+.stage.paused .stage-edge.on {
+  animation-play-state: paused;
+}
 @keyframes stage-flow {
   to {
     stroke-dashoffset: -20;

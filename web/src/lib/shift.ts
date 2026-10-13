@@ -6,6 +6,9 @@
 // is held on screen for as long as its calls take to show. "Skip" drops the
 // wait; it never changes what was run.
 
+/** How fast the plant replays each run's calls: a little under the quick player's own pace, so a call can be read. */
+export const SHOW_SPEED = 0.8;
+
 import { useSyncExternalStore } from "react";
 import { launchAgents, openEngineCase } from "./launch";
 import { getLiveRun, shownSteps } from "./liveruns";
@@ -38,6 +41,7 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
+export const getShift = () => shift;
 export const useShift = () => useSyncExternalStore(subscribe, () => shift, () => shift);
 
 function setItem(i: number, patch: Partial<ShiftItem>) {
@@ -67,7 +71,7 @@ async function work(i: number, machine: string, reading: Reading, id: string) {
       const { opened, finished } = launchAgents(item.params, { machine: item.machine, batch: id, watch: false });
       opened.then((c) => setItem(i, { caseId: c })).catch(() => undefined);
       caseId = await finished;
-      steps = quickDuration(shownSteps(getLiveRun(caseId)?.steps ?? []));
+      steps = quickDuration(shownSteps(getLiveRun(caseId)?.steps ?? [])) / SHOW_SPEED;
     } else {
       caseId = await openEngineCase(item.params, { machine: item.machine, batch: id });
       steps = 900;

@@ -1,18 +1,18 @@
-// The measurement, on a phone. A technician scans the code on the case page
-// and lands here: what Crux needs, why, how to take it, one button.
+// The measurement, on a phone. A technician scans the code on the
+// investigation's page and lands here: what to measure, how, one button.
 
 import { useState } from "react";
 import { useParams, useSearchParams } from "react-router";
-import { CircleCheck, Cpu, Crosshair } from "lucide-react";
+import { CircleCheck, Cpu, Info } from "lucide-react";
 import { getCase } from "../api/crux";
 import { useAsync, useCatalogue } from "../lib/hooks";
 import { answerWithInstrument, decodeKey, openRequest } from "../lib/instrument";
-import { shortId, signed } from "../lib/format";
+import { list, shortId, signed } from "../lib/format";
 import { check, fault } from "../lib/plain";
 import { machineById } from "../lib/plant";
 import { markAnswered } from "../lib/session";
-import { Badge, Button, Callout, Card, ErrorState, SkeletonRows, SourceTag } from "../ui/kit";
-import "../app/shell.css";
+import { Badge, Button, Callout, ErrorState, SkeletonRows } from "../ui/kit";
+import "../styles/app.css";
 import "./pages.css";
 
 export default function PhoneCheck() {
@@ -54,49 +54,56 @@ export default function PhoneCheck() {
           </svg>
         </span>
         Crux
-        <span className="push">
-          <Badge>{shortId(id)}</Badge>
-        </span>
+        <span className="push mono dim small">{shortId(id)}</span>
       </header>
 
       {got.error ? (
-        <Card>
-          <ErrorState error={got.error} onRetry={got.reload} />
-        </Card>
+        <ErrorState error={got.error} onRetry={got.reload} />
       ) : !inv ? (
-        <Card>
-          <SkeletonRows />
-        </Card>
+        <SkeletonRows />
       ) : sent ? (
-        <Card tone="ok" title={sent.already ? "Already answered" : "Sent"} icon={<CircleCheck size={16} />}>
+        <section className="ph-done" role="status">
           {sent.already ? (
-            <p>Someone answered this measurement first. Nothing was sent twice.</p>
+            <Info size={44} className="dim" aria-hidden />
           ) : (
-            <p>
-              The reading <b className="num">{sent.value !== undefined ? signed(sent.value, 2) : ""}</b> is with Crux. It is testing every suspect again; the answer is on the investigation's page.
+            <svg className="ph-tick" viewBox="0 0 52 52" aria-hidden>
+              <circle cx="26" cy="26" r="24" />
+              <path d="M15 27l7 7 15-16" />
+            </svg>
+          )}
+          <h1>{sent.already ? "Already answered" : "Sent"}</h1>
+          {sent.already ? (
+            <p className="muted">Someone answered first. Nothing was sent twice.</p>
+          ) : (
+            <p className="muted">
+              Reading <b className="num">{sent.value !== undefined ? signed(sent.value, 2) : ""}</b>. Crux is testing every suspect again; the result is on the investigation.
             </p>
           )}
-        </Card>
+        </section>
       ) : !req ? (
-        <Card title="Nothing to measure" icon={<CircleCheck size={16} />}>
-          <p className="muted">This investigation is not waiting for a measurement{inv.outcome !== "open" ? ": it has been closed" : ""}.</p>
-        </Card>
+        <section className="ph-done">
+          <CircleCheck size={44} className="dim" aria-hidden />
+          <h1>Nothing to measure</h1>
+          <p className="muted">{inv.outcome !== "open" ? "This investigation is closed." : "This investigation is not waiting for a measurement."}</p>
+        </section>
       ) : (
         <>
-          <Card tone="accent" title="Crux needs one measurement" icon={<Crosshair size={16} />}>
-            <h3 style={{ fontSize: "1.25rem", lineHeight: 1.25 }}>{check(req.test_id).name}</h3>
-            <div className="row row-wrap" style={{ marginTop: 8 }}>
-              {machine && <Badge>{machine.name}</Badge>}
-              {cat && <Badge>{cat.effort_min} min</Badge>}
-              {cat && <Badge>{cat.downtime === "none" ? "machine keeps running" : cat.downtime}</Badge>}
-            </div>
-            <p className="muted" style={{ marginTop: 12 }}>
-              Crux cannot tell {req.separates.map((k) => `“${fault(k).name}”`).join(" from ")}. This reading separates them.
-            </p>
-          </Card>
+          <section className="ph-job">
+            <span className="eyebrow">Measurement needed</span>
+            <h1>{check(req.test_id).name}</h1>
+            {machine && <p className="ph-machine">{machine.name}</p>}
+            {cat && (
+              <div className="row row-wrap">
+                <Badge>{cat.effort_min} min</Badge>
+                <Badge>{cat.downtime === "none" ? "Machine keeps running" : cat.downtime}</Badge>
+              </div>
+            )}
+            <p className="muted">Decides between {list(req.separates.map((k) => `“${fault(k).name}”`))}.</p>
+          </section>
 
           {cat && (
-            <Card title="How to take it">
+            <section className="ph-steps">
+              <h2>How to take it</h2>
               <ol className="steps">
                 {cat.procedure.map((p) => (
                   <li key={p}>
@@ -104,28 +111,21 @@ export default function PhoneCheck() {
                   </li>
                 ))}
               </ol>
-              <p className="small dim" style={{ marginTop: 12 }}>
-                Isolate and lock out under your site's own procedure before touching anything that moves.
-              </p>
-            </Card>
+              <p className="small dim">Lock out under your site's procedure before touching anything that moves.</p>
+            </section>
           )}
 
-          <Card>
-            <div className="col gap-3">
-              <Button variant="primary" size="lg" block icon={<Cpu size={16} />} busy={busy} disabled={!key} onClick={take}>
-                Take the reading
-              </Button>
-              <div className="row row-wrap">
-                <SourceTag source="physics model · synthetic" />
-              </div>
-              <span className="small dim">
-                {key
-                  ? "This machine is a model. Its own instrument takes the reading: a new simulated capture of the same machine in the same state. It answers from the fault it was given."
-                  : "This link carries no key for the model's instrument, so the reading cannot be taken from here. Open it from the code on the investigation page."}
-              </span>
-              {error && <Callout tone="danger">{error}</Callout>}
-            </div>
-          </Card>
+          <div className="ph-action">
+            {error && <Callout tone="danger">{error}</Callout>}
+            <Button variant="primary" size="lg" block icon={<Cpu size={18} />} busy={busy} disabled={!key} onClick={take}>
+              Take the reading
+            </Button>
+            <p className="small dim">
+              {key
+                ? "Synthetic: the model's own instrument takes the reading, and answers from the fault it was given."
+                : "This link has no key for the model's instrument. Scan the code on the investigation's page."}
+            </p>
+          </div>
         </>
       )}
     </div>

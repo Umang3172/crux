@@ -101,7 +101,7 @@ export function MachineTwin({
 
   return (
     <div ref={ref} className="twin">
-      <svg viewBox="0 0 760 300" role="img" aria-label="The pump set, with its parts turning at their real ratios to the shaft">
+      <svg viewBox="0 0 760 300" role="img" aria-label={`The ${kind} set, its parts turning at their real ratios to the shaft`}>
         {/* base and feet */}
         <rect x={40} y={238} width={560} height={10} rx={2} className="twin-base" />
         {[86, 214, 352, 474].map((x) => (
@@ -150,12 +150,12 @@ export function MachineTwin({
         <path d="M399 131 C399 112 420 118 432 104" className={cx("twin-wire", sensor === "asked" && "asked")} />
         {sensor === "asked" && (
           <circle cx={399} cy={135} r={10} className="twin-ask">
-            {!reduced && <animate attributeName="r" values="8;20;8" dur="1.8s" repeatCount="indefinite" />}
-            {!reduced && <animate attributeName="opacity" values="0.9;0;0.9" dur="1.8s" repeatCount="indefinite" />}
+            {!reduced && <animate attributeName="r" values="8;20;8" dur="1.8s" repeatCount="3" fill="freeze" />}
+            {!reduced && <animate attributeName="opacity" values="0.9;0;0.9" dur="1.8s" repeatCount="3" fill="freeze" />}
           </circle>
         )}
         <text x={436} y={100} className={cx("twin-note", sensor === "asked" && "asked")} textAnchor="start">
-          {sensor === "asked" ? "measurement asked for here" : "sensor"}
+          {sensor === "asked" ? "measure here" : "sensor"}
         </text>
 
         {/* seal-flush pump, belt-driven from the shaft: part of a pump set */}
@@ -265,8 +265,8 @@ export function MachineTwin({
             )}
           </>
         )}
-        <span className="twin-slow">
-          {reduced ? "Motion is off in your system settings, so the drawing is still." : `Slowed about ${num(slowed, 0)} times: one turn of the shaft takes ${PERIOD} s here.`}
+        <span className="twin-slow" data-tip={reduced ? "Your system asks for less motion" : `One turn of the shaft takes ${PERIOD} s here`}>
+          {reduced ? "Still: motion is off" : `Slowed ${num(slowed, 0)}×`}
         </span>
       </div>
     </div>

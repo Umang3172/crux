@@ -1,27 +1,29 @@
-// One machine in the plant: how it is looked after, where it stands along
-// that workflow, the machine itself, and what has been done on it.
+// One machine in the plant: where it stands and what comes next, the machine
+// itself, and what has been done on it.
 
 import { Link, useParams } from "react-router";
-import { ChevronRight, Cog, Compass, FolderOpen, ListChecks, Play, Radio, ScanLine } from "lucide-react";
+import { ChevronRight, Cog, Compass, FolderOpen, Play, Radio, ScanLine } from "lucide-react";
 import { openLauncher } from "../app/Launcher";
 import { modelOf } from "../lib/casemodel";
 import { num, stamp } from "../lib/format";
 import { useMachineModel } from "../lib/hooks";
 import { fault } from "../lib/plain";
-import { AREAS, MODE, OWNER, WORKFLOW, type MachineStatus, type PlantMachine } from "../lib/plant";
+import { AREAS, MODE, OWNER, WORKFLOW, standingOf, type MachineStatus, type PlantMachine } from "../lib/plant";
 import { usePlant } from "../lib/useplant";
+import { MachineGlyph, type GlyphFrame } from "../ui/MachineGlyph";
 import { MachineTwin } from "../ui/MachineTwin";
-import { Badge, Button, Card, Empty, LinkButton, PageHead, SourceTag, cx } from "../ui/kit";
+import { Button, Card, Empty, Hint, LinkButton, SourceTag, cx, vt } from "../ui/kit";
 import { CaseTable, rowsOf } from "./parts";
 import "../styles/plant.css";
 import "../styles/viz.css";
 import "./pages.css";
 
 function Steps({ m, st }: { m: PlantMachine; st: MachineStatus }) {
+  const tone = st.busy ? "accent" : st.tone;
   return (
-    <ol className="flow-steps">
+    <ol className="flow-steps" aria-label={MODE[m.mode].label}>
       {WORKFLOW[m.mode].map((s, i) => (
-        <li key={s} className={cx("flow-step", i < st.step && "done", i === st.step && "now")}>
+        <li key={s} className={cx("flow-step", i < st.step && "done", i === st.step && `now tone-${tone}`)}>
           <i>{i + 1}</i>
           {s}
         </li>
@@ -40,9 +42,7 @@ export default function PlantMachinePage() {
     return (
       <div className="page">
         <Card>
-          <Empty icon={<Compass size={18} />} title="No such machine in this plant" action={<LinkButton to="/plant">The plant</LinkButton>}>
-            The link may be to a machine from another site.
-          </Empty>
+          <Empty icon={<Compass size={18} />} title="No such machine here" action={<LinkButton to="/plant">Open plant</LinkButton>} />
         </Card>
       </div>
     );
@@ -54,7 +54,33 @@ export default function PlantMachinePage() {
   const latestModel = modelOf(latest);
   const named = latestModel?.status === "concluded" && latestModel.leader ? fault(latestModel.leader.kind).part : "none";
   const scans = (data.scans ?? []).filter((s) => s.machine === m.name);
-  const rpm = m.rpm ?? twin.data?.nominal_rpm ?? 0;
+  const rpm = m.rpm ?? twin.data?.nominal_rpm;
+  const standing = standingOf(st);
+  const frame: GlyphFrame = st.busy
+    ? { value: null, tone: "accent" }
+    : standing === "person"
+      ? { value: 1, tone: st.tone === "danger" ? "danger" : "warn" }
+      : standing === "ok"
+        ? { value: 1, tone: "ok" }
+        : { value: 0 };
+
+  // One thing to do: a person's step if it is their turn, else what this machine can be given.
+  const act =
+    standing === "person" && st.next ? (
+      <LinkButton to={st.next.to} variant="primary">
+        {st.next.label}
+      </LinkButton>
+    ) : st.busy && st.caseId ? (
+      <LinkButton to={`/cases/${st.caseId}`}>Open investigation</LinkButton>
+    ) : m.mode === "model" ? (
+      <Button variant="primary" icon={<Play size={14} />} onClick={() => openLauncher({ machine: m.id })}>
+        {st.caseId ? "Investigate again" : "Investigate machine"}
+      </Button>
+    ) : m.mode === "camera" ? (
+      <LinkButton to={`/lens?machine=${encodeURIComponent(m.name)}`} variant="primary" icon={<ScanLine size={14} />}>
+        Scan with phone
+      </LinkButton>
+    ) : null;
 
   return (
     <div className="page">
@@ -62,72 +88,52 @@ export default function PlantMachinePage() {
         <Link to="/plant">Plant</Link>
         <ChevronRight size={12} aria-hidden />
         <span>{area?.name}</span>
-        <ChevronRight size={12} aria-hidden />
-        <span>{m.name}</span>
       </nav>
-      <PageHead
-        title={m.name}
-        sub={`${m.type}${m.mode === "model" ? ` · ${num(rpm, 0)} rpm` : ""} · ${area?.name}`}
-        actions={
-          <>
-            <SourceTag source={MODE[m.mode].source} />
-            {m.mode === "model" && (
-              <Button variant="primary" icon={<Play size={14} />} onClick={() => openLauncher({ machine: m.id })}>
-                Investigate it
-              </Button>
-            )}
-            {m.mode === "camera" && (
-              <LinkButton to={`/lens?machine=${encodeURIComponent(m.name)}`} variant="primary" icon={<ScanLine size={14} />}>
-                Scan it with a phone
-              </LinkButton>
-            )}
-          </>
-        }
-      />
-
-      <Card title="Where it stands" icon={<ListChecks size={15} />} sub={MODE[m.mode].label} tone={st.tone === "warn" || st.tone === "danger" ? st.tone : undefined}>
-        <div className="row row-wrap between">
-          <div>
-            <div className="row row-wrap">
-              <Badge tone={st.tone} dot pulse={st.busy}>
-                {st.label}
-              </Badge>
-              {st.owner && <span className={cx("owner", st.owner)}>next: {OWNER[st.owner]}</span>}
-            </div>
-            <p className="muted" style={{ marginTop: 6 }}>
-              {st.detail}
-            </p>
+      <header className="page-head">
+        <div className="col gap-1 grow">
+          <h1 style={vt(`m-${m.id}`)}>{m.name}</h1>
+          <div className="machine-sub">
+            <span>
+              {m.type}
+              {m.mode === "model" && rpm ? ` · ${num(rpm, 0)} rpm` : ""}
+            </span>
+            {m.mode === "model" && <SourceTag source="synthetic" />}
           </div>
-          {st.caseId && (
-            <LinkButton to={`/cases/${st.caseId}`} variant={st.owner && st.owner !== "crux" ? "primary" : "default"}>
-              Open the investigation
-            </LinkButton>
-          )}
         </div>
-        <div style={{ margin: "18px 0 6px" }}>
+      </header>
+
+      <Card tone={standing === "person" ? (st.tone === "danger" ? "danger" : "warn") : st.busy ? "accent" : undefined}>
+        <div className="machine-now" data-tour="machine-status">
+          <MachineGlyph kind={m.kind} rpm={rpm} running={m.mode === "model" && st.tone !== "danger"} width={112} frame={frame} />
+          <div>
+            <div className={cx("machine-state", `tone-${st.busy ? "accent" : st.tone}`)}>{st.label}</div>
+            <div className="machine-sub">
+              <span>{st.detail}</span>
+              {st.owner && <span className={cx("owner", st.owner)}>Next: {OWNER[st.owner]}</span>}
+              {st.caseId && !(standing === "person" && st.next) && !st.busy && <Link to={`/cases/${st.caseId}`}>Latest investigation</Link>}
+            </div>
+          </div>
+          {act}
+        </div>
+        <div className="machine-steps">
           <Steps m={m} st={st} />
         </div>
-        <p className="small dim" style={{ marginTop: 10 }}>
-          {MODE[m.mode].care}
-        </p>
       </Card>
 
-      {m.mode === "model" && twin.data && (
-        <Card title="The machine" icon={<Cog size={15} />} sub="its parts turning at their real ratios to the shaft">
+      {m.mode === "model" && twin.data && rpm && (
+        <Card title="The machine" icon={<Cog size={15} />} id="machine-twin">
           <MachineTwin model={twin.data} kind={m.kind === "fan" ? "fan" : "pump"} rpm={rpm} part={named} sensor={latestModel?.status === "waiting" ? "asked" : "idle"} />
-          <dl className="defs" style={{ marginTop: 12 }}>
-            <dt>Modelled as</dt>
-            <dd>
-              One shaft on an {twin.data.bearing.label} bearing ({twin.data.bearing.rolling_elements} balls) with a {twin.data.blade_count}-blade rotor, at {num(rpm, 0)} rpm.
-            </dd>
-            <dt>What that means</dt>
-            <dd className="muted">The engine has one machine model. The modelled machines in this plant share it and differ in speed only; the drawing of a {m.kind === "fan" ? "fan" : "pump"} is a drawing. Faults are fed in, and every reading is synthetic.</dd>
-          </dl>
+          <p className="honest">
+            {m.kind === "fan" ? `A fan here is the pump model at ${num(rpm, 0)} rpm.` : `The engine's one machine model, at ${num(rpm, 0)} rpm.`} The drawing is a drawing.
+            <Hint label="How this machine is modelled">
+              One shaft on an {twin.data.bearing.label} bearing ({twin.data.bearing.rolling_elements} balls) with a {twin.data.blade_count}-blade rotor. The modelled machines in this plant share it and differ in speed only. Faults are fed in; every reading is synthetic.
+            </Hint>
+          </p>
         </Card>
       )}
 
       {m.mode === "live" && (
-        <Card title="Its sensor" icon={<Radio size={15} />} foot="A sensor posts readings with a device token. This console reads its status only.">
+        <Card title="Its sensor" icon={<Radio size={15} />} foot="This console reads the sensor's status only.">
           {data.sensor ? (
             <dl className="defs">
               <dt>Sensor</dt>
@@ -139,9 +145,7 @@ export default function PlantMachinePage() {
                 {num(data.sensor.seconds, 1)} s in {data.sensor.batches} batches
               </dd>
               <dt>Its own normal</dt>
-              <dd>{data.sensor.normal_captures > 0 ? `${data.sensor.normal_captures} healthy captures on file` : "not recorded yet"}</dd>
-              <dt>Ready to investigate</dt>
-              <dd>{data.sensor.ready ? "yes" : "no: it needs a full capture first"}</dd>
+              <dd>{data.sensor.normal_captures > 0 ? `${data.sensor.normal_captures} healthy captures` : "not recorded yet"}</dd>
             </dl>
           ) : (
             <p className="muted">This server has no live-sensor route.</p>
@@ -150,11 +154,9 @@ export default function PlantMachinePage() {
       )}
 
       {m.mode === "camera" && (
-        <Card title="Phone scans of this machine" icon={<ScanLine size={15} />} flush>
+        <Card title="Phone scans" icon={<ScanLine size={15} />} sub={scans.length || undefined} flush>
           {scans.length === 0 ? (
-            <Empty left title="Not scanned yet">
-              Nothing is fitted to this machine. A ten-second phone video is the only reading there is.
-            </Empty>
+            <Empty left title="Not scanned yet" />
           ) : (
             <ul className="list">
               {scans.map((s) => (
@@ -173,14 +175,8 @@ export default function PlantMachinePage() {
       )}
 
       {m.mode === "model" && (
-        <Card title="Investigations on this machine" icon={<FolderOpen size={15} />} sub={mine.length ? "newest first" : undefined} flush>
-          {mine.length === 0 ? (
-            <Empty left title="None yet">
-              Investigate it, or simulate a shift from the plant page.
-            </Empty>
-          ) : (
-            <CaseTable rows={rowsOf(mine)} brief />
-          )}
+        <Card title="Investigations" icon={<FolderOpen size={15} />} sub={mine.length || undefined} flush>
+          {mine.length === 0 ? <Empty left title="None yet" /> : <CaseTable rows={rowsOf(mine)} brief />}
         </Card>
       )}
     </div>
