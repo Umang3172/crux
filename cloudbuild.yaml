@@ -19,8 +19,15 @@ substitutions:
   _GEMINI_LOCATION: global
   # name=secret:version pairs to mount, empty by default. The key fallback is
   # GOOGLE_API_KEY=gemini-api-key:latest with _GOOGLE_LOGIN=false; a sensor
-  # token is RIG_INGEST_TOKEN=rig-ingest-token:latest (unset keeps /ingest off).
+  # token is RIG_INGEST_TOKEN=rig-ingest-token:latest (unset keeps /ingest off);
+  # the learning hub's signing key is CRUX_HUB_KEY=crux-hub-key:latest.
   _SECRETS: ""
+  # A Cloud Storage bucket mounted as the app's data folder (CRUX_DATA), empty
+  # for none. The learning hub, the trained time-left model, the site's lessons
+  # and the camera stills live there and outlast the instance; without it the
+  # folder is the instance's memory and starts empty. The runtime account needs
+  # roles/storage.objectUser on the bucket.
+  _DATA_BUCKET: ""
   # The id the code defaults to (agents/factory.py). A model id that does not
   # exist does not stop the deploy: every call fails and the product quietly
   # runs its offline paths. Check with `hypengine gemini-check` first.
@@ -88,6 +95,14 @@ steps:
           SECRET_FLAG="--set-secrets=${_SECRETS}"
         fi
 
+        # Cleared first so a redeploy replaces the mount rather than adding a
+        # second one. uid 10001 is the image's own user (Dockerfile), which must
+        # be able to write there.
+        VOLUME_FLAGS=""
+        if [ -n "${_DATA_BUCKET}" ]; then
+          VOLUME_FLAGS="--execution-environment=gen2 --clear-volumes --clear-volume-mounts --add-volume=name=crux-data,type=cloud-storage,bucket=${_DATA_BUCKET},mount-options=uid=10001;implicit-dirs=true --add-volume-mount=volume=crux-data,mount-path=/app/data"
+        fi
+
         # The timeout is longer than an investigator run's own cap (120 s in
         # agents/investigator.py) plus the case around it, so a slow model run
         # ends on the code's cap with its result, not on a gateway error.
@@ -107,7 +122,8 @@ steps:
           --max-instances 1 \
           --concurrency 8 \
           --set-env-vars "GEMINI_MODEL=${_GEMINI_MODEL},GEMINI_LENS_MODEL=${_GEMINI_LENS_MODEL},GOOGLE_GENAI_USE_ENTERPRISE=${_GOOGLE_LOGIN},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${_GEMINI_LOCATION}" \
-          $${SECRET_FLAG}
+          $${SECRET_FLAG} \
+          $${VOLUME_FLAGS}
 
         echo "---"
         echo "Deployed URL (this is the submission link):"
