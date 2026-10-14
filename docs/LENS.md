@@ -114,7 +114,9 @@ that it was not legible, while confirming the real "ABB" badge on a full-size
 photo. A person types the speed; a model reading is never used as a number.
 
 Models, in order: Gemini Robotics-ER 2 (`GEMINI_LENS_MODEL`, default
-`gemini-robotics-er-2-preview`) when a Gemini key is set, not yet run; a local
+`gemini-robotics-er-2-preview`) when a Gemini key is set, not yet run (the
+deploy sets `gemini-3-flash-preview`; Gemini gets 45 s, `GEMINI_TIMEOUT_S`, three
+times the slowest naming seen); a local
 model through Ollama when `OLLAMA_MODEL` is set (tested with Gemma 4); otherwise
 none, and the person draws the box. Nothing here moves a belief.
 
@@ -220,7 +222,11 @@ one blade, record again: the second scan should read as out of balance.
 **Record** on the Phone scans page sends the demo clip named in
 `web/src/pages/lens/demo.ts` through `POST /lens/scans/live`, which answers one
 JSON line per step as it runs (read, identify, gate, look, confirm, motion,
-sound, save), then the scan. The page draws the steps as they arrive, then a
+sound, save), then the scan. Naming the machine, the checklist look (gate, look,
+confirm) and the motion run side by side, so their lines interleave: the look
+is told the machine a person named, or the type its normal scan was given, and
+no longer waits for this scan's naming. A scan takes as long as its slowest
+branch. The page draws the steps as they arrive, then a
 drawing of the clip's machine with the part the scan points at in red: the part
 a damage finding names, or else the part where the cells over the shake map's
 bar sit, placed by where each part sits in the clip's frame. Two clips are in
@@ -244,7 +250,16 @@ bar sit, placed by where each part sits in the clip's frame. Two clips are in
   second look; the severities swapped between the runs (leak low and corrosion
   medium, then the reverse). The motion check found only lines under 0.04 px.
 
-Two runs of one clip are not a score, and with no shaft speed confirmed nothing
+With the branches side by side (14 Oct 2026, evening, same clips, same model):
+the leak clip took 24.6, 27.1 and 26.8 s (was about 37 s), named "piping
+system" twice and "pipes" once, and found the leak and the corrosion, kept by
+the second look, every time; the motor clip took 15.0, 16.7 and 18.3 s (was
+about 42 s), with nothing found on the checklist. One naming request that
+evening sent nothing back for over three minutes and held the scan; naming now
+gives up after `look.GEMINI_TIMEOUT_S` (45 s) and the scan goes on unnamed, and
+it runs at Gemini 3's default temperature like the look (it was 0).
+
+A few runs of one clip are not a score, and with no shaft speed confirmed nothing
 was tested on the motion or the sound.
 
 ## Data for testing

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -141,6 +142,25 @@ def _quiet(step: str, state: str, detail: dict[str, Any]) -> None:
     return None
 
 
+def _identify(still: bytes, say: Step) -> looks.Identity:
+    """Name the machine and read its nameplate, telling `say` as it starts and ends."""
+    say("identify", "start", {})
+    identity = looks.identify(still)
+    say(
+        "identify",
+        "done",
+        {
+            "machine_type": identity.machine_type,
+            "nameplate_text": identity.nameplate_text,
+            "box": asdict(identity.box) if identity.box else None,
+            "box_label": identity.box_label,
+            "by": identity.by,
+            "note": identity.note,
+        },
+    )
+    return identity
+
+
 def new_scan(
     data: bytes,
     filename: str,
@@ -190,67 +210,62 @@ def new_scan(
             reference_label = f"normal scan {normal.id} of {normal.created[:10]}"
         except FileNotFoundError:
             reference = None
-    if look:
-        say("identify", "start", {})
-        identity = looks.identify(middle)
+    # Naming the machine and the checklist look are two independent model calls,
+    # so they run side by side, and the motion is measured meanwhile: a scan
+    # takes as long as its slowest branch, not the sum (about 11 s less on 14 Oct
+    # 2026, naming 11 to 12 s beside a 16 s look). The look is told the machine
+    # a person named, or the type its normal scan was given; it no longer waits
+    # for this scan's naming.
+    known = machine.strip() or (normal.identity.get("machine_type") if normal else "") or ""
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="lens-look") as pool:
+        if look:
+            naming = pool.submit(_identify, middle, say)
+            seeing = pool.submit(
+                looks.visible,
+                middle,
+                f"a technician's phone video of a {known or 'machine'}",
+                reference,
+                reference_label,
+                on_step,
+            )
+        else:
+            for step in ("identify", "look"):
+                say(step, "off", {"note": "look skipped"})
+        notes = list(c.notes)
+        say("motion", "start", {"frames": len(c.frames)})
+        shaking = shake_map(c.frames, c.times, c.fps)
+        if normal is not None:
+            box, source = Box(**normal.box), "the normal scan of this machine"
+        elif shaking.box is not None:
+            box, source = shaking.box, "where the video shakes most"
+        else:
+            # Only now does the motion need the model's box, so only now does it wait.
+            named = naming.result() if look else looks.Identity(note="look skipped")
+            if named.box is not None:
+                box, source = named.box, f"the model ({named.box_label or 'machine'})"
+            else:
+                box, source = DEFAULT_BOX, "the middle of the frame"
+            notes.append(shaking.note)
+        if c.duration_s < 3.0:
+            notes.append(f"the clip is {c.duration_s:.1f} s; 10 s resolves the shaft lines better")
+        m = measure(c.frames, c.times, c.fps, box)
+        if m.note:
+            notes.append(m.note)
+        lines = candidates(m.signal, c.fps)
         say(
-            "identify",
+            "motion",
             "done",
             {
-                "machine_type": identity.machine_type,
-                "nameplate_text": identity.nameplate_text,
-                "box": asdict(identity.box) if identity.box else None,
-                "box_label": identity.box_label,
-                "by": identity.by,
-                "note": identity.note,
+                "box": asdict(box),
+                "box_source": source,
+                "rms_px": round(float(m.rms_px), 3),
+                "shake_removed": m.shake_removed,
+                "candidates": lines,
+                "note": m.note or shaking.note,
             },
         )
-    else:
-        identity = looks.Identity(note="look skipped")
-        for step in ("identify", "look"):
-            say(step, "off", {"note": "look skipped"})
-    seen = (
-        looks.visible(
-            middle,
-            f"a technician's phone video of a {identity.machine_type or 'machine'}",
-            reference,
-            reference_label,
-            on_step=on_step,
-        )
-        if look
-        else None
-    )
-    notes = list(c.notes)
-    say("motion", "start", {"frames": len(c.frames)})
-    shaking = shake_map(c.frames, c.times, c.fps)
-    if normal is not None:
-        box, source = Box(**normal.box), "the normal scan of this machine"
-    elif shaking.box is not None:
-        box, source = shaking.box, "where the video shakes most"
-    elif identity.box is not None:
-        box, source = identity.box, f"the model ({identity.box_label or 'machine'})"
-        notes.append(shaking.note)
-    else:
-        box, source = DEFAULT_BOX, "the middle of the frame"
-        notes.append(shaking.note)
-    if c.duration_s < 3.0:
-        notes.append(f"the clip is {c.duration_s:.1f} s; 10 s resolves the shaft lines better")
-    m = measure(c.frames, c.times, c.fps, box)
-    if m.note:
-        notes.append(m.note)
-    lines = candidates(m.signal, c.fps)
-    say(
-        "motion",
-        "done",
-        {
-            "box": asdict(box),
-            "box_source": source,
-            "rms_px": round(float(m.rms_px), 3),
-            "shake_removed": m.shake_removed,
-            "candidates": lines,
-            "note": m.note or shaking.note,
-        },
-    )
+        identity = naming.result() if look else looks.Identity(note="look skipped")
+        seen = seeing.result() if look else None
     # The sound is tested against each fault at a known shaft speed, so it waits
     # for a person to confirm one (`analyse`).
     say("sound", "waiting", {"sound": has_sound, "audio_fs": c.audio_fs})
