@@ -4,9 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { X } from "lucide-react";
-import { ROLES, useRole, type Role } from "../lib/role";
 import { Button } from "../ui/kit";
-import { plantPath } from "./nav";
+import { SECTIONS } from "./nav";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 export const MOD_KEY = isMac ? "⌘" : "Ctrl";
@@ -19,21 +18,16 @@ export function isTyping(e: KeyboardEvent): boolean {
 
 type GoKey = { key: string; label: string; to: string };
 
-export function goKeys(role: Role): GoKey[] {
-  return [
-    { key: "p", label: "Plant", to: plantPath(role) },
-    { key: "i", label: "Investigations", to: "/cases" },
-    { key: "w", label: "Work orders", to: "/work-orders" },
-    { key: "a", label: "Anatomy", to: "/anatomy" },
-    { key: "t", label: "Trends", to: "/trends" },
-    { key: "m", label: role === "control" ? "Home" : (ROLES.find((r) => r.id === role)?.home ?? "Home"), to: "/console" },
-  ];
+/** "g" then a letter: read from the menu, so a key always goes where its page is. */
+export function goKeys(): GoKey[] {
+  return SECTIONS.flatMap((s) => s.pages)
+    .filter((n) => n.keys)
+    .map((n) => ({ key: n.keys!.split(" ")[1], label: n.label === "Overview" ? "Machines" : n.label, to: n.to }));
 }
 
 /** Listens for the console's keys. Returns true while a "g" waits for its letter. */
 export function useShortcuts(on: { palette: () => void; help: () => void }): boolean {
   const navigate = useNavigate();
-  const role = useRole();
   const [waiting, setWaiting] = useState(false);
   const handlers = useRef(on);
   handlers.current = on;
@@ -56,7 +50,7 @@ export function useShortcuts(on: { palette: () => void; help: () => void }): boo
       // An open dialog keeps its keys to itself.
       if (document.querySelector(".overlay")) return disarm();
       if (armed) {
-        const hit = goKeys(role).find((g) => g.key === e.key.toLowerCase());
+        const hit = goKeys().find((g) => g.key === e.key.toLowerCase());
         disarm();
         if (hit) {
           e.preventDefault();
@@ -78,18 +72,17 @@ export function useShortcuts(on: { palette: () => void; help: () => void }): boo
       window.removeEventListener("keydown", onKey);
       disarm();
     };
-  }, [role, navigate]);
+  }, [navigate]);
 
   return waiting;
 }
 
 /** While a "g" waits for its letter: where each letter goes. */
 export function GoHint() {
-  const role = useRole();
   return (
     <div className="go-hint" role="status">
       <span className="kbd">g</span>
-      {goKeys(role).map((g) => (
+      {goKeys().map((g) => (
         <span key={g.key}>
           <span className="kbd">{g.key}</span> {g.label}
         </span>
@@ -100,7 +93,6 @@ export function GoHint() {
 
 /** The "?" list. */
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const role = useRole();
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -117,7 +109,7 @@ export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () 
 
   const rows: { keys: string[]; label: string }[] = [
     { keys: [MOD_KEY, "K"], label: "Search and commands" },
-    ...goKeys(role).map((g) => ({ keys: ["g", g.key], label: g.label })),
+    ...goKeys().map((g) => ({ keys: ["g", g.key], label: g.label })),
     { keys: ["?"], label: "This list" },
   ];
   return (

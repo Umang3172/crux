@@ -13,7 +13,7 @@ import { useAsync } from "../lib/hooks";
 import { fault } from "../lib/plain";
 import { machineOfCase } from "../lib/plant";
 import { useSession } from "../lib/session";
-import { Badge, Button, Callout, Card, Empty, ErrorState, Hint, LinkButton, PageHead, Seg, SkeletonRows, Stat, cx, toast } from "../ui/kit";
+import { Badge, Button, Callout, Card, Empty, ErrorState, Hint, LinkButton, PageHead, Seg, SkeletonRows, Stat, Tabs, cx, toast } from "../ui/kit";
 import { rowsOf } from "./parts";
 import "./pages.css";
 import "../styles/trust.css";
@@ -36,97 +36,112 @@ export function WorkOrders() {
   const session = useSession();
   const handoffs = rowsOf(session.cases).filter((r) => r.model.status === "concluded" && r.model.leader && r.model.leader.kind !== "healthy");
   const life = lives.data?.machines[0];
+  const [from, setFrom] = useState<"alarms" | "investigations">("alarms");
 
   return (
     <div className="page tr-page">
       <PageHead title="Work orders" sub="Crux recommends. A person approves." />
 
-      <Card title="From alarms" icon={<ClipboardList size={15} />} flush actions={<Hint label="Where these come from">Drafted by the server when a watched machine's alarm fires. Kept in its memory until it restarts.</Hint>}>
-        {list.error ? (
-          <ErrorState error={list.error} onRetry={list.reload} />
-        ) : !list.data ? (
-          <SkeletonRows />
-        ) : list.data.length === 0 ? (
-          <Empty icon={<ClipboardList size={18} />} title="No work orders yet" action={<LinkButton variant="primary" to={life ? `/lives/${life.machine}` : "/plant"}>Open a watched machine</LinkButton>}>
-            Draft one from a watched machine's alarm.
-          </Empty>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Machine</th>
-                  <th>Part</th>
-                  <th>Fix within</th>
-                  <th>State</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.map((t) => (
-                  <tr key={t.id} className="hover link" tabIndex={0} onClick={() => navigate(`/work-orders/${t.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/work-orders/${t.id}`)}>
-                    <td className="mono">{t.id}</td>
-                    <td className="strong">{t.machine_name}</td>
-                    <td>{t.part_label}</td>
-                    <td className="num nowrap">{range(t)}</td>
-                    <td>
-                      <span className="row gap-1 row-wrap">
-                        {t.hazard && <Badge tone="danger">hazard</Badge>}
-                        <State t={t} />
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      <Tabs
+        value={from}
+        onChange={setFrom}
+        label="Where work orders come from"
+        tabs={[
+          { id: "alarms", label: "From alarms", count: list.data?.length || undefined },
+          { id: "investigations", label: "From investigations", count: handoffs.length || undefined },
+        ]}
+      />
 
-      <Card title="From investigations" icon={<BadgeCheck size={15} />} flush actions={<Hint label="Where these come from">Causes named by this browser's investigations. Each is approved on its investigation.</Hint>}>
-        {handoffs.length === 0 ? (
-          <Empty left title="No cause named yet">
-            A named cause waits here for approval.
-          </Empty>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Machine</th>
-                  <th>Cause named</th>
-                  <th>Approval</th>
-                  <th>Repair check</th>
-                </tr>
-              </thead>
-              <tbody>
-                {handoffs.map(({ entry, model }) => (
-                  <tr key={entry.id} className="hover link" tabIndex={0} onClick={() => navigate(`/cases/${entry.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/cases/${entry.id}`)}>
-                    <td className="nowrap">
-                      <Link to={`/cases/${entry.id}`}>{machineOfCase(entry).short}</Link> <span className="mono dim small">{shortId(entry.id)}</span>
-                    </td>
-                    <td className="strong">
-                      {fault(model.leader!.kind).name} <span className="dim num">· {pct(model.leader!.belief)}</span>
-                    </td>
-                    <td>
-                      {entry.approved ? (
-                        <Badge tone="ok" dot>
-                          approved by {entry.approved.by} · {clock(entry.approved.at)}
-                        </Badge>
-                      ) : (
-                        <Badge tone="warn" dot>
-                          waiting for approval
-                        </Badge>
-                      )}
-                    </td>
-                    <td>{entry.repair ? <Badge tone={entry.repair.result.outcome === "verified" ? "ok" : "neutral"}>{entry.repair.result.outcome.replace(/_/g, " ")}</Badge> : <span className="dim">not checked yet</span>}</td>
+      {from === "alarms" && (
+        <Card title="Drafted by the server" icon={<ClipboardList size={15} />} flush actions={<Hint label="Where these come from">Drafted by the server when a watched machine's alarm fires. Kept in its memory until it restarts.</Hint>}>
+          {list.error ? (
+            <ErrorState error={list.error} onRetry={list.reload} />
+          ) : !list.data ? (
+            <SkeletonRows />
+          ) : list.data.length === 0 ? (
+            <Empty icon={<ClipboardList size={18} />} title="No work orders yet" action={<LinkButton variant="primary" to={life ? `/lives/${life.machine}` : "/plant"}>Open a watched machine</LinkButton>}>
+              Draft one from a watched machine's alarm.
+            </Empty>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Machine</th>
+                    <th>Part</th>
+                    <th>Fix within</th>
+                    <th>State</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                </thead>
+                <tbody>
+                  {list.data.map((t) => (
+                    <tr key={t.id} className="hover link" tabIndex={0} onClick={() => navigate(`/work-orders/${t.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/work-orders/${t.id}`)}>
+                      <td className="mono">{t.id}</td>
+                      <td className="strong">{t.machine_name}</td>
+                      <td>{t.part_label}</td>
+                      <td className="num nowrap">{range(t)}</td>
+                      <td>
+                        <span className="row gap-1 row-wrap">
+                          {t.hazard && <Badge tone="danger">hazard</Badge>}
+                          <State t={t} />
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {from === "investigations" && (
+        <Card title="Causes named in this browser" icon={<BadgeCheck size={15} />} flush actions={<Hint label="Where these come from">Causes named by this browser's investigations. Each is approved on its investigation.</Hint>}>
+          {handoffs.length === 0 ? (
+            <Empty left title="No cause named yet">
+              A named cause waits here for approval.
+            </Empty>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Machine</th>
+                    <th>Cause named</th>
+                    <th>Approval</th>
+                    <th>Repair check</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {handoffs.map(({ entry, model }) => (
+                    <tr key={entry.id} className="hover link" tabIndex={0} onClick={() => navigate(`/cases/${entry.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/cases/${entry.id}`)}>
+                      <td className="nowrap">
+                        <Link to={`/cases/${entry.id}`}>{machineOfCase(entry).short}</Link> <span className="mono dim small">{shortId(entry.id)}</span>
+                      </td>
+                      <td className="strong">
+                        {fault(model.leader!.kind).name} <span className="dim num">· {pct(model.leader!.belief)}</span>
+                      </td>
+                      <td>
+                        {entry.approved ? (
+                          <Badge tone="ok" dot>
+                            approved by {entry.approved.by} · {clock(entry.approved.at)}
+                          </Badge>
+                        ) : (
+                          <Badge tone="warn" dot>
+                            waiting for approval
+                          </Badge>
+                        )}
+                      </td>
+                      <td>{entry.repair ? <Badge tone={entry.repair.result.outcome === "verified" ? "ok" : "neutral"}>{entry.repair.result.outcome.replace(/_/g, " ")}</Badge> : <span className="dim">not checked yet</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -136,6 +151,7 @@ export function WorkOrderPage() {
   const list = useAsync(() => fetchTickets(), [id]);
   const fleet = useAsync(() => fleetStatus(), []);
   const [cited, setCited] = useState<string[]>([]);
+  const [tab, setTab] = useState<"order" | "evidence" | "camera" | "notes">("order");
   const [by, setBy] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,44 +216,91 @@ export function WorkOrderPage() {
         </Callout>
       )}
 
-      <div className="stats">
-        <Stat label="Fix within" value={<span style={{ fontSize: "var(--fs-20)" }}>{range(t)}</span>} sub={t.likely_h !== null ? `likely ${hours(t.likely_h)} · a range for planning` : "a range for planning"} />
-        <Stat label="Next planned stop" value={<span style={{ fontSize: "var(--fs-20)" }}>{t.stop_in_h !== null ? `in ${hours(t.stop_in_h)}` : "–"}</span>} sub="as entered when drafted" />
-        <Stat label="Risk before that stop" value={t.risk_before_stop !== null ? pct(t.risk_before_stop) : "–"} sub="of reaching the danger line first" />
-        <Stat label="Written by" value={<span style={{ fontSize: "var(--fs-20)" }}>{writer(t.written_by)}</span>} sub={t.removed.length > 0 ? `${t.removed.length} sentence${t.removed.length > 1 ? "s" : ""} removed by the check` : "nothing removed by the check"} />
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        label="Work order"
+        tabs={[
+          { id: "order", label: "The order" },
+          { id: "evidence", label: "Evidence", count: t.evidence.length },
+          ...(t.camera ? [{ id: "camera" as const, label: "Camera look" }] : []),
+          ...(t.notes.length > 0 ? [{ id: "notes" as const, label: "Notes", count: t.notes.length }] : []),
+        ]}
+      />
 
-      <div className="split">
-        <div className="col" style={{ gap: "var(--s-5)" }}>
-          <Card title="The work order" icon={<ClipboardList size={15} />} actions={<Hint label="About the evidence ids">Every sentence cites the evidence it rests on. Pick an id to find it below.</Hint>}>
-            <ol className="tr-lines">
-              {t.sentences.map((s, i) => (
-                <li key={i}>
-                  {s.text}
-                  {s.cites.map((c) => (
-                    <button key={c} type="button" className={cx("chip", cited.includes(c) && "on")} onClick={() => setCited(s.cites)}>
-                      {c}
-                    </button>
+      {tab === "order" && (
+        <>
+          <div className="stats">
+            <Stat label="Fix within" value={<span style={{ fontSize: "var(--fs-20)" }}>{range(t)}</span>} sub={t.likely_h !== null ? `likely ${hours(t.likely_h)} · a range for planning` : "a range for planning"} />
+            <Stat label="Next planned stop" value={<span style={{ fontSize: "var(--fs-20)" }}>{t.stop_in_h !== null ? `in ${hours(t.stop_in_h)}` : "–"}</span>} sub="as entered when drafted" />
+            <Stat label="Risk before that stop" value={t.risk_before_stop !== null ? pct(t.risk_before_stop) : "–"} sub="of reaching the danger line first" />
+            <Stat label="Written by" value={<span style={{ fontSize: "var(--fs-20)" }}>{writer(t.written_by)}</span>} sub={t.removed.length > 0 ? `${t.removed.length} sentence${t.removed.length > 1 ? "s" : ""} removed by the check` : "nothing removed by the check"} />
+          </div>
+
+          <div className="split">
+            <div className="col" style={{ gap: "var(--s-5)" }}>
+              <Card title="The work order" icon={<ClipboardList size={15} />} actions={<Hint label="About the evidence ids">Every sentence cites the evidence it rests on. Pick an id to see it under Evidence.</Hint>}>
+                <ol className="tr-lines">
+                  {t.sentences.map((s, i) => (
+                    <li key={i}>
+                      {s.text}
+                      {s.cites.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className={cx("chip", cited.includes(c) && "on")}
+                          onClick={() => {
+                            setCited(s.cites);
+                            setTab("evidence");
+                          }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </li>
                   ))}
-                </li>
-              ))}
-            </ol>
-            {t.removed.length > 0 && (
-              <div className="col" style={{ marginTop: 14 }}>
-                <h3>Removed by the check</h3>
-                {t.removed.map((r, i) => (
-                  <div className="removed" key={i}>
-                    <s>{r.text}</s>
-                    <span>The evidence it cites does not back it.</span>
+                </ol>
+                {t.removed.length > 0 && (
+                  <div className="col" style={{ marginTop: 14 }}>
+                    <h3>Removed by the check</h3>
+                    {t.removed.map((r, i) => (
+                      <div className="removed" key={i}>
+                        <s>{r.text}</s>
+                        <span>The evidence it cites does not back it.</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-            <div style={{ marginTop: 14 }}>
-              <Callout tone="accent">{t.safety}</Callout>
+                )}
+                <div style={{ marginTop: 14 }}>
+                  <Callout tone="accent">{t.safety}</Callout>
+                </div>
+              </Card>
             </div>
-          </Card>
 
+            <aside className="col rail" style={{ gap: "var(--s-5)" }}>
+              <Card title="Approval" icon={<BadgeCheck size={15} />} tone={t.status === "approved" ? "ok" : "warn"}>
+                {t.status === "approved" ? (
+                  <p>
+                    Approved by <b>{t.approved_by}</b>.
+                  </p>
+                ) : (
+                  <div className="col gap-3">
+                    <input className="input" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to approve" />
+                    <Button variant="primary" block busy={busy} disabled={!by.trim()} onClick={approve}>
+                      Approve work order
+                    </Button>
+                    {error && <Callout tone="danger">{error}</Callout>}
+                  </div>
+                )}
+              </Card>
+              {t.status === "approved" && <Found ticket={t} hub={(fleet.data?.hub_versions.length ?? 0) > 0} />}
+            </aside>
+          </div>
+        </>
+      )}
+
+      {tab === "evidence" && (
+        <div className="narrow">
           <Card title="Evidence" icon={<ClipboardList size={15} />} flush>
             <div className="table-wrap">
               <table className="table compact">
@@ -259,72 +322,56 @@ export function WorkOrderPage() {
               </table>
             </div>
           </Card>
-
-          {t.camera && (
-            <Card title="Camera look" icon={<Camera size={15} />} sub={`${t.camera.camera} · looked at by ${t.camera.inspected_by}`} actions={<Badge tone="warn">unconfirmed</Badge>}>
-              <Callout tone="model">Unconfirmed until a person checks it. {t.camera.note}</Callout>
-              {t.has_still && <img className="still" style={{ marginTop: 12 }} src={ticketStillUrl(t.id)} alt="The still the camera look was made from" />}
-              {t.camera.retake && <p className="t-warn small" style={{ marginTop: 8 }}>Retake asked for: {t.camera.retake}</p>}
-              {(t.camera.checklist.length > 0 || t.camera.findings.length > 0) && (
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table className="table compact">
-                    <thead>
-                      <tr>
-                        <th>Looked for</th>
-                        <th>Result</th>
-                        <th>Where</th>
-                        <th>Seen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(t.camera.checklist.length ? t.camera.checklist : t.camera.findings).map((f, i) => (
-                        <tr key={i}>
-                          <td className="strong">{f.item}</td>
-                          <td>
-                            <Badge tone={f.status === "present" ? (f.hazard ? "danger" : "warn") : "neutral"}>{f.status.replace(/_/g, " ")}</Badge>
-                          </td>
-                          <td className="muted">{f.where || "–"}</td>
-                          <td className="muted">{f.evidence || f.what}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          )}
         </div>
-
-        <aside className="col rail" style={{ gap: "var(--s-5)" }}>
-          <Card title="Approval" icon={<BadgeCheck size={15} />} tone={t.status === "approved" ? "ok" : "warn"}>
-            {t.status === "approved" ? (
-              <p>
-                Approved by <b>{t.approved_by}</b>.
-              </p>
-            ) : (
-              <div className="col gap-3">
-                <input className="input" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to approve" />
-                <Button variant="primary" block busy={busy} disabled={!by.trim()} onClick={approve}>
-                  Approve work order
-                </Button>
-                {error && <Callout tone="danger">{error}</Callout>}
+      )}
+      {tab === "camera" && t.camera && (
+        <div className="narrow">
+          <Card title="Camera look" icon={<Camera size={15} />} sub={`${t.camera.camera} · looked at by ${t.camera.inspected_by}`} actions={<Badge tone="warn">unconfirmed</Badge>}>
+            <Callout tone="model">Unconfirmed until a person checks it. {t.camera.note}</Callout>
+            {t.has_still && <img className="still" style={{ marginTop: 12 }} src={ticketStillUrl(t.id)} alt="The still the camera look was made from" />}
+            {t.camera.retake && <p className="t-warn small" style={{ marginTop: 8 }}>Retake asked for: {t.camera.retake}</p>}
+            {(t.camera.checklist.length > 0 || t.camera.findings.length > 0) && (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table className="table compact">
+                  <thead>
+                    <tr>
+                      <th>Looked for</th>
+                      <th>Result</th>
+                      <th>Where</th>
+                      <th>Seen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(t.camera.checklist.length ? t.camera.checklist : t.camera.findings).map((f, i) => (
+                      <tr key={i}>
+                        <td className="strong">{f.item}</td>
+                        <td>
+                          <Badge tone={f.status === "present" ? (f.hazard ? "danger" : "warn") : "neutral"}>{f.status.replace(/_/g, " ")}</Badge>
+                        </td>
+                        <td className="muted">{f.where || "–"}</td>
+                        <td className="muted">{f.evidence || f.what}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </Card>
-          {t.status === "approved" && <Found ticket={t} hub={(fleet.data?.hub_versions.length ?? 0) > 0} />}
-          {t.notes.length > 0 && (
-            <Card title="Notes" flush>
-              <ul className="tr-rows">
-                {t.notes.map((n, i) => (
-                  <li key={i} className="muted">
-                    {n}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </aside>
-      </div>
+        </div>
+      )}
+      {tab === "notes" && (
+        <div className="narrow">
+          <Card title="Notes" flush>
+            <ul className="tr-rows">
+              {t.notes.map((n, i) => (
+                <li key={i} className="muted">
+                  {n}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

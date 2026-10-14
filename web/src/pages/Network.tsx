@@ -1,5 +1,6 @@
-// Learning across sites: this site's forecasting model, an update from other
-// sites waiting for a person's decision, and the lessons repairs left behind.
+// Learning across sites: the lessons repairs left behind, first; then, a tab
+// away, this site's forecasting model and an update from other sites waiting
+// for a person's decision.
 // Nothing installs itself, and no control is shown for a step this server
 // cannot take.
 
@@ -9,7 +10,7 @@ import { fleetApprove, fleetPull, fleetRollback, fleetStatus, lessons as fetchLe
 import type { FleetStatus } from "../api/types";
 import { num, pct, stamp } from "../lib/format";
 import { useAsync } from "../lib/hooks";
-import { Badge, Button, Callout, Card, Details, Empty, ErrorState, LinkButton, PageHead, SkeletonRows, Stat, toast } from "../ui/kit";
+import { Badge, Button, Callout, Card, Details, Empty, ErrorState, LinkButton, PageHead, SkeletonRows, Stat, Tabs, toast } from "../ui/kit";
 import "./pages.css";
 import "../styles/trust.css";
 
@@ -153,6 +154,7 @@ function Updates({ s, busy, act }: { s: FleetStatus; busy: string | null; act: A
 
 export default function Network() {
   const status = useAsync(() => fleetStatus(), []);
+  const [tab, setTab] = useState<"lessons" | "updates">("lessons");
   const [q, setQ] = useState("");
   const lessons = useAsync(() => fetchLessons("rolling bearing", q, 20), [q]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -177,75 +179,88 @@ export default function Network() {
 
   return (
     <div className="page tr-page">
-      <PageHead title="Lessons and updates" sub="What repairs teach this site, and updates from other sites." />
+      <PageHead title="Lessons" sub="What repairs teach this site, and updates other sites send." />
 
-      {status.error ? (
-        <Card>
-          <ErrorState error={status.error} onRetry={status.reload} />
-        </Card>
-      ) : !s ? (
-        <Card>
-          <SkeletonRows />
-        </Card>
-      ) : (
-        <>
-          <div className="stats">
-            <Stat label="This site" value={<span style={{ fontSize: "var(--fs-20)" }}>{s.site}</span>} sub={`forecast model: ${s.model}`} />
-            <Stat label="Installed update" value={s.active === null ? "none" : `v${s.active}`} sub={s.active === null ? "running on its own model" : "installed by a person"} />
-            <Stat label="Lessons on file" value={s.lessons} sub="from recorded repairs" />
-          </div>
-          <Updates s={s} busy={busy} act={act} />
-          {error && <Callout tone="danger">{error}</Callout>}
-        </>
-      )}
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        label="Lessons and updates"
+        tabs={[
+          { id: "lessons", label: "Lessons", count: lessons.data?.length || undefined },
+          { id: "updates", label: "Updates from other sites" },
+        ]}
+      />
 
-      <Card
-        title="Lessons"
-        icon={<BookOpen size={15} />}
-        flush
-        actions={(any || q) && <input className="input input-sm" style={{ width: 200 }} placeholder="Search lessons" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search lessons" />}
-      >
-        {lessons.error ? (
-          <ErrorState error={lessons.error} onRetry={lessons.reload} />
-        ) : !lessons.data ? (
-          <SkeletonRows />
-        ) : lessons.data.length === 0 ? (
-          q ? (
-            <Empty left icon={<BookOpen size={18} />} title="No lesson matches" />
-          ) : (
-            <Empty left icon={<BookOpen size={18} />} title="No lessons yet" action={<LinkButton to="/work-orders">Open work orders</LinkButton>}>
-              One is saved when someone records what a repair found.
-            </Empty>
-          )
+      {tab === "updates" &&
+        (status.error ? (
+          <Card>
+            <ErrorState error={status.error} onRetry={status.reload} />
+          </Card>
+        ) : !s ? (
+          <Card>
+            <SkeletonRows />
+          </Card>
         ) : (
-          <ul className="tr-rows">
-            {lessons.data.map((l) => (
-              <li key={l.id}>
-                <div className="row row-wrap">
-                  <b>{l.title}</b>
-                  <Badge tone={l.outcome === "success" ? "ok" : "warn"}>{l.outcome === "success" ? "what worked" : "a pitfall"}</Badge>
-                  <span className="dim small">
-                    {l.machine_type} · from {l.source}
-                    {l.confirmed_by ? ` · confirmed by ${l.confirmed_by}` : ""}
-                  </span>
-                </div>
-                <dl className="tr-defs">
-                  <dt>When</dt>
-                  <dd>{l.when}</dd>
-                  <dt>Do</dt>
-                  <dd>{l.do}</dd>
-                  {l.avoid && (
-                    <>
-                      <dt>Avoid</dt>
-                      <dd>{l.avoid}</dd>
-                    </>
-                  )}
-                </dl>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+          <>
+            <div className="stats">
+              <Stat label="This site" value={<span style={{ fontSize: "var(--fs-20)" }}>{s.site}</span>} sub={`forecast model: ${s.model}`} />
+              <Stat label="Installed update" value={s.active === null ? "none" : `v${s.active}`} sub={s.active === null ? "running on its own model" : "installed by a person"} />
+              <Stat label="Lessons on file" value={s.lessons} sub="from recorded repairs" />
+            </div>
+            <Updates s={s} busy={busy} act={act} />
+            {error && <Callout tone="danger">{error}</Callout>}
+          </>
+        ))}
+
+      {tab === "lessons" && (
+        <Card
+          title="Lessons"
+          icon={<BookOpen size={15} />}
+          flush
+          actions={(any || q) && <input className="input input-sm" style={{ width: 200 }} placeholder="Search lessons" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search lessons" />}
+        >
+          {lessons.error ? (
+            <ErrorState error={lessons.error} onRetry={lessons.reload} />
+          ) : !lessons.data ? (
+            <SkeletonRows />
+          ) : lessons.data.length === 0 ? (
+            q ? (
+              <Empty left icon={<BookOpen size={18} />} title="No lesson matches" />
+            ) : (
+              <Empty left icon={<BookOpen size={18} />} title="No lessons yet" action={<LinkButton to="/work-orders">Open work orders</LinkButton>}>
+                One is saved when someone records what a repair found.
+              </Empty>
+            )
+          ) : (
+            <ul className="tr-rows">
+              {lessons.data.map((l) => (
+                <li key={l.id}>
+                  <div className="row row-wrap">
+                    <b>{l.title}</b>
+                    <Badge tone={l.outcome === "success" ? "ok" : "warn"}>{l.outcome === "success" ? "what worked" : "a pitfall"}</Badge>
+                    <span className="dim small">
+                      {l.machine_type} · from {l.source}
+                      {l.confirmed_by ? ` · confirmed by ${l.confirmed_by}` : ""}
+                    </span>
+                  </div>
+                  <dl className="tr-defs">
+                    <dt>When</dt>
+                    <dd>{l.when}</dd>
+                    <dt>Do</dt>
+                    <dd>{l.do}</dd>
+                    {l.avoid && (
+                      <>
+                        <dt>Avoid</dt>
+                        <dd>{l.avoid}</dd>
+                      </>
+                    )}
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

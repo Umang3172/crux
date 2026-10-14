@@ -1,19 +1,24 @@
 // One machine: the machine itself in 3D, one sentence on where it stands, one
 // button for the next thing to do, and, once Crux has an answer, the answer
-// and how it got there in four plain lines.
+// and how it got there in four plain lines. Its past investigations, its
+// sensor and its phone scans are a tab away each, beside the same figure.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { modelOf, type CaseModel } from "../lib/casemodel";
+import { clock, num, stamp } from "../lib/format";
 import { useCatalogue } from "../lib/hooks";
 import { fault } from "../lib/plain";
-import { machinePath, type PlantMachine } from "../lib/plant";
+import { machinePath, type PlantData, type PlantMachine } from "../lib/plant";
 import type { CaseEntry } from "../lib/session";
 import { usePlant } from "../lib/useplant";
+import { finding, rowsOf } from "../pages/parts";
+import { Tabs } from "../ui/kit";
 import { MachineFigure } from "./Figure";
 import { investigateMachine, takeMeasurement } from "./run";
 import { keep, sayStatus, usable } from "./words";
+import "./simple.css";
 
 const pct = (x: number) => (x >= 0.995 ? "over 99%" : `${Math.round(x * 100)}%`);
 
@@ -38,7 +43,7 @@ function Trail({ model }: { model: CaseModel }) {
       ? { text: `Asked for ${asked.length === 1 ? "one measurement" : `${asked.length} measurements`}: ${asked.map((c) => c.name.toLowerCase()).join(", ")}.` }
       : { text: "Needed no extra measurement.", off: true },
     model.status === "concluded" && model.leader
-      ? { text: `Named the cause, ${pct(model.leader.belief ?? 0)} sure.` }
+      ? { text: model.leader.kind === "healthy" ? `Found nothing wrong, ${pct(model.leader.belief ?? 0)} sure.` : `Named the cause, ${pct(model.leader.belief ?? 0)} sure.` }
       : { text: "Could not name a cause, and said so." },
   ];
   return (
@@ -53,7 +58,70 @@ function Trail({ model }: { model: CaseModel }) {
   );
 }
 
-function Actions({ m, entry, model, busy, run, measure }: { m: PlantMachine; entry?: CaseEntry; model: CaseModel | null; busy: boolean; run: () => void; measure: () => void }) {
+type Tab = "now" | "history" | "sensor" | "scans";
+
+/** This machine's investigations, newest first, each one line that opens it. */
+function History({ cases }: { cases: CaseEntry[] }) {
+  const rows = rowsOf(cases);
+  if (rows.length === 0) return <p className="mn-now-detail">Nothing investigated on this machine yet.</p>;
+  const today = new Date().toDateString();
+  return (
+    <ul className="mn-list">
+      {rows.map(({ entry, model }) => (
+        <li key={entry.id}>
+          <Link to={`/cases/${entry.id}`}>
+            <span>{finding(model)}</span>
+            <span className="mn-list-meta">
+              {model.status === "concluded" && model.leader ? `${pct(model.leader.belief ?? 0)} sure · ` : ""}
+              {new Date(entry.createdAt).toDateString() === today ? clock(entry.createdAt) : stamp(entry.createdAt)}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Sensor({ data }: { data: PlantData }) {
+  if (!data.sensor) return <p className="mn-now-detail">This server has no live-sensor route.</p>;
+  const rows: [string, ReactNode][] = [
+    ["Sensor", data.sensor.name],
+    ["Sample rate", `${num(data.sensor.sample_rate_hz, 0)} Hz`],
+    ["Buffered", `${num(data.sensor.seconds, 1)} s in ${data.sensor.batches} batches`],
+    ["Its own normal", data.sensor.normal_captures > 0 ? `${data.sensor.normal_captures} healthy captures` : "not recorded yet"],
+  ];
+  return (
+    <dl className="mn-kv">
+      {rows.map(([k, v]) => (
+        <div key={k} style={{ display: "contents" }}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function Scans({ m, data }: { m: PlantMachine; data: PlantData }) {
+  const scans = (data.scans ?? []).filter((s) => s.machine === m.name);
+  if (scans.length === 0) return <p className="mn-now-detail">Not scanned yet.</p>;
+  return (
+    <ul className="mn-list">
+      {scans.map((s) => (
+        <li key={s.id}>
+          <Link to={`/lens/${s.id}`}>
+            <span>{s.summary[0] ?? "A clip on file"}</span>
+            <span className="mn-list-meta">
+              {stamp(s.created)} · {s.analysed ? "analysed" : "speed not confirmed"}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Actions({ m, entry, model, busy, run, measure, onSensor }: { m: PlantMachine; entry?: CaseEntry; model: CaseModel | null; busy: boolean; run: () => void; measure: () => void; onSensor: () => void }) {
   if (m.mode === "life")
     return (
       <Link to={machinePath(m)} className="mn-btn">
@@ -62,9 +130,9 @@ function Actions({ m, entry, model, busy, run, measure }: { m: PlantMachine; ent
     );
   if (m.mode === "live")
     return (
-      <Link to={`/machines/${m.id}`} className="mn-btn">
+      <button className="mn-btn" onClick={onSensor}>
         See the sensor
-      </Link>
+      </button>
     );
   if (m.mode === "camera")
     return (
@@ -110,15 +178,16 @@ function Actions({ m, entry, model, busy, run, measure }: { m: PlantMachine; ent
 
 export default function Machine() {
   const { id } = useParams();
-  const { rows, session } = usePlant();
+  const { rows, session, data } = usePlant();
   const catalogue = useCatalogue();
+  const [tab, setTab] = useState<Tab>("now");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const row = rows.find((r) => r.m.id === id);
 
   if (!row) {
     return (
-      <div className="mn-wrap">
+      <div className="mn-page mn-wrap">
         <Link to="/" className="mn-back">
           <ArrowLeft size={15} /> All machines
         </Link>
@@ -128,7 +197,8 @@ export default function Machine() {
   }
 
   const { m, st } = row;
-  const entry = [...session.cases].filter((c) => (c.machine ?? "p2") === m.id).sort((a, b) => b.createdAt - a.createdAt)[0];
+  const mine = session.cases.filter((c) => (c.machine ?? "p2") === m.id);
+  const entry = [...mine].sort((a, b) => b.createdAt - a.createdAt)[0];
   const model = usable(entry, modelOf(entry, catalogue.data));
   const cleared = !!entry?.lost && !model;
   const working = busy || !!st.busy;
@@ -149,7 +219,7 @@ export default function Machine() {
   }
 
   return (
-    <div className="mn-wrap">
+    <div className="mn-page mn-wrap">
       <Link to="/" className="mn-back">
         <ArrowLeft size={15} /> All machines
       </Link>
@@ -168,59 +238,80 @@ export default function Machine() {
             </div>
           </div>
 
-          <section className="mn-now" aria-live="polite">
-            <div className="mn-state">
-              <i className={`mn-dot ${said.mood}`} aria-hidden />
-              <span className="mn-now-label">{leader && !working ? "Problem found" : said.short}</span>
-            </div>
+          {m.mode !== "life" && (
+            <Tabs
+              value={tab}
+              onChange={setTab}
+              label={m.name}
+              tabs={[
+                { id: "now", label: "Now" },
+                ...(m.mode === "model" ? [{ id: "history" as const, label: "History", count: rowsOf(mine).length || undefined }] : []),
+                ...(m.mode === "live" ? [{ id: "sensor" as const, label: "Sensor" }] : []),
+                ...(m.mode === "camera" ? [{ id: "scans" as const, label: "Phone scans" }] : []),
+              ]}
+            />
+          )}
 
-            {leader && !working ? (
-              <div className="mn-answer" aria-label="The answer">
-                <div className="mn-answer-name">{fault(leader.kind).name}</div>
-                <span className="mn-sure">Crux is {pct(leader.belief ?? 0)} sure</span>
-                {fault(leader.kind).story && <p>{fault(leader.kind).story}</p>}
-                <dl className="mn-kv">
-                  <dt>Where</dt>
-                  <dd>{fault(leader.kind).partName}</dd>
-                  {action && (
-                    <>
-                      <dt>What to do</dt>
-                      <dd>{action}</dd>
-                    </>
-                  )}
-                </dl>
+          {tab === "history" && <History cases={mine} />}
+          {tab === "sensor" && <Sensor data={data} />}
+          {tab === "scans" && <Scans m={m} data={data} />}
+
+          {tab === "now" && (
+            <section className="mn-now" aria-live="polite">
+              <div className="mn-state">
+                <i className={`mn-dot ${said.mood}`} aria-hidden />
+                <span className="mn-now-label">{leader && !working ? "Problem found" : said.short}</span>
               </div>
-            ) : (
-              <>
-                <div className="mn-now-text">{said.line}</div>
-                {said.detail && <p className="mn-now-detail">{said.detail}</p>}
-              </>
-            )}
 
-            <div className="mn-actions">
-              <Actions
-                m={m}
-                entry={entry}
-                model={model}
-                busy={working}
-                run={() => void act(() => investigateMachine(m.id))}
-                measure={() => entry && model?.request && void act(() => takeMeasurement(entry, model.request!.test_id))}
-              />
-            </div>
-            {model?.status === "waiting" && entry?.kind === "engine" && !working && (
-              <p className="mn-now-detail" style={{ fontSize: 13.5 }}>
-                In this demo the machine's model takes the reading for you. On a real plant a technician would.
-              </p>
-            )}
-            {cleared && !working && (
-              <p className="mn-now-detail" style={{ fontSize: 13.5 }}>
-                The last check on this machine was cleared when the demo server restarted.
-              </p>
-            )}
-            {error && <p className="mn-error">{error}</p>}
-          </section>
+              {leader && !working ? (
+                <div className="mn-answer" aria-label="The answer">
+                  <div className="mn-answer-name">{fault(leader.kind).name}</div>
+                  <span className="mn-sure">Crux is {pct(leader.belief ?? 0)} sure</span>
+                  {fault(leader.kind).story && <p>{fault(leader.kind).story}</p>}
+                  <dl className="mn-kv">
+                    <dt>Where</dt>
+                    <dd>{fault(leader.kind).partName}</dd>
+                    {action && (
+                      <>
+                        <dt>What to do</dt>
+                        <dd>{action}</dd>
+                      </>
+                    )}
+                  </dl>
+                </div>
+              ) : (
+                <>
+                  <div className="mn-now-text">{said.line}</div>
+                  {said.detail && <p className="mn-now-detail">{said.detail}</p>}
+                </>
+              )}
 
-          {model && model.status !== "waiting" && !working && <Trail model={model} />}
+              <div className="mn-actions">
+                <Actions
+                  m={m}
+                  entry={entry}
+                  model={model}
+                  busy={working}
+                  run={() => void act(() => investigateMachine(m.id))}
+                  measure={() => entry && model?.request && void act(() => takeMeasurement(entry, model.request!.test_id))}
+                  onSensor={() => setTab("sensor")}
+                />
+              </div>
+              {model?.status === "waiting" && entry?.kind === "engine" && !working && (
+                <p className="mn-now-detail" style={{ fontSize: 13.5 }}>
+                  In this demo the machine's model takes the reading for you. On a real plant a technician would.
+                </p>
+              )}
+              {cleared && !working && (
+                <p className="mn-now-detail" style={{ fontSize: 13.5 }}>
+                  The last check on this machine was cleared when the demo server restarted.
+                </p>
+              )}
+              {error && <p className="mn-error">{error}</p>}
+            </section>
+          )}
+
+          {tab === "now" && model && model.status !== "waiting" && !working && <Trail model={model} />}
         </div>
       </div>
     </div>

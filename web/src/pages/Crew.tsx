@@ -1,6 +1,7 @@
-// Maintenance: a technician's inbox. One row per job, most urgent first, each
-// with one thing to do: the measurement Crux is waiting for, a repair that is
-// approved, a repair whose check did not pass, a work order to carry out.
+// To do: a technician's inbox. One row per job, most urgent first, each with
+// one thing to do: the measurement Crux is waiting for, a repair that is
+// approved, a repair whose check did not pass, a work order to carry out, a
+// machine with no sensor whose turn it is to be scanned.
 
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -10,7 +11,7 @@ import { usePresence } from "../lib/glide";
 import { useCatalogue } from "../lib/hooks";
 import { answerWithInstrument } from "../lib/instrument";
 import { check, fault } from "../lib/plain";
-import { SITE, machineOfCase, machinePath, standingOf } from "../lib/plant";
+import { SITE, machineOfCase, standingOf } from "../lib/plant";
 import { isOnList } from "../lib/scenarios";
 import { markAnswered, rememberInvestigation } from "../lib/session";
 import { usePlant } from "../lib/useplant";
@@ -144,82 +145,60 @@ export default function Crew() {
 
   return (
     <div className="page">
-      <PageHead eyebrow={`${SITE.name} · Maintenance`} title="My work" sub={jobs.length ? "Most urgent first." : undefined} />
+      <PageHead eyebrow={`${SITE.name} · for the maintenance crew`} title="To do" sub={jobs.length ? "Most urgent first." : "Measurements and repairs Crux needs appear here."} />
 
       {error && <Callout tone="danger">{error}</Callout>}
 
-      <div className="split-even">
-        <div className="col" style={{ gap: "var(--s-5)" }}>
-          <Card title="To do" icon={<ListTodo size={15} />} sub={jobs.length > 0 ? <CountUp value={jobs.length} /> : undefined} flush tone={jobs.length ? "warn" : undefined}>
-            {shown.length === 0 ? (
-              <Empty left title="Nothing to do" action={session.cases.length === 0 ? <LinkButton to="/go/shift" size="sm">Start a shift</LinkButton> : <LinkButton to="/plant" size="sm">Open plant</LinkButton>}>
-                Measurements and repairs Crux needs appear here.
-              </Empty>
-            ) : (
-              <ul className="inbox" data-tour="crew-todo">
-                {shown.map(({ item: j, key, leaving }) => (
-                  <li key={key} className={cx("job", leaving && "leaving")}>
-                    <div className="job-in">
-                      <span className={cx("job-icon", `tone-${j.tone}`)} aria-hidden>
-                        {j.icon}
-                      </span>
-                      <div>
-                        <h3>{j.title}</h3>
-                        <div className="job-meta">{j.meta}</div>
-                        {j.more}
-                      </div>
-                      <div className="job-acts">{j.act}</div>
+      <div className="col narrow" style={{ gap: "var(--s-4)" }}>
+        <Card title="To do" icon={<ListTodo size={15} />} sub={jobs.length > 0 ? <CountUp value={jobs.length} /> : undefined} flush tone={jobs.length ? "warn" : undefined}>
+          {shown.length === 0 ? (
+            <Empty left title="Nothing to do" action={session.cases.length === 0 ? <LinkButton to="/go/shift" size="sm">Start a shift</LinkButton> : <LinkButton to="/plant" size="sm">Open the control room</LinkButton>}>
+              Measurements and repairs Crux needs appear here.
+            </Empty>
+          ) : (
+            <ul className="inbox" data-tour="crew-todo">
+              {shown.map(({ item: j, key, leaving }) => (
+                <li key={key} className={cx("job", leaving && "leaving")}>
+                  <div className="job-in">
+                    <span className={cx("job-icon", `tone-${j.tone}`)} aria-hidden>
+                      {j.icon}
+                    </span>
+                    <div>
+                      <h3>{j.title}</h3>
+                      <div className="job-meta">{j.meta}</div>
+                      {j.more}
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          {coming.length > 0 && (
-            <Card title="Next, once approved" icon={<Timer size={15} />} sub={coming.length} flush>
-              <ul className="quiet-list">
-                {coming.map((r) => (
-                  <li key={r.entry.id}>
-                    <div className="grow">
-                      <Link to={`/cases/${r.entry.id}`} className="strong">
-                        {fault(r.model.leader!.kind).name}
-                      </Link>
-                      <small>{machineOfCase(r.entry).name}</small>
-                    </div>
-                    <span className="owner manager">Manager</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-
-        <div className="col" style={{ gap: "var(--s-4)" }}>
-          <Card title="No sensor" icon={<ScanLine size={15} />} sub="phone scan only" flush>
-            <ul className="quiet-list">
-              {scans.map(({ m, st }) => (
-                <li key={m.id}>
-                  <div className="grow">
-                    <Link to={machinePath(m)} className="strong">
-                      {m.name}
-                    </Link>
-                    <small>{st.label}</small>
+                    <div className="job-acts">{j.act}</div>
                   </div>
-                  <LinkButton to={`/lens?machine=${encodeURIComponent(m.name)}`} size="sm" icon={<ScanLine size={13} />}>
-                    Scan with phone
-                  </LinkButton>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {coming.length > 0 && (
+          <Card title="Next, once approved" icon={<Timer size={15} />} sub={coming.length} flush>
+            <ul className="quiet-list">
+              {coming.map((r) => (
+                <li key={r.entry.id}>
+                  <div className="grow">
+                    <Link to={`/cases/${r.entry.id}`} className="strong">
+                      {fault(r.model.leader!.kind).name}
+                    </Link>
+                    <small>{machineOfCase(r.entry).name}</small>
+                  </div>
+                  <span className="owner manager">Manager</span>
                 </li>
               ))}
             </ul>
           </Card>
-          <p className="foot-note">
-            Crux never sends a command to a machine.
-            <Hint label="How a job reaches you">
-              Crux investigates each reading. If it cannot tell two causes apart, it asks you for one measurement. When it names a cause, a manager approves the work; after your repair, a new reading checks it.
-            </Hint>
-          </p>
-        </div>
+        )}
+        <p className="foot-note">
+          Crux never sends a command to a machine.
+          <Hint label="How a job reaches you">
+            Crux investigates each reading. If it cannot tell two causes apart, it asks you for one measurement. When it names a cause, a manager approves the work; after your repair, a new reading checks it.
+          </Hint>
+        </p>
       </div>
     </div>
   );

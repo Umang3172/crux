@@ -3,12 +3,12 @@
 // here beyond adding its parts and the differences the page has always shown;
 // the small pictures draw those same counts, one square each.
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { CircleSlash, ExternalLink, FlaskConical, ScrollText, Terminal, TriangleAlert } from "lucide-react";
 import { ASKED, BEST, BY_FAULT, COMMAND, CRUX, CRUX_RIGHT, MEASURED, PER_FAULT, RECORDINGS, REPO, TOTAL, WHERE_BEST_WRONG } from "../data/evaluation";
 import { CONCLUDE_AT, fault } from "../lib/plain";
 import { pct } from "../lib/format";
-import { Badge, Card, CountUp, Details, Hint, Meter, PageHead, SourceTag, cx } from "../ui/kit";
+import { Badge, Card, CountUp, Details, Hint, Meter, PageHead, SourceTag, Tabs, cx } from "../ui/kit";
 import { UnitChart, UnitRow, type UnitPart } from "./trust/UnitChart";
 import { useSeenOnce } from "./trust/seen";
 import "./pages.css";
@@ -200,74 +200,95 @@ function Measured() {
   );
 }
 
+type Tab = "tests" | "measured" | "real" | "limits";
+
 export default function Proof() {
+  const [tab, setTab] = useState<Tab>("tests");
   return (
     <div className="page tr-page">
       <PageHead title="Track record" sub="Crux against a rule that always answers, on the same hard cases." />
 
-      <Result />
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        label="Track record"
+        tabs={[
+          { id: "tests", label: "Hard tests" },
+          { id: "measured", label: "Other results" },
+          { id: "real", label: "Real recordings" },
+          { id: "limits", label: "What it does not claim" },
+        ]}
+      />
 
-      <Measured />
+      {tab === "tests" && <Result />}
 
-      <div className="grid-2" style={{ alignItems: "start" }}>
-        <Card title="Real recordings" icon={<ScrollText size={15} />} flush>
-          <p className="tr-lead">No accuracy figure on real recordings yet. None is shown.</p>
-          <ul className="tr-sets">
-            {RECORDINGS.map((r) => (
-              <li key={r.dataset}>
+      {tab === "measured" && <Measured />}
+
+      <div className="narrow col" style={{ gap: "var(--s-5)" }}>
+        {tab === "real" && (
+          <Card title="Real recordings" icon={<ScrollText size={15} />} flush>
+            <p className="tr-lead">No accuracy figure on real recordings yet. None is shown.</p>
+            <ul className="tr-sets">
+              {RECORDINGS.map((r) => (
+                <li key={r.dataset}>
+                  <div>
+                    <b>{r.dataset}</b>
+                    <div className="small dim">{r.kind}</div>
+                  </div>
+                  <div>
+                    <span>{r.run}</span> <b>{r.result}</b>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {tab === "limits" && (
+          <Card title="What Crux does not claim" icon={<CircleSlash size={15} />} flush>
+            <ul className="tr-claims">
+              <li>
+                <CircleSlash size={14} aria-hidden />
                 <div>
-                  <b>{r.dataset}</b>
-                  <div className="small dim">{r.kind}</div>
-                </div>
-                <div>
-                  <span>{r.run}</span> <b>{r.result}</b>
+                  <b>Accuracy on real machines.</b> <span>The {TOTAL} cases are synthetic.</span>
                 </div>
               </li>
-            ))}
-          </ul>
-        </Card>
+              <li>
+                <CircleSlash size={14} aria-hidden />
+                <div>
+                  <b>That a forecast is a promise.</b> <span>It is a range for planning.</span>
+                </div>
+              </li>
+              <li>
+                <CircleSlash size={14} aria-hidden />
+                <div>
+                  <b>That what a camera or a model saw is confirmed.</b> <span>Unconfirmed until a person checks it.</span>
+                </div>
+              </li>
+              <li>
+                <CircleSlash size={14} aria-hidden />
+                <div>
+                  <b>That it can act on a machine.</b> <span>Crux recommends; a person decides and does the work.</span>
+                </div>
+              </li>
+            </ul>
+          </Card>
+        )}
 
-        <Card title="What Crux does not claim" icon={<CircleSlash size={15} />} flush>
-          <ul className="tr-claims">
-            <li>
-              <CircleSlash size={14} aria-hidden />
-              <div>
-                <b>Accuracy on real machines.</b> <span>The {TOTAL} cases are synthetic.</span>
-              </div>
-            </li>
-            <li>
-              <CircleSlash size={14} aria-hidden />
-              <div>
-                <b>That a forecast is a promise.</b> <span>It is a range for planning.</span>
-              </div>
-            </li>
-            <li>
-              <CircleSlash size={14} aria-hidden />
-              <div>
-                <b>That what a camera or a model saw is confirmed.</b> <span>Unconfirmed until a person checks it.</span>
-              </div>
-            </li>
-            <li>
-              <CircleSlash size={14} aria-hidden />
-              <div>
-                <b>That it can act on a machine.</b> <span>Crux recommends; a person decides and does the work.</span>
-              </div>
-            </li>
-          </ul>
-        </Card>
+        {tab === "limits" && (
+          <Card title="Try it yourself" icon={<Terminal size={15} />}>
+            <div className="tr-run">
+              <code className="code-block">{COMMAND}</code>
+              <Hint label="What it runs">
+                The same {TOTAL} cases, offline and with no keys. It prints the totals and the table by fault.
+              </Hint>
+              <a href={REPO} target="_blank" rel="noreferrer" className="btn">
+                Open the code <ExternalLink size={13} aria-hidden />
+              </a>
+            </div>
+          </Card>
+        )}
       </div>
-
-      <Card title="Try it yourself" icon={<Terminal size={15} />}>
-        <div className="tr-run">
-          <code className="code-block">{COMMAND}</code>
-          <Hint label="What it runs">
-            The same {TOTAL} cases, offline and with no keys. It prints the totals and the table by fault.
-          </Hint>
-          <a href={REPO} target="_blank" rel="noreferrer" className="btn">
-            Open the code <ExternalLink size={13} aria-hidden />
-          </a>
-        </div>
-      </Card>
     </div>
   );
 }

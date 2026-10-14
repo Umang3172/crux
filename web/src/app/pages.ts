@@ -9,7 +9,6 @@ export const PAGES = {
   plant: () => import("../pages/Plant").then((m) => m.default),
   crew: () => import("../pages/Crew").then((m) => m.default),
   manager: () => import("../pages/Manager").then((m) => m.default),
-  plantMachine: () => import("../pages/PlantMachine").then((m) => m.default),
   cases: () => import("../pages/Cases").then((m) => m.default),
   casePage: () => import("../pages/CasePage").then((m) => m.default),
   agents: () => import("../pages/Agents").then((m) => m.default),

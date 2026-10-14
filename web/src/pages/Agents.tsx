@@ -3,21 +3,20 @@
 // which model drives each job. The words explain; every name, tool and limit
 // on the page is the server's.
 
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { Activity, ArrowLeftRight, ArrowRight, Bot, Check, FileCheck, FlaskConical, ListChecks, Lock, Play, Ruler, Scale, Search, ShieldCheck, Timer, Workflow } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowLeftRight, Bot, Check, FileCheck, FlaskConical, ListChecks, Lock, Play, Scale, Search, ShieldCheck, Timer, Workflow } from "lucide-react";
 import { openLauncher } from "../app/Launcher";
 import type { AgentAbout } from "../api/types";
 import { brainOf, fallbackReason, runBrain } from "../lib/ai";
 import { modelOf } from "../lib/casemodel";
-import { pct, shortId, stamp } from "../lib/format";
+import { shortId, stamp } from "../lib/format";
 import { useAbout, useHealth, useReducedMotion } from "../lib/hooks";
 import { shownSteps } from "../lib/liveruns";
 import { usePlayback } from "../lib/playback";
-import { CONCLUDE_AT } from "../lib/plain";
 import { machineOfCase } from "../lib/plant";
 import { useSession, type CaseEntry } from "../lib/session";
 import { AgentStage } from "../ui/AgentStage";
-import { Badge, Button, Card, Details, Empty, ErrorState, Hint, LinkButton, PageHead, SkeletonRows, cx } from "../ui/kit";
+import { Badge, Button, Card, Details, Empty, ErrorState, Hint, LinkButton, PageHead, SkeletonRows, Tabs, cx } from "../ui/kit";
 import { Link } from "react-router";
 import { finding } from "./parts";
 import { AiJobs, Limits } from "./trust/Jobs";
@@ -31,33 +30,6 @@ const WRITES = new Set(["propose_suspect"]);
 const NAME: Record<string, string> = { investigator: "Investigator", critic: "Critic" };
 
 type Agent = AgentAbout["agents"][number];
-
-function Steps() {
-  const steps = [
-    { icon: <Activity size={16} />, tone: "", title: "A reading comes in", sub: "Vibration from a pump, fan or motor." },
-    { icon: <FlaskConical size={16} />, tone: "tone-sim", title: "Every suspect is tested on a virtual copy", sub: `A cause is named only at ${pct(CONCLUDE_AT)} belief.` },
-    { icon: <Ruler size={16} />, tone: "tone-accent", title: "One measurement, only if it cannot tell", sub: "Then a person approves any repair." },
-  ];
-  return (
-    <ol className="tr-steps tr-in" id="how-steps" aria-label="How an investigation goes">
-      {steps.map((s, i) => (
-        <li key={s.title} className="tr-step" style={{ "--i": i } as CSSProperties}>
-          {i > 0 && (
-            <span className="tr-join" aria-hidden>
-              <ArrowRight size={13} />
-            </span>
-          )}
-          <span className={cx("tr-ico", s.tone)}>{s.icon}</span>
-          <div>
-            <span className="tr-step-n">Step {i + 1}</span>
-            <h3>{s.title}</h3>
-            <p>{s.sub}</p>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
 
 function Power({ can, label, tools }: { can: boolean; label: string; tools: string[] }) {
   return (
@@ -104,7 +76,7 @@ function Split({ about }: { about: AgentAbout }) {
   const others = about.agents.filter((a) => a !== investigator && a !== critic);
   const both = about.agents.some((x) => x.tools.some((t) => CLOSES.has(t)) && x.tools.some((t) => WRITES.has(t)));
   return (
-    <Card id="who-may-do-what" title="Two AI investigators" icon={<Bot size={15} />}>
+    <Card id="who-may-do-what" title="Who may do what" icon={<Bot size={15} />}>
       <div className="tr-split">
         {investigator && <Side agent={investigator} icon={<Bot size={16} />} />}
         <div className="tr-gate">
@@ -231,7 +203,10 @@ function LatestRun({ entry, about }: { entry: CaseEntry; about: AgentAbout }) {
   );
 }
 
+type Tab = "who" | "honest" | "watch" | "reference";
+
 export default function Agents() {
+  const [tab, setTab] = useState<Tab>("who");
   const about = useAbout();
   const health = useHealth();
   const session = useSession();
@@ -253,7 +228,7 @@ export default function Agents() {
   return (
     <div className="page tr-page">
       <PageHead
-        title="How Crux works"
+        title="The AI at work"
         sub="The AI may ask the physics anything. It cannot tell it the answer."
         actions={
           <>
@@ -277,7 +252,17 @@ export default function Agents() {
         }
       />
 
-      <Steps />
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        label="The AI at work"
+        tabs={[
+          { id: "who", label: "Two investigators" },
+          { id: "honest", label: "What keeps it honest" },
+          { id: "watch", label: "Watch a run" },
+          { id: "reference", label: "Reference" },
+        ]}
+      />
 
       {!a ? (
         <Card>
@@ -285,124 +270,131 @@ export default function Agents() {
         </Card>
       ) : (
         <>
-          <Split about={a} />
-
-          <Honest about={a} />
-
-          {runs[0] ? (
-            <LatestRun key={runs[0].id} entry={runs[0]} about={a} />
-          ) : (
-            <Card id="latest-investigation" title="Its latest investigation" icon={<Workflow size={15} />}>
-              <Empty
-                icon={<Play size={18} />}
-                title="Nothing to replay yet"
-                action={
-                  <Button variant="primary" icon={<Play size={14} />} onClick={watch}>
-                    Watch an investigation
-                  </Button>
-                }
-              >
-                Start one and it replays here, step by step.
-              </Empty>
-            </Card>
+          {tab === "who" && (
+            <Split about={a} />
           )}
 
-          <Card title="Reference" icon={<ListChecks size={15} />} flush>
-            <div className="tr-more">
-              <Details
-                summary={
-                  <>
-                    Every tool <span className="dim">· {a.tools.length}</span>
-                  </>
-                }
-              >
-                <div className="table-wrap">
-                  <table className="table compact t-top">
-                    <thead>
-                      <tr>
-                        <th>Tool</th>
-                        <th>What it does</th>
-                        <th>Takes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {a.tools.map((t) => (
-                        <tr key={t.name}>
-                          <td className="mono nowrap strong" style={{ verticalAlign: "top" }}>
-                            {t.name}
-                          </td>
-                          <td className="muted">{t.does}</td>
-                          <td style={{ verticalAlign: "top" }}>
-                            {t.takes.length === 0 ? (
-                              <span className="dim">nothing</span>
-                            ) : (
-                              <span className="row gap-1 row-wrap">
-                                {t.takes.map((x) => (
-                                  <span key={x} className="chip">
-                                    {x}
-                                  </span>
-                                ))}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Details>
-              <Details summary="Which model does which job">{health.data ? <AiJobs models={health.data.models} /> : <SkeletonRows rows={3} />}</Details>
-              {runs.length > 0 && (
+          {tab === "honest" && (
+            <Honest about={a} />
+          )}
+
+          {tab === "watch" &&
+            (runs[0] ? (
+              <LatestRun key={runs[0].id} entry={runs[0]} about={a} />
+            ) : (
+              <Card id="latest-investigation" title="Its latest investigation" icon={<Workflow size={15} />}>
+                <Empty
+                  icon={<Play size={18} />}
+                  title="Nothing to replay yet"
+                  action={
+                    <Button variant="primary" icon={<Play size={14} />} onClick={watch}>
+                      Watch an investigation
+                    </Button>
+                  }
+                >
+                  Start one and it replays here, step by step.
+                </Empty>
+              </Card>
+            ))}
+
+          {tab === "reference" && (
+            <Card title="Reference" icon={<ListChecks size={15} />} flush>
+              <div className="tr-more">
                 <Details
                   summary={
                     <>
-                      AI investigations this session <span className="dim">· {runs.length}</span>
+                      Every tool <span className="dim">· {a.tools.length}</span>
                     </>
                   }
                 >
                   <div className="table-wrap">
-                    <table className="table compact">
+                    <table className="table compact t-top">
                       <thead>
                         <tr>
-                          <th>Machine</th>
-                          <th>Ended as</th>
-                          <th>Model</th>
-                          <th className="t-num">Rounds</th>
-                          <th className="t-num">Steps</th>
-                          <th>Critic</th>
-                          <th className="t-num">Opened</th>
+                          <th>Tool</th>
+                          <th>What it does</th>
+                          <th>Takes</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {runs.map((c) => {
-                          const m = modelOf(c);
-                          const run = c.run!;
-                          const b = runBrain(run.model, run.live);
-                          return (
-                            <tr key={c.id}>
-                              <td className="nowrap">
-                                <Link to={`/cases/${c.id}`}>{machineOfCase(c).short}</Link> <span className="mono dim small">{shortId(c.id)}</span>
-                              </td>
-                              <td className="strong">{m ? finding(m) : "–"}</td>
-                              <td>
-                                <Badge tone={b.live ? "ok" : "neutral"} title={run.model}>
-                                  {b.name}
-                                </Badge>
-                              </td>
-                              <td className="t-num">{run.rounds}</td>
-                              <td className="t-num">{run.tool_calls.length}</td>
-                              <td>{run.steps.some((s) => s.agent === "critic") ? <Badge tone="model">called</Badge> : <span className="dim">not needed</span>}</td>
-                              <td className="t-num dim-cell">{stamp(c.createdAt)}</td>
-                            </tr>
-                          );
-                        })}
+                        {a.tools.map((t) => (
+                          <tr key={t.name}>
+                            <td className="mono nowrap strong" style={{ verticalAlign: "top" }}>
+                              {t.name}
+                            </td>
+                            <td className="muted">{t.does}</td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {t.takes.length === 0 ? (
+                                <span className="dim">nothing</span>
+                              ) : (
+                                <span className="row gap-1 row-wrap">
+                                  {t.takes.map((x) => (
+                                    <span key={x} className="chip">
+                                      {x}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 </Details>
-              )}
-            </div>
-          </Card>
+                <Details summary="Which model does which job">{health.data ? <AiJobs models={health.data.models} /> : <SkeletonRows rows={3} />}</Details>
+                {runs.length > 0 && (
+                  <Details
+                    summary={
+                      <>
+                        AI investigations this session <span className="dim">· {runs.length}</span>
+                      </>
+                    }
+                  >
+                    <div className="table-wrap">
+                      <table className="table compact">
+                        <thead>
+                          <tr>
+                            <th>Machine</th>
+                            <th>Ended as</th>
+                            <th>Model</th>
+                            <th className="t-num">Rounds</th>
+                            <th className="t-num">Steps</th>
+                            <th>Critic</th>
+                            <th className="t-num">Opened</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runs.map((c) => {
+                            const m = modelOf(c);
+                            const run = c.run!;
+                            const b = runBrain(run.model, run.live);
+                            return (
+                              <tr key={c.id}>
+                                <td className="nowrap">
+                                  <Link to={`/cases/${c.id}`}>{machineOfCase(c).short}</Link> <span className="mono dim small">{shortId(c.id)}</span>
+                                </td>
+                                <td className="strong">{m ? finding(m) : "–"}</td>
+                                <td>
+                                  <Badge tone={b.live ? "ok" : "neutral"} title={run.model}>
+                                    {b.name}
+                                  </Badge>
+                                </td>
+                                <td className="t-num">{run.rounds}</td>
+                                <td className="t-num">{run.tool_calls.length}</td>
+                                <td>{run.steps.some((s) => s.agent === "critic") ? <Badge tone="model">called</Badge> : <span className="dim">not needed</span>}</td>
+                                <td className="t-num dim-cell">{stamp(c.createdAt)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Details>
+                )}
+              </div>
+            </Card>
+          )}
         </>
       )}
     </div>

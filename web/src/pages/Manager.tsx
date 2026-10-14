@@ -1,17 +1,17 @@
-// The manager's page: the decisions that wait for a name, first; then how each
-// area stands and what Crux did, counted from this session's investigations.
+// Sign-offs: the decisions that wait for a name, first. What was signed off and
+// what Crux did this session are a tab away each (?tab=signed|session).
 
 import { useState } from "react";
-import { Link } from "react-router";
-import { BadgeCheck, Building2, ClipboardCheck, Sparkles } from "lucide-react";
+import { Link, useSearchParams } from "react-router";
+import { BadgeCheck, ClipboardCheck, Sparkles } from "lucide-react";
 import { clock, pct } from "../lib/format";
 import { usePresence } from "../lib/glide";
 import { fault } from "../lib/plain";
-import { AREAS, SITE, STANDING, machineOfCase, standingOf, type Standing } from "../lib/plant";
+import { SITE, machineOfCase } from "../lib/plant";
 import { patchCase } from "../lib/session";
 import { usePlant } from "../lib/useplant";
 import { StackBar } from "../ui/charts";
-import { Badge, Button, Card, CountUp, Empty, Hint, LinkButton, PageHead, Ring, cx, toast } from "../ui/kit";
+import { Badge, Button, Card, CountUp, Empty, Hint, LinkButton, PageHead, Ring, Tabs, cx, toast } from "../ui/kit";
 import { rowsOf, type CaseRow } from "./parts";
 import "../styles/plant.css";
 import "./pages.css";
@@ -33,12 +33,16 @@ function keepName(name: string) {
   }
 }
 
-const ORDER: Standing[] = ["person", "crux", "ok", "idle"];
+type Tab = "waiting" | "signed" | "session";
+const TABS: Tab[] = ["waiting", "signed", "session"];
 
 type Decision = { key: string; row?: CaseRow; ticket?: { id: string; part: string; machine: string } };
 
 export default function Manager() {
-  const { session, rows, tickets } = usePlant();
+  const { session, tickets } = usePlant();
+  const [params, setParams] = useSearchParams();
+  const pickedTab = params.get("tab") as Tab | null;
+  const tab: Tab = pickedTab && TABS.includes(pickedTab) ? pickedTab : "waiting";
   const [name, setName] = useState(storedName);
   const [editing, setEditing] = useState(() => storedName() === "");
   const cases = rowsOf(session.cases);
@@ -90,10 +94,21 @@ export default function Manager() {
 
   return (
     <div className="page">
-      <PageHead eyebrow={`${SITE.name} · Manager`} title="Summary" sub="Nothing is done to a machine until a person signs." />
+      <PageHead eyebrow={`${SITE.name} · for the manager`} title="Sign-offs" sub="Nothing is done to a machine until a person signs." />
 
-      <div className="split-even">
-        <div className="col" style={{ gap: "var(--s-5)" }}>
+      <Tabs
+        value={tab}
+        onChange={(t) => setParams(t === "waiting" ? {} : { tab: t }, { replace: true })}
+        label="Sign-offs"
+        tabs={[
+          { id: "waiting", label: "Waiting", count: decisions.length || undefined },
+          { id: "signed", label: "Signed off", count: signed.length || undefined },
+          { id: "session", label: "This session" },
+        ]}
+      />
+
+      <div className="col narrow" style={{ gap: "var(--s-4)" }}>
+        {tab === "waiting" && (
           <Card
             title="Decisions"
             icon={<ClipboardCheck size={15} />}
@@ -155,7 +170,8 @@ export default function Manager() {
               </ul>
             )}
           </Card>
-
+        )}
+        {tab === "signed" && (
           <Card title="Signed off" icon={<BadgeCheck size={15} />} sub={signed.length || undefined} flush>
             {signed.length === 0 ? (
               <Empty left title="Nothing signed off yet" />
@@ -181,100 +197,71 @@ export default function Manager() {
               </ul>
             )}
           </Card>
-        </div>
-
-        <div className="col" style={{ gap: "var(--s-4)" }}>
-          <Card title="Areas" icon={<Building2 size={15} />} actions={<Link to="/plant" className="small">Open plant</Link>}>
-            <div className="legend" aria-hidden>
-              {ORDER.map((s) => (
-                <span key={s}>
-                  <i className={`is-${s}`} />
-                  {STANDING[s].label}
-                </span>
-              ))}
-            </div>
-            <div className="areas" style={{ marginTop: 12 }}>
-              {AREAS.map((a) => {
-                const here = rows.filter((r) => r.m.area === a.id);
-                const n = (s: Standing) => here.filter((r) => standingOf(r.st) === s).length;
-                return (
-                  <div key={a.id} className="area-row" role="img" aria-label={`${a.name}: ${ORDER.map((s) => `${n(s)} ${STANDING[s].label.toLowerCase()}`).join(", ")}`}>
-                    <span className="truncate">{a.name}</span>
-                    <div className="standing-bar">
-                      {ORDER.map((s) => (
-                        <span key={s} className={`is-${s}`} style={{ flexGrow: n(s) }} title={`${STANDING[s].label}: ${n(s)}`} />
-                      ))}
+        )}
+        {tab === "session" && (
+          <>
+            <Card
+              title={
+                <>
+                  This session
+                  <Hint label="About these counts">Counts of what happened in this browser, on synthetic readings. Not an accuracy figure.</Hint>
+                </>
+              }
+              icon={<Sparkles size={15} />}
+            >
+              {cases.length === 0 ? (
+                <p className="muted">Nothing investigated yet.</p>
+              ) : (
+                <>
+                  <StackBar
+                    height={8}
+                    parts={[
+                      { label: "Fault found", value: faults.length, tone: "warn" },
+                      { label: "Nothing wrong", value: healthy.length, tone: "ok" },
+                      { label: "No cause named", value: declined.length, tone: "muted" },
+                      { label: "Waiting for a measurement", value: waiting.length, tone: "accent" },
+                    ]}
+                  />
+                  <div className="counts">
+                    <div>
+                      <b className="num">
+                        <CountUp value={cases.length} />
+                      </b>
+                      <span>readings investigated</span>
                     </div>
-                    <b className="num" title="Needs a person">
-                      {n("person") || ""}
-                    </b>
+                    <div>
+                      <b className="num">
+                        <CountUp value={faults.length} />
+                      </b>
+                      <span>faults found</span>
+                    </div>
+                    <div>
+                      <b className="num">
+                        <CountUp value={healthy.length} />
+                      </b>
+                      <span>nothing wrong</span>
+                    </div>
+                    <div>
+                      <b className="num">
+                        <CountUp value={asked.length} />
+                      </b>
+                      <span>asked for a measurement</span>
+                    </div>
+                    <div>
+                      <b className="num">
+                        <CountUp value={declined.length} />
+                      </b>
+                      <span>no cause named</span>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card
-            title={
-              <>
-                This session
-                <Hint label="About these counts">Counts of what happened in this browser, on synthetic readings. Not an accuracy figure.</Hint>
-              </>
-            }
-            icon={<Sparkles size={15} />}
-          >
-            {cases.length === 0 ? (
-              <p className="muted">Nothing investigated yet.</p>
-            ) : (
-              <>
-                <StackBar
-                  height={8}
-                  parts={[
-                    { label: "Fault found", value: faults.length, tone: "warn" },
-                    { label: "Nothing wrong", value: healthy.length, tone: "ok" },
-                    { label: "No cause named", value: declined.length, tone: "muted" },
-                    { label: "Waiting for a measurement", value: waiting.length, tone: "accent" },
-                  ]}
-                />
-                <div className="counts">
-                  <div>
-                    <b className="num">
-                      <CountUp value={cases.length} />
-                    </b>
-                    <span>readings investigated</span>
-                  </div>
-                  <div>
-                    <b className="num">
-                      <CountUp value={faults.length} />
-                    </b>
-                    <span>faults found</span>
-                  </div>
-                  <div>
-                    <b className="num">
-                      <CountUp value={healthy.length} />
-                    </b>
-                    <span>nothing wrong</span>
-                  </div>
-                  <div>
-                    <b className="num">
-                      <CountUp value={asked.length} />
-                    </b>
-                    <span>asked for a measurement</span>
-                  </div>
-                  <div>
-                    <b className="num">
-                      <CountUp value={declined.length} />
-                    </b>
-                    <span>no cause named</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </Card>
-          <p className="foot-note">
-            Measured results: <Link to="/proof">Track record</Link> · <Link to="/agents">How Crux works</Link>
-          </p>
-        </div>
+                </>
+              )}
+            </Card>
+            <p className="foot-note">
+              Measured results: <Link to="/proof">Track record</Link> · <Link to="/agents">How Crux works</Link>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

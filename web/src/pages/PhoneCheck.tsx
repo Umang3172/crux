@@ -12,6 +12,7 @@ import { check, fault } from "../lib/plain";
 import { machineById } from "../lib/plant";
 import { markAnswered } from "../lib/session";
 import { Badge, Button, Callout, ErrorState, SkeletonRows } from "../ui/kit";
+import "../app/shell.css";
 import "../styles/app.css";
 import "./pages.css";
 
@@ -48,9 +49,9 @@ export default function PhoneCheck() {
   return (
     <div className="phone">
       <header className="phone-head">
-        <span className="brand-mark" aria-hidden>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <path d="M3 3l10 10M13 3L3 13" />
+        <span className="mn-mark" aria-hidden>
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path d="M2 2l8 8M10 2L2 10" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </span>
         Crux

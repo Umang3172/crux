@@ -7,19 +7,17 @@
   align-items: center;
   gap: 4px;
   color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--fs-12);
+  font-weight: 450;
   white-space: nowrap;
 }
 .owner.crew,
 .owner.manager,
 .owner.control {
-  color: var(--warn);
+  color: var(--text-2);
 }
 .owner.crux {
-  color: var(--accent);
+  color: var(--text-3);
 }
 a.owner:hover {
   text-decoration: underline;
@@ -84,87 +82,8 @@ a.owner:hover {
 }
 .flow-label b {
   color: var(--text-2);
-  font-weight: 600;
+  font-weight: 500;
 }
-.flow-steps {
-  display: flex;
-  overflow-x: auto;
-}
-.flow-step {
-  flex: 1 0 84px;
-  position: relative;
-  padding: 0 6px;
-  text-align: center;
-  color: var(--text-3);
-  font-size: var(--fs-12);
-}
-.flow-step i {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  margin: 0 auto 6px;
-  border: 1.5px solid var(--line-2);
-  border-radius: 50%;
-  background: var(--panel);
-  font-family: var(--mono);
-  font-size: var(--fs-10);
-  font-style: normal;
-  transition:
-    background-color var(--t-med),
-    border-color var(--t-med);
-}
-.flow-step::before {
-  content: "";
-  position: absolute;
-  top: 11px;
-  left: -50%;
-  right: 50%;
-  height: 2px;
-  background: var(--line);
-}
-.flow-step:first-child::before {
-  display: none;
-}
-.flow-step.done,
-.flow-step.now {
-  color: var(--text);
-}
-.flow-step.done i {
-  border-color: var(--text-3);
-  color: var(--text-2);
-}
-.flow-step.done::before,
-.flow-step.now::before {
-  background: var(--text-3);
-}
-.flow-step.now i {
-  border-color: var(--accent);
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-.flow-step.now.tone-warn i {
-  border-color: var(--warn);
-  background: var(--warn);
-  color: var(--bg);
-  box-shadow: 0 0 0 4px var(--warn-soft);
-}
-.flow-step.now.tone-ok i {
-  border-color: var(--ok);
-  background: var(--ok);
-  color: var(--bg);
-  box-shadow: 0 0 0 4px var(--ok-soft);
-}
-.flow-step.now.tone-danger i {
-  border-color: var(--danger);
-  background: var(--danger);
-  color: var(--bg);
-  box-shadow: 0 0 0 4px var(--danger-soft);
-}
-
 /* A machine's drawing with the frame that carries its state */
 .glyph-frame-track {
   fill: none;
@@ -218,6 +137,10 @@ a.owner:hover {
   margin: -4px;
   padding: 4px;
 }
+/* With no shift to show, the band takes no room in the page's rhythm. */
+.page > .band-wrap:has(> div:empty) {
+  display: none;
+}
 .band {
   border: 1px solid var(--line);
   border-radius: var(--r-3);
@@ -249,7 +172,7 @@ a.owner:hover {
 }
 .hero-text h2 {
   font-size: var(--fs-28);
-  font-weight: 640;
+  font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.15;
 }
@@ -305,7 +228,7 @@ a.owner:hover {
 }
 .hero-loop b {
   font-size: var(--fs-13);
-  font-weight: 600;
+  font-weight: 500;
 }
 .hero-loop span {
   color: var(--text-3);
@@ -338,7 +261,7 @@ a.owner:hover {
   align-items: center;
   gap: 8px;
   font-size: var(--fs-14);
-  font-weight: 620;
+  font-weight: 500;
 }
 .band-dot {
   width: 8px;
@@ -363,7 +286,7 @@ a.owner:hover {
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-12);
-  font-weight: 550;
+  font-weight: 500;
   transition:
     border-color var(--t-fast),
     background var(--t-fast),
@@ -421,23 +344,8 @@ a.owner:hover {
   gap: 6px 14px;
 }
 
-/* The page split: the floor and a light rail */
-.plant-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--s-5);
-  align-items: start;
-}
 .plant-main {
-  gap: var(--s-3);
-}
-.plant-rail {
-  gap: var(--s-4);
-}
-@media (max-width: 1180px) {
-  .plant-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  gap: 20px;
 }
 
 /* The strip: where the machines stand, which is also the filter */
@@ -454,7 +362,7 @@ a.owner:hover {
   flex: 1 1 520px;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: var(--r-3);
+  border-radius: var(--r-pill);
   background: var(--panel);
   overflow: hidden;
 }
@@ -473,11 +381,11 @@ a.owner:hover {
   height: 32px;
   padding: 0 11px;
   border: 0;
-  border-radius: var(--r-2);
+  border-radius: var(--r-pill);
   background: none;
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-12);
-  font-weight: 550;
+  font-weight: 450;
   white-space: nowrap;
   transition:
     background var(--t-fast),
@@ -495,8 +403,8 @@ a.owner:hover {
 .standing-chip b {
   margin-left: auto;
   color: var(--text);
-  font-size: var(--fs-14);
-  font-weight: 640;
+  font-size: var(--fs-13);
+  font-weight: 500;
 }
 .standing-dot {
   width: 8px;
@@ -526,6 +434,10 @@ a.owner:hover {
   display: flex;
   height: 3px;
 }
+/* The strip's counts say it; the bar under them would say it twice. */
+.standing .standing-bar {
+  display: none;
+}
 .standing-bar span {
   flex-basis: 0;
   transition: flex-grow var(--t-slow) var(--ease);
@@ -535,23 +447,24 @@ a.owner:hover {
 .floor {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
 }
 .floor-head {
   grid-column: 1 / -1;
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-top: var(--s-2);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  margin-top: 20px;
+  padding-bottom: 2px;
 }
 .floor-head:first-child {
-  margin-top: 0;
+  margin-top: 4px;
 }
 .floor-head h2 {
-  font-size: var(--fs-13);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 .floor-count {
   color: var(--text-3);
@@ -564,14 +477,7 @@ a.owner:hover {
   margin-left: auto;
   font-size: var(--fs-12);
 }
-.floor-head.lane-crux h2 {
-  color: var(--accent);
-}
-.floor-head.lane-crew h2,
-.floor-head.lane-manager h2,
-.floor-head.lane-control h2 {
-  color: var(--warn);
-}
+
 .floor-empty {
   grid-column: 1 / -1;
   padding: 10px 12px;
@@ -600,20 +506,21 @@ a.owner:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 12px 11px;
+  gap: 14px;
+  padding: 18px 18px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-3);
   background: var(--panel);
-  box-shadow: var(--shadow-1);
   transition:
     border-color var(--t-med),
     box-shadow var(--t-med),
+    transform var(--t-med) var(--ease),
     background-color var(--t-med);
 }
 .tile:hover {
   border-color: var(--line-2);
-  background: var(--panel-2);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(10, 10, 10, 0.06);
 }
 .tile:focus-within {
   border-color: var(--focus);
@@ -624,12 +531,8 @@ a.owner:hover {
 .tile.is-danger {
   border-color: var(--danger-line);
 }
-.tile.is-crux {
-  border-color: var(--accent-line);
-}
 .tile.on-stage {
-  border-color: var(--model);
-  box-shadow: 0 0 0 3px var(--model-soft);
+  border-color: var(--text);
 }
 /* When a machine's state moves, its tile answers once. */
 .tile-pulse {
@@ -683,8 +586,9 @@ a.owner:hover {
 .tile-name {
   display: block;
   color: var(--text);
-  font-size: var(--fs-14);
-  font-weight: 620;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   line-height: 1.25;
 }
 .tile-name:hover {
@@ -711,7 +615,7 @@ a.owner:hover {
   min-width: 0;
   color: var(--text-2);
   font-size: var(--fs-12);
-  font-weight: 550;
+  font-weight: 450;
 }
 .tile-dot {
   width: 7px;
@@ -746,8 +650,8 @@ a.owner:hover {
   background: var(--model);
 }
 .call-who {
-  font-weight: 620;
-  color: var(--model);
+  font-weight: 500;
+  color: var(--text);
 }
 .tile-act {
   position: relative;
@@ -789,7 +693,7 @@ a.owner:hover {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding: 6px var(--s-4);
+  padding: 10px 20px;
   color: inherit;
 }
 .needs-row > a:hover {
@@ -797,7 +701,7 @@ a.owner:hover {
   text-decoration: none;
 }
 .needs-name {
-  font-weight: 600;
+  font-weight: 500;
 }
 .needs-what {
   font-size: var(--fs-12);
@@ -826,7 +730,7 @@ a.owner:hover {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 9px var(--s-4);
+  padding: 14px 20px;
   border: 0;
   background: none;
   color: var(--text);
@@ -842,7 +746,7 @@ a.owner:hover {
 .guided-title {
   flex: 1;
   min-width: 0;
-  font-weight: 600;
+  font-weight: 500;
 }
 .guided-shows {
   color: var(--text-3);
@@ -855,7 +759,7 @@ a.owner:hover {
 
 /* Crux at work, short */
 .feed-tight li {
-  padding: 8px var(--s-4);
+  padding: 12px 20px;
 }
 .feed-row {
   display: flex;
@@ -867,7 +771,7 @@ a.owner:hover {
   text-decoration: none;
 }
 .feed-row:hover .feed-what b {
-  color: var(--accent);
+  text-decoration: underline;
 }
 .feed-what {
   font-size: var(--fs-12);
@@ -875,7 +779,7 @@ a.owner:hover {
 }
 .feed-what b {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .feed-said {
   overflow: hidden;
@@ -883,50 +787,6 @@ a.owner:hover {
   font-size: var(--fs-12);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* The role switch in the sidebar */
-.roles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: var(--s-3) var(--s-3) 0;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  background: var(--panel);
-}
-.roles > span {
-  padding: 5px 8px 3px;
-  color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.roles button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-2);
-  font-weight: 550;
-  text-align: left;
-}
-.roles button:hover {
-  background: var(--panel-2);
-  color: var(--text);
-}
-.roles button.on {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.roles button svg {
-  flex: none;
 }
 
 /* An inbox: one job per row, one primary action */
@@ -953,14 +813,14 @@ a.owner:hover {
   align-items: start;
   min-height: 0;
   overflow: hidden;
-  padding: 12px var(--s-4);
+  padding: 16px 20px;
 }
 .job-icon {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: var(--r-2);
+  border-radius: 50%;
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -973,7 +833,8 @@ a.owner:hover {
   color: var(--text-2);
 }
 .job h3 {
-  font-size: var(--fs-14);
+  font-size: 15px;
+  font-weight: 500;
   line-height: 1.3;
 }
 .job h3 a {
@@ -1016,7 +877,7 @@ a.owner:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px var(--s-4);
+  padding: 12px 20px;
   border-bottom: 1px solid var(--line);
 }
 .quiet-list li:last-child {
@@ -1056,15 +917,15 @@ a.owner:hover {
   align-items: center;
   min-height: 0;
   overflow: hidden;
-  padding: 12px var(--s-4);
+  padding: 16px 20px;
 }
 .decision-in .ring-label {
   font-size: var(--fs-12);
 }
 .decision-what {
-  font-size: var(--fs-16);
-  font-weight: 640;
-  letter-spacing: -0.01em;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
 }
 .decision-rec {
   margin-top: 3px;
@@ -1097,7 +958,7 @@ a.owner:hover {
 }
 .area-row > span:first-child {
   color: var(--text);
-  font-weight: 550;
+  font-weight: 450;
 }
 .area-row .standing-bar {
   height: 8px;
@@ -1156,66 +1017,11 @@ a.owner:hover {
 }
 .counts b {
   font-size: var(--fs-20);
-  font-weight: 640;
+  font-weight: 500;
 }
 .counts > div > span {
   color: var(--text-3);
   font-size: var(--fs-12);
-}
-
-/* One machine */
-.machine-now {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--s-2) var(--s-4);
-  align-items: center;
-}
-.machine-state {
-  font-size: var(--fs-20);
-  font-weight: 640;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
-}
-.machine-state.tone-warn {
-  color: var(--warn);
-}
-.machine-state.tone-danger {
-  color: var(--danger);
-}
-.machine-state.tone-ok {
-  color: var(--ok);
-}
-.machine-state.tone-accent {
-  color: var(--accent);
-}
-.machine-sub {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin-top: 2px;
-  color: var(--text-2);
-}
-.machine-steps {
-  margin-top: var(--s-4);
-}
-.honest {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 10px;
-  color: var(--text-2);
-  font-size: var(--fs-12);
-}
-@media (max-width: 640px) {
-  .machine-now {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .machine-now > .btn {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
 }
 
 /* Older lists other pages may still use */

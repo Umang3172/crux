@@ -40,7 +40,7 @@
 .tour-card h3 {
   margin-top: 8px;
   font-size: var(--fs-16);
-  font-weight: 640;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .tour-card p {
@@ -104,5 +104,5 @@
   gap: 6px;
   color: var(--accent);
   font-size: var(--fs-12);
-  font-weight: 600;
+  font-weight: 500;
 }

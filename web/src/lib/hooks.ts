@@ -115,36 +115,13 @@ export function useHotkey(test: (e: KeyboardEvent) => boolean, run: () => void) 
   }, []);
 }
 
-export type Theme = "dark" | "light";
-const THEME_KEY = "crux.theme";
+export type Theme = "light";
 
-function storedTheme(): Theme {
-  try {
-    const t = window.localStorage.getItem(THEME_KEY);
-    if (t === "dark" || t === "light") return t;
-  } catch {
-    /* fall through */
-  }
-  return "dark";
-}
-
+/** The app has one theme. The figures read it from the root to pick their light inks. */
 export function applyStoredTheme() {
-  document.documentElement.dataset.theme = storedTheme();
+  document.documentElement.dataset.theme = "light";
   // index.html paints a ground colour before the bundle loads; from here the tokens own it.
   document.documentElement.style.removeProperty("background");
-}
-
-export function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(storedTheme);
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* the choice lasts for this page only */
-    }
-  }, [theme]);
-  return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
 }
 
 /** A value that climbs from 0 to `count`, one step at a time: used to replay a finished run in order. */

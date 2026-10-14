@@ -76,7 +76,7 @@ export const MODELLED = FIXED.filter((m) => m.mode === "model");
 export const machineById = (id: string | undefined, all: PlantMachine[] = FIXED) => all.find((m) => m.id === id);
 /** The machine a case is on. Cases opened before machines had ids were all on pump P-2. */
 export const machineOfCase = (entry: Pick<CaseEntry, "machine"> | undefined) => machineById(entry?.machine) ?? FIXED[0];
-export const machinePath = (m: PlantMachine) => (m.mode === "life" && m.ref ? `/lives/${m.ref}` : `/machines/${m.id}`);
+export const machinePath = (m: PlantMachine) => (m.mode === "life" && m.ref ? `/lives/${m.ref}` : `/m/${encodeURIComponent(m.id)}`);
 
 export const MODE: Record<Mode, { label: string; source: string; care: string }> = {
   model: { label: "Investigated on demand", source: "engine's model · synthetic", care: "Crux tests every suspect on a model of the machine, and asks for a measurement only when it cannot tell." },

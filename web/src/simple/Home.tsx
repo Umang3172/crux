@@ -8,6 +8,7 @@ import { startShift } from "../lib/shift";
 import { usePlant } from "../lib/useplant";
 import { Drawing } from "./Drawing";
 import { keep, sayStatus, usable } from "./words";
+import "./simple.css";
 
 export const STEPS = [
   { icon: AudioLines, title: "Listen", text: "A sensor records how the machine shakes. Every fault shakes it in its own way." },
@@ -22,7 +23,7 @@ export default function Home() {
     [...session.cases].filter((c) => (c.machine ?? "p2") === id).sort((a, b) => b.createdAt - a.createdAt)[0];
 
   return (
-    <>
+    <div className="mn-page">
       <section className="mn-hero">
         <div className="mn-wrap">
           <div className="mn-eyebrow">Maintenance, explained</div>
@@ -105,6 +106,6 @@ export default function Home() {
           </ol>
         </div>
       </section>
-    </>
+    </div>
   );
 }

@@ -3,6 +3,7 @@
 
 import { Link } from "react-router";
 import { STEPS } from "./Home";
+import "./simple.css";
 
 const FACTS = [
   { title: "The physics decides", text: "Which cause is most likely is worked out by simulating the machine, never by an AI's opinion." },
@@ -12,7 +13,7 @@ const FACTS = [
 
 export default function How() {
   return (
-    <>
+    <div className="mn-page">
       <section className="mn-hero">
         <div className="mn-wrap">
           <div className="mn-eyebrow">How it works</div>
@@ -54,7 +55,7 @@ export default function How() {
             ))}
           </div>
           <p className="mn-lede" style={{ fontSize: 15 }}>
-            In this demo the readings come from a physics model of each machine, not from a real plant. <Link to="/console" className="mn-link">The full console</Link> shows every number behind each answer.
+            In this demo the readings come from a physics model of each machine, not from a real plant. Each <Link to="/cases" className="mn-link">investigation</Link> shows every number behind its answer.
           </p>
           <div className="mn-hero-actions">
             <Link to="/" className="mn-btn">
@@ -63,6 +64,6 @@ export default function How() {
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }

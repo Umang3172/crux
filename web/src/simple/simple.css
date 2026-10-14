@@ -1,188 +1,18 @@
-/* The simple view: black ink on warm white, one type family, hairlines for
-   structure, and colour only where it means something (the red on a figure's
-   faulty part). Everything here is scoped to .mn so the console is untouched. */
+/* The simple pages: the machines, one machine, how it works. They share the
+   frame's tokens; these names are kept for the pages' own rules. */
 
 .mn {
-  --mn-page: #fafaf9;
-  --mn-panel: #ffffff;
-  --mn-sunk: #f3f3f1;
-  --mn-ink: #0a0a0a;
-  --mn-ink-2: #3f3f3c;
-  --mn-grey: #6b6b67;
+  --mn-page: var(--bg);
+  --mn-panel: var(--panel);
+  --mn-sunk: var(--panel-3);
+  --mn-ink: var(--text);
+  --mn-ink-2: var(--text-2);
+  --mn-grey: var(--text-3);
   --mn-faint: #9c9c97;
-  --mn-line: #e6e6e3;
-  --mn-line-2: #d6d6d2;
-  --mn-radius: 14px;
-  --mn-max: 1120px;
-
-  min-height: 100vh;
-  background: var(--mn-page);
-  color: var(--mn-ink);
-  font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
-  line-height: 1.55;
-  font-feature-settings: "ss01", "cv11";
-  -webkit-font-smoothing: antialiased;
-  display: flex;
-  flex-direction: column;
-}
-
-.mn *,
-.mn *::before,
-.mn *::after {
-  box-sizing: border-box;
-}
-
-.mn a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.mn :focus-visible {
-  outline: 2px solid var(--mn-ink);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
-
-.mn-wrap {
-  width: 100%;
-  max-width: var(--mn-max);
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-/* ---------------------------------------------------------------- top bar */
-
-.mn-top {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--mn-page) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(10px);
-  border-bottom: 1px solid var(--mn-line);
-}
-
-.mn-top .mn-wrap {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  height: 60px;
-}
-
-.mn-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-
-.mn-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--mn-ink);
-  display: grid;
-  place-items: center;
-}
-
-.mn-nav {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.mn-nav a {
-  padding: 6px 12px;
-  border-radius: 999px;
-  color: var(--mn-grey);
-  font-size: 14px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.mn-nav a:hover {
-  color: var(--mn-ink);
-}
-
-.mn-nav a[aria-current="page"] {
-  color: var(--mn-ink);
-  background: var(--mn-sunk);
-}
-
-.mn-show-sm {
-  display: none;
-}
-
-/* ---------------------------------------------------------------- buttons */
-
-.mn-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
-  border: 1px solid var(--mn-ink);
-  background: var(--mn-ink);
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: transform 0.12s ease, opacity 0.15s;
-  white-space: nowrap;
-}
-
-.mn a.mn-btn {
-  color: #fff;
-}
-
-.mn a.mn-btn.ghost {
-  color: var(--mn-ink);
-}
-
-.mn-btn:hover:not(:disabled) {
-  opacity: 0.86;
-}
-
-.mn-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.mn-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.mn-btn.ghost {
-  background: transparent;
-  color: var(--mn-ink);
-  border-color: var(--mn-line-2);
-}
-
-.mn-btn.ghost:hover:not(:disabled) {
-  opacity: 1;
-  border-color: var(--mn-ink);
-}
-
-.mn-link {
-  color: var(--mn-grey);
-  font-size: 14px;
-  text-decoration: underline;
-  text-decoration-color: var(--mn-line-2);
-  text-underline-offset: 4px;
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.mn-link:hover {
-  color: var(--mn-ink);
-  text-decoration-color: var(--mn-ink);
+  --mn-line: var(--line);
+  --mn-line-2: var(--line-2);
+  --mn-radius: var(--r-3);
+  --mn-max: var(--max);
 }
 
 /* ---------------------------------------------------------------- type */
@@ -588,36 +418,54 @@
   color: var(--mn-faint);
 }
 
+/* A machine's past investigations or scans: one line each, the whole line a link. */
+.mn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--mn-line);
+}
+
+.mn-list a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--mn-line);
+  font-size: 14.5px;
+  transition: padding var(--t-med) var(--ease);
+}
+
+.mn-list a:hover {
+  padding-left: 8px;
+  text-decoration: none;
+}
+
+.mn-list-meta {
+  color: var(--mn-grey);
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-side .tabs {
+  margin-bottom: -8px;
+}
+
 .mn-error {
   color: #b42318;
   font-size: 14px;
   margin: 0;
 }
 
-/* ---------------------------------------------------------------- footer */
-
-.mn-foot {
-  border-top: 1px solid var(--mn-line);
-  color: var(--mn-faint);
-  font-size: 13px;
-}
-
-.mn-foot .mn-wrap {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 22px;
-  padding-bottom: 28px;
-  flex-wrap: wrap;
-}
-
-/* The figure sits on the simple view's white, not the console's panel. */
-.mn .iso.fx {
+/* The figure sits on the page's white, without the plate's frame or caption. */
+.mn-stage .iso.fx {
   --anatomy-paper: var(--mn-panel);
   --anatomy-card: var(--mn-panel);
 }
 
-.mn .fx-plate {
+.mn-stage .fx-plate {
   border: 0;
   background: transparent;
 }
@@ -635,24 +483,6 @@
   }
 }
 
-@media (max-width: 560px) {
-  .mn-top .mn-wrap {
-    gap: 12px;
-  }
-  .mn-nav a {
-    padding: 6px 8px;
-  }
-  .mn-wrap {
-    padding: 0 16px;
-  }
-  .mn-hide-sm {
-    display: none;
-  }
-  .mn-show-sm {
-    display: inline;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .mn-dot.busy,
   .mn-answer {
@@ -660,7 +490,6 @@
   }
 }
 
-/* The figures' long technical captions stay in the console; the key to the colours stays here. */
-.mn .fx-caption {
+.mn-stage .fx-caption {
   display: none;
 }

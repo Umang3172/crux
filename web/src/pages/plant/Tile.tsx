@@ -10,7 +10,7 @@ import { useMachineModel } from "../../lib/hooks";
 import { MODE, machinePath, standingOf, type MachineStatus, type PlantMachine } from "../../lib/plant";
 import type { ShiftItem } from "../../lib/shift";
 import { MachineGlyph, type GlyphFrame } from "../../ui/MachineGlyph";
-import { LinkButton, SourceTag, cx, vt } from "../../ui/kit";
+import { LinkButton, cx, vt } from "../../ui/kit";
 import { LiveCall } from "../live";
 import { Flow } from "./Flow";
 
@@ -30,7 +30,6 @@ export function MachineTile({ m, st, item, onStage }: { m: PlantMachine; st: Mac
   const changed = useChangeCount(`${st.label}|${standing}`);
   const rpm = m.mode === "model" ? (m.rpm ?? model.data?.nominal_rpm) : undefined;
   const facts = [m.type, rpm ? `${num(rpm, 0)} rpm` : null, MODE[m.mode].label].filter(Boolean).join(" · ");
-  const synthetic = m.mode === "model" || !!m.synthetic;
   const act = standing === "person" ? st.next : undefined;
 
   return (
@@ -39,7 +38,6 @@ export function MachineTile({ m, st, item, onStage }: { m: PlantMachine; st: Mac
       <div className="tile-main">
         <div className="tile-art" title={facts}>
           <MachineGlyph kind={m.kind} rpm={rpm} running={m.mode === "model" && st.tone !== "danger"} width={84} frame={frame} />
-          {synthetic && <SourceTag source="synthetic" />}
         </div>
         <div className="tile-text">
           <Link to={machinePath(m)} viewTransition className="tile-name" style={vt(`m-${m.id}`)}>

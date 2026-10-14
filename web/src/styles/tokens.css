@@ -1,71 +1,72 @@
 /* Design tokens. Every colour, size and timing on screen comes from here.
 
-   Colour carries meaning, one job each:
-     accent (blue)   the engine's voice, the measurement it asks for, the primary action
-     model  (violet) anything a language model did or wrote
-     sim    (cyan)   a simulation: virtual experiments, simulated traces
-     ok / warn / danger   an outcome, something waiting on a person, a hazard
-   Nothing else is coloured. */
+   One theme: black ink on warm white, hairlines for structure. Colour is kept
+   for the few things a reader must not miss, and used small (a dot, a word):
+     accent          the primary action and the engine's voice: plain ink
+     model / sim     what a language model did, and what was simulated: greys,
+                     told apart by their labels rather than by hue
+     ok / warn / danger   an outcome, something waiting on a person, a hazard */
 
-:root {
-  color-scheme: dark;
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
 
-  --bg: #0a0c11;
-  --bg-2: #0d1016;
-  --panel: #10141c;
-  --panel-2: #151a24;
-  --panel-3: #1c2230;
-  --line: #1f2532;
-  --line-2: #2c3446;
-  --text: #e9ecf3;
-  --text-2: #a9b2c2;
-  --text-3: #7a8497;
+  --bg: #fafaf9;
+  --bg-2: #f6f6f4;
+  --panel: #ffffff;
+  --panel-2: #f6f6f4;
+  --panel-3: #ededea;
+  --line: #e7e7e4;
+  --line-2: #d4d4cf;
+  --text: #0a0a0a;
+  --text-2: #3f3f3c;
+  --text-3: #74746e;
 
-  --accent: #7aa2ff;
-  --accent-solid: #3d6bf5;
-  --accent-solid-hover: #5580ff;
+  --accent: #0a0a0a;
+  --accent-solid: #0a0a0a;
+  --accent-solid-hover: #2c2c2a;
   --on-accent: #ffffff;
-  --accent-soft: rgba(109, 155, 255, 0.13);
-  --accent-line: rgba(109, 155, 255, 0.4);
+  --accent-soft: rgba(10, 10, 10, 0.045);
+  --accent-line: rgba(10, 10, 10, 0.26);
 
-  --model: #b9a3ff;
-  --model-soft: rgba(181, 157, 255, 0.13);
-  --model-line: rgba(181, 157, 255, 0.4);
+  --model: #55554f;
+  --model-soft: rgba(85, 85, 79, 0.07);
+  --model-line: rgba(85, 85, 79, 0.28);
 
-  --sim: #45c8f1;
-  --sim-soft: rgba(63, 197, 240, 0.13);
-  --sim-line: rgba(63, 197, 240, 0.4);
+  --sim: #8b8b84;
+  --sim-soft: rgba(139, 139, 132, 0.1);
+  --sim-line: rgba(139, 139, 132, 0.4);
 
-  --ok: #3fd39f;
-  --ok-soft: rgba(58, 209, 154, 0.13);
-  --ok-line: rgba(58, 209, 154, 0.4);
-  --warn: #f6b93b;
-  --warn-soft: rgba(246, 185, 59, 0.13);
-  --warn-line: rgba(246, 185, 59, 0.42);
-  --danger: #ff7676;
-  --danger-soft: rgba(255, 107, 107, 0.13);
-  --danger-line: rgba(255, 107, 107, 0.45);
-  --danger-solid: #d83a3a;
+  --ok: #2c7a4d;
+  --ok-soft: rgba(44, 122, 77, 0.07);
+  --ok-line: rgba(44, 122, 77, 0.3);
+  --warn: #a35f08;
+  --warn-soft: rgba(163, 95, 8, 0.07);
+  --warn-line: rgba(163, 95, 8, 0.32);
+  --danger: #c22a22;
+  --danger-soft: rgba(194, 42, 34, 0.06);
+  --danger-line: rgba(194, 42, 34, 0.32);
+  --danger-solid: #c22a22;
 
-  --focus: #9db9ff;
-  --overlay: rgba(4, 6, 10, 0.66);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-2: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --focus: #0a0a0a;
+  --overlay: rgba(10, 10, 10, 0.24);
+  --shadow-1: none;
+  --shadow-2: 0 24px 60px rgba(10, 10, 10, 0.12), 0 0 0 1px rgba(10, 10, 10, 0.05);
 
   --font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --fs-10: 0.6875rem; /* 11 */
   --fs-12: 0.75rem;
-  --fs-13: 0.8125rem;
-  --fs-14: 0.875rem;
+  --fs-13: 0.84375rem; /* 13.5 */
+  --fs-14: 0.90625rem; /* 14.5 */
   --fs-16: 1rem;
   --fs-20: 1.25rem;
   --fs-28: 1.75rem;
 
-  --r-1: 4px;
-  --r-2: 6px;
-  --r-3: 10px;
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 14px;
   --r-pill: 999px;
 
   --s-1: 4px;
@@ -77,55 +78,11 @@
   --s-8: 32px;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --t-fast: 120ms;
-  --t-med: 220ms;
-  --t-slow: 520ms;
+  --t-fast: 140ms;
+  --t-med: 240ms;
+  --t-slow: 560ms;
 
-  --side: 236px;
-  --top: 52px;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-
-  --bg: #f4f5f8;
-  --bg-2: #fbfbfc;
-  --panel: #ffffff;
-  --panel-2: #f6f7fa;
-  --panel-3: #eceef3;
-  --line: #e3e6ec;
-  --line-2: #cdd3dd;
-  --text: #0f131a;
-  --text-2: #465061;
-  --text-3: #6b7586;
-
-  --accent: #2b59e0;
-  --accent-solid: #2b59e0;
-  --accent-solid-hover: #1f49c8;
-  --accent-soft: rgba(43, 89, 224, 0.08);
-  --accent-line: rgba(43, 89, 224, 0.35);
-
-  --model: #6340d9;
-  --model-soft: rgba(99, 64, 217, 0.08);
-  --model-line: rgba(99, 64, 217, 0.35);
-
-  --sim: #0a7ea8;
-  --sim-soft: rgba(10, 126, 168, 0.09);
-  --sim-line: rgba(10, 126, 168, 0.35);
-
-  --ok: #0b8a5d;
-  --ok-soft: rgba(11, 138, 93, 0.09);
-  --ok-line: rgba(11, 138, 93, 0.35);
-  --warn: #a35f00;
-  --warn-soft: rgba(196, 122, 0, 0.11);
-  --warn-line: rgba(196, 122, 0, 0.4);
-  --danger: #cf2a2a;
-  --danger-soft: rgba(207, 42, 42, 0.08);
-  --danger-line: rgba(207, 42, 42, 0.4);
-  --danger-solid: #cf2a2a;
-
-  --focus: #2b59e0;
-  --overlay: rgba(15, 19, 26, 0.38);
-  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-2: 0 18px 50px rgba(16, 24, 40, 0.18), 0 0 0 1px rgba(16, 24, 40, 0.04);
+  --side: 0px;
+  --top: 60px;
+  --max: 1180px;
 }

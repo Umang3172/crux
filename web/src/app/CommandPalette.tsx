@@ -2,21 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { Compass, CornerDownLeft, Eye, Factory, FolderOpen, HardHat, Keyboard, LayoutDashboard, Moon, Play, Plus, RotateCcw, Search, Sun, Sunrise } from "lucide-react";
+import { Compass, CornerDownLeft, FolderOpen, Keyboard, Play, Plus, RotateCcw, Search, Sunrise } from "lucide-react";
 import { modelOf } from "../lib/casemodel";
 import { shortId } from "../lib/format";
 import { launchScenario } from "../lib/launch";
 import { machineOfCase } from "../lib/plant";
-import { ROLES, setRole, useRole } from "../lib/role";
 import { SCENARIOS } from "../lib/scenarios";
 import { resetSession, useSession } from "../lib/session";
 import { startShift } from "../lib/shift";
-import type { Theme } from "../lib/hooks";
 import { cx } from "../ui/kit";
 import { finding } from "../pages/parts";
 import { goKeys } from "./keys";
 import { openLauncher } from "./Launcher";
-import { navFor, plantPath } from "./nav";
+import { SECTIONS } from "./nav";
 import { beginTour } from "../tour/steps";
 
 type Item = { id: string; group: string; label: string; hint?: ReactNode; icon: ReactNode; run: () => void | Promise<void> };
@@ -31,10 +29,9 @@ const keysHint = (keys: string) => (
   </>
 );
 
-export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open: boolean; onClose: () => void; onTheme: () => void; onKeys?: () => void; theme?: Theme }) {
+export function CommandPalette({ open, onClose, onKeys }: { open: boolean; onClose: () => void; onKeys?: () => void }) {
   const navigate = useNavigate();
   const session = useSession();
-  const role = useRole();
   const [q, setQ] = useState("");
   const [at, setAt] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -42,19 +39,14 @@ export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open
 
   const items = useMemo<Item[]>(() => {
     const go = (to: string) => () => navigate(to, { viewTransition: true });
-    const keyFor = (to: string) => goKeys(role).find((g) => g.to === to);
-    // The three homes first, then every other page in any view's menu: nothing is hidden from anyone.
-    const homes: Item[] = [
-      { id: "home-control", group: "Go to", label: "Plant", hint: keysHint("g p"), icon: <Factory size={15} />, run: go(plantPath(role)) },
-      { id: "home-crew", group: "Go to", label: "My work", hint: role === "crew" ? keysHint("g m") : "Maintenance", icon: <HardHat size={15} />, run: go(role === "crew" ? "/console" : "/crew") },
-      { id: "home-manager", group: "Go to", label: "Summary", hint: role === "manager" ? keysHint("g m") : "Manager", icon: <LayoutDashboard size={15} />, run: go(role === "manager" ? "/console" : "/manager") },
-    ];
-    const pages = new Map<string, Item>();
-    for (const n of [role, ...ROLES.map((r) => r.id)].flatMap((r) => navFor(r).flatMap((g) => g.items))) {
-      if (n.to === "/console" || n.to === "/plant" || pages.has(n.to)) continue;
-      const k = keyFor(n.to);
-      pages.set(n.to, { id: `n-${n.to}`, group: "Go to", label: n.label, hint: k ? keysHint(`g ${k.key}`) : undefined, icon: <n.icon size={15} />, run: go(n.to) });
-    }
+    const keyFor = (to: string) => goKeys().find((g) => g.to === to);
+    // Every page in the menu, named with its section so "Overview" says which one.
+    const pages: Item[] = SECTIONS.flatMap((sec) =>
+      sec.pages.map((n) => {
+        const k = keyFor(n.to);
+        return { id: `n-${n.to}`, group: "Go to", label: sec.pages.length > 1 ? `${sec.label}: ${n.label}` : n.label, hint: k ? keysHint(`g ${k.key}`) : undefined, icon: <n.icon size={15} />, run: go(n.to) };
+      }),
+    );
 
     const recent: Item[] = [...session.cases]
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -90,39 +82,26 @@ export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open
         icon: <Play size={15} />,
         run: async () => navigate(`/cases/${await launchScenario(s)}`, { viewTransition: true }),
       })),
-      ...homes,
-      ...pages.values(),
+      ...pages,
       ...recent,
-      ...ROLES.map((r) => ({
-        id: `v-${r.id}`,
-        group: "View as",
-        label: r.label,
-        hint: r.id === role ? "current" : undefined,
-        icon: <Eye size={15} />,
-        run: () => {
-          setRole(r.id);
-          navigate("/console", { viewTransition: true });
-        },
-      })),
-      { id: "tour", group: "Console", label: "Take the tour", icon: <Compass size={15} />, run: beginTour },
-      { id: "theme", group: "Console", label: theme === "light" ? "Dark theme" : "Light theme", icon: theme === "light" ? <Moon size={15} /> : <Sun size={15} />, run: onTheme },
-      ...(onKeys ? [{ id: "keys", group: "Console", label: "Keyboard shortcuts", hint: keysHint("?"), icon: <Keyboard size={15} />, run: onKeys }] : []),
+      { id: "tour", group: "Crux", label: "Take the tour", icon: <Compass size={15} />, run: beginTour },
+      ...(onKeys ? [{ id: "keys", group: "Crux", label: "Keyboard shortcuts", hint: keysHint("?"), icon: <Keyboard size={15} />, run: onKeys }] : []),
       {
         id: "reset",
-        group: "Console",
+        group: "Crux",
         label: "Reset session",
         icon: <RotateCcw size={15} />,
         run: () => {
           if (window.confirm("Start a fresh session? This browser forgets its investigations.")) {
             resetSession();
-            navigate("/console");
+            navigate("/");
           }
         },
       },
     ];
     const needle = q.trim().toLowerCase();
     return needle ? all.filter((i) => `${i.label} ${typeof i.hint === "string" ? i.hint : ""} ${i.group}`.toLowerCase().includes(needle)) : all;
-  }, [q, session.cases, navigate, onTheme, onKeys, theme, role]);
+  }, [q, session.cases, navigate, onKeys]);
 
   useEffect(() => {
     if (open) {

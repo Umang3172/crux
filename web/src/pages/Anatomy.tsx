@@ -3,14 +3,14 @@
 // computes. Below them, the figures the same kit could draw next, each with the
 // idea it explains, where it would sit and what it would read.
 
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Box, Download, Gauge, Hourglass, Scale, Ruler, Wrench } from "lucide-react";
 import { useCatalogue, useMachineModel } from "../lib/hooks";
 import type { Async } from "../lib/hooks";
 import { BearingFigure } from "../figures/bearing/BearingFigure";
 import { SensorFigure } from "../figures/sensor/SensorFigure";
 import { downloadSvg } from "../figures/exportSvg";
-import { Badge, Button, Card, ErrorState, PageHead, SkeletonRows } from "../ui/kit";
+import { Badge, Button, Card, ErrorState, PageHead, SkeletonRows, Tabs } from "../ui/kit";
 import "./pages.css";
 import "./anatomy.css";
 
@@ -84,59 +84,75 @@ const IDEAS: Idea[] = [
   },
 ];
 
+type Tab = "bearing" | "sensor" | "next";
+
 export default function Anatomy() {
+  const [tab, setTab] = useState<Tab>("bearing");
   const machine = useMachineModel();
   const catalogue = useCatalogue();
   return (
-    <div className="page col gap-6 an-page">
-      <PageHead
-        eyebrow="Learn"
-        title="Anatomy"
-        sub="Crux, drawn as machines you can watch. Every figure is built from the engine's own numbers, so what moves on screen is what the engine computes."
+    <div className="page an-page">
+      <PageHead title="Anatomy" sub="Crux, drawn as machines you can watch. Every figure is built from the engine's own numbers." />
+
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        label="Anatomy"
+        tabs={[
+          { id: "bearing", label: "The bearing" },
+          { id: "sensor", label: "Where the sensor goes" },
+          { id: "next", label: "Coming next" },
+        ]}
       />
 
-      <FigureCard title="The bearing the engine listens to" icon={<Box size={15} />} file="crux-bearing" uses="Could also sit on a case's reading stage, with the part a verdict names lit, and open the video.">
-        <Loaded a={machine} empty="The engine did not send its machine model, so there is nothing true to draw.">
-          {(m) => <BearingFigure model={m} />}
-        </Loaded>
-      </FigureCard>
+      {tab === "bearing" && (
+        <FigureCard title="The bearing the engine listens to" icon={<Box size={15} />} file="crux-bearing" uses="Could also sit on a case's reading stage, with the part a verdict names lit, and open the video.">
+          <Loaded a={machine} empty="The engine did not send its machine model, so there is nothing true to draw.">
+            {(m) => <BearingFigure model={m} />}
+          </Loaded>
+        </FigureCard>
+      )}
 
-      <FigureCard title="Where to put the sensor" icon={<Ruler size={15} />} file="crux-checks" uses="Could also sit on a work order and the phone check, as the picture beside each step.">
-        <Loaded a={catalogue} empty="The engine sent no catalogue of checks.">
-          {(tests) => (
-            <Loaded a={machine} empty="The engine did not send its machine model.">
-              {(m) => <SensorFigure tests={tests} blades={m.blade_count} />}
-            </Loaded>
-          )}
-        </Loaded>
-      </FigureCard>
+      {tab === "sensor" && (
+        <FigureCard title="Where to put the sensor" icon={<Ruler size={15} />} file="crux-checks" uses="Could also sit on a work order and the phone check, as the picture beside each step.">
+          <Loaded a={catalogue} empty="The engine sent no catalogue of checks.">
+            {(tests) => (
+              <Loaded a={machine} empty="The engine did not send its machine model.">
+                {(m) => <SensorFigure tests={tests} blades={m.blade_count} />}
+              </Loaded>
+            )}
+          </Loaded>
+        </FigureCard>
+      )}
 
-      <section className="col gap-3">
-        <div className="col gap-1">
-          <h2 className="an-h2">More the same kit can draw</h2>
-          <p className="muted small">Each is one idea in Crux turned into a machine whose working is the idea, read from data the server already sends.</p>
-        </div>
-        <div className="an-ideas">
-          {IDEAS.map((i) => (
-            <article className="an-idea" key={i.title}>
-              <header className="row gap-3">
-                <span className="an-idea-ico">{i.icon}</span>
-                <h3 className="grow">{i.title}</h3>
-                <Badge plain>Not built</Badge>
-              </header>
-              <p>{i.object}</p>
-              <dl>
-                <dt>Explains</dt>
-                <dd>{i.shows}</dd>
-                <dt>Goes on</dt>
-                <dd>{i.goes}</dd>
-                <dt>Reads</dt>
-                <dd>{i.reads}</dd>
-              </dl>
-            </article>
-          ))}
-        </div>
-      </section>
+      {tab === "next" && (
+        <section className="col gap-3">
+          <div className="col gap-1">
+            <h2 className="an-h2">More the same kit can draw</h2>
+            <p className="muted small">Each is one idea in Crux turned into a machine whose working is the idea, read from data the server already sends.</p>
+          </div>
+          <div className="an-ideas">
+            {IDEAS.map((i) => (
+              <article className="an-idea" key={i.title}>
+                <header className="row gap-3">
+                  <span className="an-idea-ico">{i.icon}</span>
+                  <h3 className="grow">{i.title}</h3>
+                  <Badge plain>Not built</Badge>
+                </header>
+                <p>{i.object}</p>
+                <dl>
+                  <dt>Explains</dt>
+                  <dd>{i.shows}</dd>
+                  <dt>Goes on</dt>
+                  <dd>{i.goes}</dd>
+                  <dt>Reads</dt>
+                  <dd>{i.reads}</dd>
+                </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
