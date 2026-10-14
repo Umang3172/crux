@@ -46,3 +46,4 @@ web/dist/
 .idea/
 .vscode/
 data/forecast/
+data/series/

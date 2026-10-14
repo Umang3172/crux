@@ -32,6 +32,13 @@ jev = [
 forecast = [
     "scikit-learn>=1.4",
 ]
+# The Trends tab's Google run: BigQuery (TimesFM 3.0, ARIMA_PLUS, contribution
+# analysis) and the Conversational Analytics API. Only `scripts/series.py` and a
+# server with CRUX_SERIES_LIVE or CRUX_SERIES_ASK set use it; snapshots need none.
+series = [
+    "google-cloud-bigquery>=3.20",
+    "google-cloud-geminidataanalytics>=0.2",
+]
 dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",

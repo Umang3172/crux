@@ -25,6 +25,7 @@ export const PAGES = {
   notFound: () => import("../pages/NotFound").then((m) => m.default),
   go: () => import("../pages/Go").then((m) => m.default),
   anatomy: () => import("../pages/Anatomy").then((m) => m.default),
+  trends: () => import("../pages/trends/TrendsPage").then((m) => m.default),
 } satisfies Record<string, Load>;
 
 /**

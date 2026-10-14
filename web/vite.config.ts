@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 // `VITE_API_BASE=""` behaves exactly like the deployed build while you work.
 const API_PATHS = [
   "/health",
+  "/series",
   "/tests",
   "/investigations",
   "/replay",

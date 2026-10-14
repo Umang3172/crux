@@ -844,3 +844,8 @@ app.include_router(_fleet)
 from .lens import router as _lens  # noqa: E402
 
 app.include_router(_lens)
+
+# Trends: forecasts and analyses of sensor history by Google's tools, from snapshots.
+from .series import router as _series  # noqa: E402
+
+app.include_router(_series)
