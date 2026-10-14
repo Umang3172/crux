@@ -58,6 +58,7 @@ export const router = createHashRouter([
           page("proof", PAGES.proof),
           page("agents", PAGES.agents),
           page("system", PAGES.system),
+          page("anatomy", PAGES.anatomy),
           page("go/:what", PAGES.go),
           page("*", PAGES.notFound),
         ],

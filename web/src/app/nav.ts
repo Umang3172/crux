@@ -1,7 +1,7 @@
 // The menu, in the words of the people who use the console. What comes first
 // depends on who is looking; nothing is hidden from anyone.
 
-import { Activity, BookOpen, ClipboardList, Factory, FolderOpen, HardHat, LayoutDashboard, ScanLine, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import { Activity, BookOpen, Box, ClipboardList, Factory, FolderOpen, HardHat, LayoutDashboard, ScanLine, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 import type { Role } from "../lib/role";
 
 export type NavItem = {
@@ -24,6 +24,7 @@ const lessons: NavItem = { to: "/network", label: "Lessons and updates", icon: B
 const record: NavItem = { to: "/proof", label: "Track record", icon: ShieldCheck };
 const how: NavItem = { to: "/agents", label: "How Crux works", icon: Sparkles };
 const system: NavItem = { to: "/system", label: "System", icon: Activity };
+const anatomy: NavItem = { to: "/anatomy", label: "Anatomy", icon: Box, keys: "g a" };
 const plant = (home: boolean): NavItem =>
   home ? { to: "/", label: "Plant", icon: Factory, end: true, also: ["/plant"], keys: "g p" } : { to: "/plant", label: "Plant", icon: Factory, keys: "g p" };
 
@@ -31,19 +32,19 @@ export function navFor(role: Role): NavGroup[] {
   if (role === "crew") {
     return [
       { group: "", items: [{ to: "/", label: "My work", icon: HardHat, end: true, also: ["/crew"], keys: "g m" }, plant(false), orders, scans] },
-      { group: "About", items: [how, record] },
+      { group: "About", items: [how, anatomy, record] },
     ];
   }
   if (role === "manager") {
     return [
       { group: "", items: [{ to: "/", label: "Summary", icon: LayoutDashboard, end: true, also: ["/manager"], keys: "g m" }, plant(false), investigations, orders] },
-      { group: "Learn", items: [lessons, record] },
+      { group: "Learn", items: [anatomy, lessons, record] },
       { group: "About", items: [how, system] },
     ];
   }
   return [
     { group: "", items: [plant(true), investigations, orders, scans] },
-    { group: "Learn", items: [lessons, record] },
+    { group: "Learn", items: [anatomy, lessons, record] },
     { group: "About", items: [how, system] },
   ];
 }
