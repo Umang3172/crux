@@ -27,6 +27,17 @@ function Home() {
 
 export const router = createHashRouter([
   {
+    // The simple view a visitor meets first: the machines, one machine, how it works.
+    lazy: async () => ({ Component: (await import("../simple/SimpleShell")).default }),
+    hydrateFallbackElement: <Blank />,
+    errorElement: <PageError />,
+    children: [
+      { index: true, lazy: async () => ({ Component: (await import("../simple/Home")).default }), hydrateFallbackElement: <Blank /> },
+      page("m/:id", () => import("../simple/Machine").then((m) => m.default)),
+      page("how", () => import("../simple/How").then((m) => m.default)),
+    ],
+  },
+  {
     element: <Shell />,
     errorElement: <PageError />,
     children: [
@@ -35,7 +46,7 @@ export const router = createHashRouter([
         errorElement: <PageError />,
         children: [
           {
-            index: true,
+            path: "console",
             lazy: async () => {
               const [control, crew, manager] = await Promise.all([PAGES.plant(), PAGES.crew(), PAGES.manager()]);
               homes = { control, crew, manager };

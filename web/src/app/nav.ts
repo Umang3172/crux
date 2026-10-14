@@ -27,18 +27,18 @@ const system: NavItem = { to: "/system", label: "System", icon: Activity };
 const anatomy: NavItem = { to: "/anatomy", label: "Anatomy", icon: Box, keys: "g a" };
 const trends: NavItem = { to: "/trends", label: "Trends", icon: ChartLine, keys: "g t" };
 const plant = (home: boolean): NavItem =>
-  home ? { to: "/", label: "Plant", icon: Factory, end: true, also: ["/plant"], keys: "g p" } : { to: "/plant", label: "Plant", icon: Factory, keys: "g p" };
+  home ? { to: "/console", label: "Plant", icon: Factory, end: true, also: ["/plant"], keys: "g p" } : { to: "/plant", label: "Plant", icon: Factory, keys: "g p" };
 
 export function navFor(role: Role): NavGroup[] {
   if (role === "crew") {
     return [
-      { group: "", items: [{ to: "/", label: "My work", icon: HardHat, end: true, also: ["/crew"], keys: "g m" }, plant(false), orders, scans] },
+      { group: "", items: [{ to: "/console", label: "My work", icon: HardHat, end: true, also: ["/crew"], keys: "g m" }, plant(false), orders, scans] },
       { group: "About", items: [how, anatomy, record] },
     ];
   }
   if (role === "manager") {
     return [
-      { group: "", items: [{ to: "/", label: "Summary", icon: LayoutDashboard, end: true, also: ["/manager"], keys: "g m" }, plant(false), investigations, orders] },
+      { group: "", items: [{ to: "/console", label: "Summary", icon: LayoutDashboard, end: true, also: ["/manager"], keys: "g m" }, plant(false), investigations, orders] },
       { group: "Learn", items: [trends, anatomy, lessons, record] },
       { group: "About", items: [how, system] },
     ];
@@ -57,4 +57,4 @@ export function isHere(n: NavItem, path: string): boolean {
 }
 
 /** Where "g p" goes: the plant is the control room's home, and a page of its own for everyone else. */
-export const plantPath = (role: Role) => (role === "control" ? "/" : "/plant");
+export const plantPath = (role: Role) => (role === "control" ? "/console" : "/plant");

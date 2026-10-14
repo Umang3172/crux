@@ -84,7 +84,7 @@ const STEPS: TourStep[] = [
   {
     id: "approve",
     before: () => setRole("manager"),
-    route: "/",
+    route: "/console",
     target: '[data-tour="manager-decisions"]',
     title: "A manager signs off",
     body: "Nothing happens to a machine until a person puts their name to it.",
@@ -97,7 +97,7 @@ const STEPS: TourStep[] = [
   {
     id: "crew",
     before: () => setRole("crew"),
-    route: "/",
+    route: "/console",
     target: '[data-tour="crew-todo"]',
     title: "The technician's list",
     body: "The approved repair arrives here. After it, a new reading checks the work.",

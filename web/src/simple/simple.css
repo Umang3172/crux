@@ -1,0 +1,666 @@
+/* The simple view: black ink on warm white, one type family, hairlines for
+   structure, and colour only where it means something (the red on a figure's
+   faulty part). Everything here is scoped to .mn so the console is untouched. */
+
+.mn {
+  --mn-page: #fafaf9;
+  --mn-panel: #ffffff;
+  --mn-sunk: #f3f3f1;
+  --mn-ink: #0a0a0a;
+  --mn-ink-2: #3f3f3c;
+  --mn-grey: #6b6b67;
+  --mn-faint: #9c9c97;
+  --mn-line: #e6e6e3;
+  --mn-line-2: #d6d6d2;
+  --mn-radius: 14px;
+  --mn-max: 1120px;
+
+  min-height: 100vh;
+  background: var(--mn-page);
+  color: var(--mn-ink);
+  font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+
+.mn *,
+.mn *::before,
+.mn *::after {
+  box-sizing: border-box;
+}
+
+.mn a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.mn :focus-visible {
+  outline: 2px solid var(--mn-ink);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.mn-wrap {
+  width: 100%;
+  max-width: var(--mn-max);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ---------------------------------------------------------------- top bar */
+
+.mn-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--mn-page) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--mn-line);
+}
+
+.mn-top .mn-wrap {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  height: 60px;
+}
+
+.mn-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.mn-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--mn-ink);
+  display: grid;
+  place-items: center;
+}
+
+.mn-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mn-nav a {
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--mn-grey);
+  font-size: 14px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.mn-nav a:hover {
+  color: var(--mn-ink);
+}
+
+.mn-nav a[aria-current="page"] {
+  color: var(--mn-ink);
+  background: var(--mn-sunk);
+}
+
+.mn-show-sm {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.mn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid var(--mn-ink);
+  background: var(--mn-ink);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.15s;
+  white-space: nowrap;
+}
+
+.mn a.mn-btn {
+  color: #fff;
+}
+
+.mn a.mn-btn.ghost {
+  color: var(--mn-ink);
+}
+
+.mn-btn:hover:not(:disabled) {
+  opacity: 0.86;
+}
+
+.mn-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.mn-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mn-btn.ghost {
+  background: transparent;
+  color: var(--mn-ink);
+  border-color: var(--mn-line-2);
+}
+
+.mn-btn.ghost:hover:not(:disabled) {
+  opacity: 1;
+  border-color: var(--mn-ink);
+}
+
+.mn-link {
+  color: var(--mn-grey);
+  font-size: 14px;
+  text-decoration: underline;
+  text-decoration-color: var(--mn-line-2);
+  text-underline-offset: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mn-link:hover {
+  color: var(--mn-ink);
+  text-decoration-color: var(--mn-ink);
+}
+
+/* ---------------------------------------------------------------- type */
+
+.mn-eyebrow {
+  color: var(--mn-grey);
+  font-size: 14px;
+}
+
+.mn-h1 {
+  margin: 14px 0 0;
+  font-size: clamp(36px, 5.4vw, 60px);
+  line-height: 1.04;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+.mn-h2 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.12;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.mn-lede {
+  margin: 18px 0 0;
+  max-width: 54ch;
+  color: var(--mn-grey);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.mn-muted {
+  color: var(--mn-grey);
+}
+
+/* ---------------------------------------------------------------- page */
+
+.mn-main {
+  flex: 1;
+}
+
+.mn-hero {
+  padding: 88px 0 56px;
+}
+
+.mn-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 32px;
+  flex-wrap: wrap;
+}
+
+.mn-section {
+  padding: 24px 0 72px;
+}
+
+.mn-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.mn-section-head p {
+  margin: 8px 0 0;
+  color: var(--mn-grey);
+  max-width: 52ch;
+}
+
+/* The hairline grid: cells share their borders, as on a printed sheet. */
+.mn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  border-top: 1px solid var(--mn-line);
+  border-left: 1px solid var(--mn-line);
+  background: var(--mn-panel);
+}
+
+.mn-grid > * {
+  border-right: 1px solid var(--mn-line);
+  border-bottom: 1px solid var(--mn-line);
+}
+
+.mn-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .mn-grid.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- machine card */
+
+.mn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 22px 20px;
+  min-height: 248px;
+  transition: background 0.2s ease;
+  position: relative;
+}
+
+.mn-card:hover {
+  background: var(--mn-page);
+}
+
+.mn-card-art {
+  height: 108px;
+  display: grid;
+  place-items: center;
+  color: var(--mn-ink);
+}
+
+.mn-card-art svg {
+  width: 100%;
+  max-width: 200px;
+  height: 100%;
+}
+
+.mn-card-name {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mn-card-type {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+  margin-top: 2px;
+}
+
+.mn-card-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mn-open {
+  color: var(--mn-faint);
+  font-size: 13px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.mn-card:hover .mn-open,
+.mn-card:focus-visible .mn-open {
+  opacity: 1;
+  transform: none;
+}
+
+/* A state is a dot and a few words: filled when someone has to act, a ring when all is calm. */
+.mn-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--mn-ink-2);
+}
+
+.mn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mn-ink);
+  flex: none;
+}
+
+.mn-dot.act {
+  background: var(--mn-ink);
+}
+
+.mn-dot.calm {
+  border-color: var(--mn-faint);
+}
+
+.mn-dot.busy {
+  border-color: var(--mn-ink);
+  border-right-color: transparent;
+  animation: mn-spin 0.9s linear infinite;
+}
+
+@keyframes mn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- steps strip */
+
+.mn-steps .mn-step {
+  padding: 26px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mn-step-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--mn-sunk);
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+}
+
+.mn-step h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mn-step p {
+  margin: 0;
+  color: var(--mn-grey);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.mn-step-n {
+  color: var(--mn-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- machine page */
+
+.mn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-grey);
+  font-size: 14px;
+  margin-top: 28px;
+}
+
+.mn-back:hover {
+  color: var(--mn-ink);
+}
+
+.mn-machine {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  gap: 48px;
+  align-items: start;
+  padding: 28px 0 72px;
+}
+
+.mn-stage {
+  position: sticky;
+  top: 84px;
+}
+
+.mn-stage-note {
+  margin: 12px 4px 0;
+  color: var(--mn-faint);
+  font-size: 12.5px;
+}
+
+.mn-side {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 8px;
+}
+
+.mn-title {
+  margin: 0;
+  font-size: clamp(30px, 3.4vw, 42px);
+  line-height: 1.06;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+
+.mn-sub {
+  color: var(--mn-grey);
+  margin-top: 8px;
+}
+
+.mn-now {
+  border-top: 1px solid var(--mn-line);
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mn-now-label {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+}
+
+.mn-now-text {
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  text-wrap: pretty;
+}
+
+.mn-now-detail {
+  color: var(--mn-grey);
+  margin: 0;
+  max-width: 46ch;
+}
+
+.mn-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.mn-answer {
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-panel);
+  padding: 22px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: mn-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes mn-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.mn-answer-name {
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.mn-sure {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-answer p {
+  margin: 0;
+  color: var(--mn-ink-2);
+}
+
+.mn-kv {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 6px 16px;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.mn-kv dt {
+  color: var(--mn-grey);
+}
+
+.mn-kv dd {
+  margin: 0;
+}
+
+/* How Crux got there: three plain rows. */
+.mn-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--mn-line);
+}
+
+.mn-trail li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--mn-line);
+  font-size: 14.5px;
+}
+
+.mn-trail li span:first-child {
+  color: var(--mn-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-trail li.off {
+  color: var(--mn-faint);
+}
+
+.mn-error {
+  color: #b42318;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.mn-foot {
+  border-top: 1px solid var(--mn-line);
+  color: var(--mn-faint);
+  font-size: 13px;
+}
+
+.mn-foot .mn-wrap {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 22px;
+  padding-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+/* The figure sits on the simple view's white, not the console's panel. */
+.mn .iso.fx {
+  --anatomy-paper: var(--mn-panel);
+  --anatomy-card: var(--mn-panel);
+}
+
+.mn .fx-plate {
+  border: 0;
+  background: transparent;
+}
+
+@media (max-width: 860px) {
+  .mn-machine {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .mn-stage {
+    position: static;
+  }
+  .mn-hero {
+    padding: 56px 0 40px;
+  }
+}
+
+@media (max-width: 560px) {
+  .mn-top .mn-wrap {
+    gap: 12px;
+  }
+  .mn-nav a {
+    padding: 6px 8px;
+  }
+  .mn-wrap {
+    padding: 0 16px;
+  }
+  .mn-hide-sm {
+    display: none;
+  }
+  .mn-show-sm {
+    display: inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-dot.busy,
+  .mn-answer {
+    animation: none;
+  }
+}
+
+/* The figures' long technical captions stay in the console; the key to the colours stays here. */
+.mn .fx-caption {
+  display: none;
+}

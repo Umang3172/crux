@@ -106,7 +106,7 @@ export function Shell() {
                   onClick={() => {
                     if (role === r.id) return;
                     setRole(r.id);
-                    navigate("/", { viewTransition: true });
+                    navigate("/console", { viewTransition: true });
                   }}
                 >
                   {r.label}

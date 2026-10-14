@@ -26,7 +26,7 @@ export function goKeys(role: Role): GoKey[] {
     { key: "w", label: "Work orders", to: "/work-orders" },
     { key: "a", label: "Anatomy", to: "/anatomy" },
     { key: "t", label: "Trends", to: "/trends" },
-    { key: "m", label: role === "control" ? "Home" : (ROLES.find((r) => r.id === role)?.home ?? "Home"), to: "/" },
+    { key: "m", label: role === "control" ? "Home" : (ROLES.find((r) => r.id === role)?.home ?? "Home"), to: "/console" },
   ];
 }
 

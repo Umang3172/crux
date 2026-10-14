@@ -12,7 +12,19 @@ import { NUT_DROP, PART_NAME, type PartId, SHAKE_HZ_DRAWN, SHAKE_UNITS } from ".
 
 const TAU = Math.PI * 2;
 
-export function SkidFigure({ part, shakes, readout: said, fig = "Fig 1" }: { part: PartId | null; shakes: boolean; readout: string; fig?: string }) {
+export function SkidFigure({
+  part,
+  shakes,
+  readout: said,
+  fig = "Fig 1",
+  title = "The machine, drawn from the clip",
+}: {
+  part: PartId | null;
+  shakes: boolean;
+  readout: string;
+  fig?: string;
+  title?: string;
+}) {
   const loose = part === "looseBolt";
   const [az, setAz] = useState(AZ_REST);
   const geo = useMemo(() => buildSkid(az), [az]);
@@ -55,7 +67,7 @@ export function SkidFigure({ part, shakes, readout: said, fig = "Fig 1" }: { par
     <div ref={stage}>
       <Plate
         fig={fig}
-        title="The machine, drawn from the clip"
+        title={title}
         hint="drag to turn"
         readout={readout}
         keys={[]}

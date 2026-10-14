@@ -46,12 +46,12 @@ export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open
     // The three homes first, then every other page in any view's menu: nothing is hidden from anyone.
     const homes: Item[] = [
       { id: "home-control", group: "Go to", label: "Plant", hint: keysHint("g p"), icon: <Factory size={15} />, run: go(plantPath(role)) },
-      { id: "home-crew", group: "Go to", label: "My work", hint: role === "crew" ? keysHint("g m") : "Maintenance", icon: <HardHat size={15} />, run: go(role === "crew" ? "/" : "/crew") },
-      { id: "home-manager", group: "Go to", label: "Summary", hint: role === "manager" ? keysHint("g m") : "Manager", icon: <LayoutDashboard size={15} />, run: go(role === "manager" ? "/" : "/manager") },
+      { id: "home-crew", group: "Go to", label: "My work", hint: role === "crew" ? keysHint("g m") : "Maintenance", icon: <HardHat size={15} />, run: go(role === "crew" ? "/console" : "/crew") },
+      { id: "home-manager", group: "Go to", label: "Summary", hint: role === "manager" ? keysHint("g m") : "Manager", icon: <LayoutDashboard size={15} />, run: go(role === "manager" ? "/console" : "/manager") },
     ];
     const pages = new Map<string, Item>();
     for (const n of [role, ...ROLES.map((r) => r.id)].flatMap((r) => navFor(r).flatMap((g) => g.items))) {
-      if (n.to === "/" || n.to === "/plant" || pages.has(n.to)) continue;
+      if (n.to === "/console" || n.to === "/plant" || pages.has(n.to)) continue;
       const k = keyFor(n.to);
       pages.set(n.to, { id: `n-${n.to}`, group: "Go to", label: n.label, hint: k ? keysHint(`g ${k.key}`) : undefined, icon: <n.icon size={15} />, run: go(n.to) });
     }
@@ -101,7 +101,7 @@ export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open
         icon: <Eye size={15} />,
         run: () => {
           setRole(r.id);
-          navigate("/", { viewTransition: true });
+          navigate("/console", { viewTransition: true });
         },
       })),
       { id: "tour", group: "Console", label: "Take the tour", icon: <Compass size={15} />, run: beginTour },
@@ -115,7 +115,7 @@ export function CommandPalette({ open, onClose, onTheme, onKeys, theme }: { open
         run: () => {
           if (window.confirm("Start a fresh session? This browser forgets its investigations.")) {
             resetSession();
-            navigate("/");
+            navigate("/console");
           }
         },
       },
