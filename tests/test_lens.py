@@ -508,3 +508,81 @@ def test_a_new_scan_is_looked_at_beside_the_machines_normal_scan(lens_dir, monke
     assert shown[0] is None  # the first scan had nothing to compare with
     assert shown[1].image == scan.still(first.id, first.stills // 2)
     assert later.look["reference"].startswith(f"normal scan {first.id}")
+
+
+def _steps(body: str) -> list[dict]:
+    import json
+
+    return [json.loads(line) for line in body.splitlines() if line.strip()]
+
+
+def test_live_scan_streams_each_step_as_it_runs_then_the_scan(lens_dir, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from hypothesis_engine.api.app import app
+    from hypothesis_engine.ticket import camera
+
+    leak = camera.Finding(
+        "leak",
+        "under the welded joint",
+        0.0,
+        item="leak",
+        severity="high",
+        box=(400, 450, 520, 620),
+    )
+
+    class Fake:
+        name = "fake"
+
+        def look(self, still, context, reference=None):
+            return [leak, camera.Finding("rust", "on the pipe", 0.0, item="rust", status="absent")]
+
+        def confirm(self, crop, finding, reference=None):
+            return True
+
+    monkeypatch.setattr(camera, "get_inspector", lambda: Fake())
+    monkeypatch.setattr(camera.photo, "quality", lambda image: camera.photo.Quality(True, ""))
+    r = TestClient(app).post("/lens/scans/live?machine=Pipework", content=_video(seed=6))
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/x-ndjson")
+    lines = _steps(r.text)
+    seen = [(x["step"], x["state"]) for x in lines]
+    assert seen == [
+        ("read", "start"),
+        ("read", "done"),
+        ("identify", "start"),
+        ("identify", "done"),
+        ("gate", "done"),
+        ("look", "start"),
+        ("look", "done"),
+        ("confirm", "start"),
+        ("confirm", "done"),
+        ("motion", "start"),
+        ("motion", "done"),
+        ("sound", "waiting"),
+        ("save", "done"),
+        ("scan", "done"),
+    ]
+    by = {(x["step"], x["state"]): x for x in lines}
+    assert by[("read", "done")]["detail"]["fps"] == pytest.approx(120.0, rel=0.01)
+    assert [f["item"] for f in by[("look", "done")]["detail"]["present"]] == ["leak"]
+    assert by[("confirm", "done")]["detail"]["kept"][0]["box"] == [400, 450, 520, 620]
+    scan = by[("scan", "done")]["scan"]
+    assert (
+        scan["id"] == by[("read", "done")]["detail"]["id"] == by[("save", "done")]["detail"]["id"]
+    )
+    assert scan["look"]["findings"][0]["item"] == "leak"
+    assert scan["candidates"] == by[("motion", "done")]["detail"]["candidates"]
+
+
+def test_live_scan_without_a_model_says_the_look_is_off(lens_dir):
+    from fastapi.testclient import TestClient
+
+    from hypothesis_engine.api.app import app
+
+    client = TestClient(app)
+    lines = _steps(client.post("/lens/scans/live?look=false", content=_video(seed=7)).text)
+    assert ("look", "off") in [(x["step"], x["state"]) for x in lines]
+    assert lines[-1]["step"] == "scan"
+    bad = _steps(client.post("/lens/scans/live?look=false", content=b"not a video").text)
+    assert bad[-1]["step"] == "error" and "could not read" in bad[-1]["detail"]["message"]
+    assert client.post("/lens/scans/live", content=b"").status_code == 400

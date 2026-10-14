@@ -167,7 +167,11 @@ def identify(still: bytes) -> Identity:
 
 
 def visible(
-    still: bytes, context: str, reference: bytes | None = None, reference_label: str = ""
+    still: bytes,
+    context: str,
+    reference: bytes | None = None,
+    reference_label: str = "",
+    on_step: camera.Step | None = None,
 ) -> camera.CameraLook:
     """The checklist on the still, kept only where a cropped second look confirms it.
 
@@ -180,4 +184,4 @@ def visible(
         if reference
         else None
     )
-    return camera.inspect(s, context, reference=ref, use_registry=False)
+    return camera.inspect(s, context, reference=ref, use_registry=False, on_step=on_step)

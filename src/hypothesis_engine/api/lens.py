@@ -1,15 +1,21 @@
 """Crux Lens over HTTP: upload a phone video, confirm the speed, read the result.
 
 The upload is the raw video as the request body (no form encoding), so a phone
-page can send the file the camera app produced as it is.
+page can send the file the camera app produced as it is. `/scans/live` takes the
+same upload and answers with one JSON line per step as the step runs, then the
+scan, so a page can draw the pipeline while it works instead of a spinner.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..lens import scan as scans
@@ -28,27 +34,91 @@ def _get(scan_id: str) -> scans.Scan:
         raise HTTPException(404, f"no scan {scan_id}") from None
 
 
-@router.post("/scans")
-async def new_scan(
-    request: Request, machine: str = "", filename: str = "video.mp4", look: bool = True
-) -> dict[str, Any]:
-    """Read the video, let a model name the machine and box it, list speed candidates."""
+async def _upload(request: Request) -> bytes:
     data = await request.body()
     if not data:
         raise HTTPException(400, "send the video file as the request body")
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "video too large: keep it to about 10 seconds")
     try:
-        import av
+        import av  # noqa: F401 - checked here so the reply says what is missing
     except ImportError:
         raise HTTPException(
             501, 'video support is not installed: uv pip install -e ".[lens]"'
         ) from None
+    return data
+
+
+@router.post("/scans")
+async def new_scan(
+    request: Request, machine: str = "", filename: str = "video.mp4", look: bool = True
+) -> dict[str, Any]:
+    """Read the video, let a model name the machine and box it, list speed candidates."""
+    import av
+
+    data = await _upload(request)
     try:
         scan = scans.new_scan(data, filename, machine, look=look)
     except (ValueError, av.FFmpegError) as e:
         raise HTTPException(422, f"could not read this video: {e}") from None
     return asdict(scan)
+
+
+@router.post("/scans/live")
+async def new_scan_live(
+    request: Request, machine: str = "", filename: str = "video.mp4", look: bool = True
+) -> StreamingResponse:
+    """The same scan, answered as it runs: one JSON line per step, then the scan.
+
+    Each line is `{"step", "state", "detail"}`; the last is `{"step": "scan",
+    "state": "done", "scan": ...}`, or `{"step": "error", ...}` if the video could
+    not be read. The scan runs in a worker thread; its steps reach the stream
+    through the event loop, in the order they happened.
+    """
+    import av
+
+    data = await _upload(request)
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    def say(step: str, state: str, detail: dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(
+            queue.put_nowait, {"step": step, "state": state, "detail": detail}
+        )
+
+    async def run() -> None:
+        try:
+            scan = await asyncio.to_thread(
+                scans.new_scan, data, filename, machine, look=look, on_step=say
+            )
+            queue.put_nowait({"step": "scan", "state": "done", "scan": asdict(scan)})
+        except (ValueError, av.FFmpegError) as e:
+            queue.put_nowait(
+                {
+                    "step": "error",
+                    "state": "failed",
+                    "detail": {"message": f"could not read this video: {e}"},
+                }
+            )
+        except Exception as e:  # the stream has started: report it in the stream
+            queue.put_nowait(
+                {
+                    "step": "error",
+                    "state": "failed",
+                    "detail": {"message": f"the scan failed ({type(e).__name__})"},
+                }
+            )
+        finally:
+            queue.put_nowait(None)
+
+    task = asyncio.create_task(run())
+
+    async def lines() -> AsyncIterator[str]:
+        while (item := await queue.get()) is not None:
+            yield json.dumps(item, default=str) + "\n"
+        await task
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @router.get("/scans")

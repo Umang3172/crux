@@ -29,6 +29,7 @@ import numpy as np
 from ..forecast.runs import DATA_ROOT
 from ..models import FaultKind
 from ..signals.features import magnitude_spectrum
+from ..ticket.camera import Step
 from . import clip as clips
 from . import experiments as ex
 from . import look as looks
@@ -136,19 +137,48 @@ def candidates(signal: np.ndarray, fps: float) -> list[dict[str, float]]:
     return out
 
 
+def _quiet(step: str, state: str, detail: dict[str, Any]) -> None:
+    return None
+
+
 def new_scan(
-    data: bytes, filename: str, machine: str, root: Path | None = None, look: bool = True
+    data: bytes,
+    filename: str,
+    machine: str,
+    root: Path | None = None,
+    look: bool = True,
+    on_step: Step | None = None,
 ) -> Scan:
+    """Read a video and keep it as a scan. `on_step` hears each step as it runs."""
+    say = on_step or _quiet
     scan_id = f"S-{uuid.uuid4().hex[:8]}"
     folder = _folder(scan_id, root)
     folder.mkdir(parents=True, exist_ok=True)
     suffix = Path(filename).suffix.lower() or ".mp4"
     path = folder / f"video{suffix}"
     path.write_bytes(data)
+    say("read", "start", {"bytes": len(data)})
     c = _clip(str(path))
     for i, jpg in enumerate(c.stills):
         (folder / f"still_{i}.jpg").write_bytes(jpg)
     middle = c.stills[len(c.stills) // 2]
+    has_sound = c.audio is not None and len(c.audio) > 0
+    say(
+        "read",
+        "done",
+        {
+            "id": scan_id,
+            "fps": round(c.fps, 3),
+            "duration_s": round(c.duration_s, 2),
+            "frames": len(c.frames),
+            "size": list(c.size),
+            "stills": len(c.stills),
+            "still": len(c.stills) // 2,
+            "sound": has_sound,
+            "audio_fs": c.audio_fs,
+            "notes": list(c.notes),
+        },
+    )
 
     # The machine's normal scan, when a person has marked one: its box measures the
     # same spot again, and its still is the look's reference photo.
@@ -160,18 +190,38 @@ def new_scan(
             reference_label = f"normal scan {normal.id} of {normal.created[:10]}"
         except FileNotFoundError:
             reference = None
-    identity = looks.identify(middle) if look else looks.Identity(note="look skipped")
+    if look:
+        say("identify", "start", {})
+        identity = looks.identify(middle)
+        say(
+            "identify",
+            "done",
+            {
+                "machine_type": identity.machine_type,
+                "nameplate_text": identity.nameplate_text,
+                "box": asdict(identity.box) if identity.box else None,
+                "box_label": identity.box_label,
+                "by": identity.by,
+                "note": identity.note,
+            },
+        )
+    else:
+        identity = looks.Identity(note="look skipped")
+        for step in ("identify", "look"):
+            say(step, "off", {"note": "look skipped"})
     seen = (
         looks.visible(
             middle,
             f"a technician's phone video of a {identity.machine_type or 'machine'}",
             reference,
             reference_label,
+            on_step=on_step,
         )
         if look
         else None
     )
     notes = list(c.notes)
+    say("motion", "start", {"frames": len(c.frames)})
     shaking = shake_map(c.frames, c.times, c.fps)
     if normal is not None:
         box, source = Box(**normal.box), "the normal scan of this machine"
@@ -188,6 +238,22 @@ def new_scan(
     m = measure(c.frames, c.times, c.fps, box)
     if m.note:
         notes.append(m.note)
+    lines = candidates(m.signal, c.fps)
+    say(
+        "motion",
+        "done",
+        {
+            "box": asdict(box),
+            "box_source": source,
+            "rms_px": round(float(m.rms_px), 3),
+            "shake_removed": m.shake_removed,
+            "candidates": lines,
+            "note": m.note or shaking.note,
+        },
+    )
+    # The sound is tested against each fault at a known shaft speed, so it waits
+    # for a person to confirm one (`analyse`).
+    say("sound", "waiting", {"sound": has_sound, "audio_fs": c.audio_fs})
 
     scan = Scan(
         id=scan_id,
@@ -207,9 +273,10 @@ def new_scan(
         box_source=source,
         shake=[[round(float(v), 2) for v in row] for row in shaking.ratio],
         shake_area=asdict(shaking.area) if shaking.area else None,
-        candidates=candidates(m.signal, c.fps),
+        candidates=lines,
     )
     save(scan, root)
+    say("save", "done", {"id": scan.id})
     return scan
 
 

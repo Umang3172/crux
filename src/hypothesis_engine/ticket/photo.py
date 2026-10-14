@@ -37,7 +37,9 @@ MIN_SHORT_SIDE_PX = 224
 #: et al., "Diatom autofocusing in brightfield microscopy", ICPR 2000). The bar
 #: of 100 is a published rule of thumb (A. Rosebrock, "Blur detection with
 #: OpenCV", PyImageSearch, 2015), not a calibrated value: PROVISIONAL until
-#: `scripts/photo_eval.py --calibrate` sets it from a calibration split.
+#: `scripts/photo_eval.py --calibrate` sets it from a calibration split. Below
+#: it a still is marked soft and looked at anyway (ADR-0032): an uncalibrated
+#: bar turned back both real photos of a plainly visible fault it met.
 MIN_SHARPNESS = 100.0
 
 #: Too dark: even the brightest 1% of pixels sit in the bottom eighth of the
@@ -64,6 +66,7 @@ class Quality:
     p1: float = 0.0
     p99: float = 0.0
     measured: bool = True  # False when the still could not be measured at all
+    soft: bool = False  # under the sharpness bar: looked at, but a miss is likelier
 
     def as_dict(self) -> dict[str, float | int | bool]:
         return {
@@ -73,6 +76,7 @@ class Quality:
             "p1": self.p1,
             "p99": self.p99,
             "measured": self.measured,
+            "soft": self.soft,
         }
 
 
@@ -114,11 +118,7 @@ def quality(image: bytes) -> Quality:
         return Quality(False, f"too dark (brightest 1% of pixels at {p99:.0f} of 255)", **q)
     if p1 > BRIGHT_P1:
         return Quality(False, f"blown out (darkest 1% of pixels at {p1:.0f} of 255)", **q)
-    if sharpness < MIN_SHARPNESS:
-        return Quality(
-            False, f"blurred (sharpness {sharpness:.0f}, at least {MIN_SHARPNESS:.0f})", **q
-        )
-    return Quality(True, "", **q)
+    return Quality(True, "", soft=sharpness < MIN_SHARPNESS, **q)
 
 
 def parse_box(value: object) -> Box1000 | None:

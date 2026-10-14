@@ -321,15 +321,22 @@ def test_the_gate_turns_back_an_unusable_photo_before_any_model(image, why) -> N
     assert any("nobody has looked at it yet" in s.text for s in t.sentences)
 
 
-def test_the_gate_turns_back_a_blurred_photo() -> None:
+def test_a_blurred_photo_is_marked_soft_and_still_looked_at() -> None:
     from io import BytesIO
 
     from PIL import Image, ImageFilter
 
     out = BytesIO()
     Image.open(BytesIO(_photo())).filter(ImageFilter.GaussianBlur(6)).save(out, format="JPEG")
-    assert not photo.quality(out.getvalue()).usable
-    assert photo.quality(_photo()).usable
+    soft = photo.quality(out.getvalue())
+    assert soft.usable and soft.soft and soft.sharpness < photo.MIN_SHARPNESS
+    assert not photo.quality(_photo()).soft
+    # The uncalibrated bar warns instead of vetoing (ADR-0032): the model looks,
+    # the second look still has to confirm, and the note says a miss is likelier.
+    still = camera.Still("m", "Bay 2", out.getvalue(), "image/jpeg", "now")
+    look = camera.inspect(still, "ctx", _Checklist(_answers(leak=(600, 300, 800, 500))))
+    assert [f.item for f in look.findings] == ["leak"]
+    assert look.quality["soft"] is True and "soft" in look.note and look.retake == ""
 
 
 def test_a_present_item_the_cropped_second_look_rejects_is_dropped() -> None:
