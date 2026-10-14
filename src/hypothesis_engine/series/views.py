@@ -25,6 +25,7 @@ from . import sources
 from .settings import (
     IMS_CADENCE_MIN,
     METRO_TARGETS,
+    RUNNING_SHARE,
     WINDOW_AFTER_H,
     WINDOW_BEFORE_H,
     WINDOW_CADENCE_MIN,
@@ -199,18 +200,33 @@ def anomalies_view(
     made: Made,
     relative: bool = False,
 ) -> dict[str, Any]:
+    """The readings checked, the band, and which readings outside it count.
+
+    For the compressor a reading counts only while the motor ran (settings,
+    RUNNING_SHARE): the model's own flags are kept in `flagged`, the ones that
+    count in `counted`, split at "as of" so a week can be held against the
+    normal week's.
+    """
     rows = []
     total = 0
     after = 0
     a = as_of(p) if not relative else None
+    t = flags[signals[0].id].t
+    running = (
+        sources.metro_running(t, WINDOW_CADENCE_MIN)
+        if source == "metro"
+        else np.ones(len(t), dtype=bool)
+    )
     for s in signals:
         f = flags[s.id]
         mask = f.filled if f.filled is not None else np.zeros(len(f.t), dtype=bool)
         flagged = f.flagged & ~mask
         idx = np.flatnonzero(flagged)
+        counted = np.flatnonzero(flagged & running)
         total += len(idx)
         if a is not None:
             after += int(np.sum(f.t[idx] >= a))
+        late = int(np.sum(f.t[counted] >= a)) if a is not None else None
         rows.append(
             {
                 **signal_meta(s),
@@ -220,9 +236,17 @@ def anomalies_view(
                 "hi": nums(clipped(s.id, f.hi)),
                 "flagged": idx.tolist(),
                 "prob": nums(f.prob) if f.prob is not None else None,
+                "counted": counted.tolist(),
+                "counted_before": len(counted) - (late or 0),
+                "counted_after": late,
             }
         )
-    t0, t1 = flags[signals[0].id].t[0], flags[signals[0].id].t[-1]
+    if source == "metro":
+        made.settings.setdefault(
+            "counted", f"only while the motor ran for at least {RUNNING_SHARE:.0%} of a step"
+        )
+    t0, t1 = t[0], t[-1]
+    counted_total = sum(len(r["counted"]) for r in rows)
     return {
         "source": source,
         "preset": p.id,
@@ -235,10 +259,61 @@ def anomalies_view(
         "window": {"start": epoch(np.array([t0]))[0], "end": epoch(np.array([t1]))[0]},
         "flagged": total,
         "flagged_after_as_of": after if a is not None else None,
+        "counted": counted_total,
+        "counted_after_as_of": sum(r["counted_after"] for r in rows) if a is not None else None,
+        "not_counted_off": total - counted_total,
+        "off": np.flatnonzero(~running).tolist(),
         "signals": rows,
         "failures": failures_between(t0, t1) if source == "metro" else [],
         "made": made.to_dict(),
     }
+
+
+def tally(view: dict[str, Any]) -> dict[str, Any]:
+    """The counted readings of an anomalies view, before and after "as of", for a comparison."""
+    return {
+        "preset": view["preset"],
+        "before": sum(s["counted_before"] for s in view["signals"]),
+        "after": view["counted_after_as_of"],
+        "signals": {
+            s["id"]: {"before": s["counted_before"], "after": s["counted_after"]}
+            for s in view["signals"]
+        },
+    }
+
+
+def flags_from_view(view: dict[str, Any]) -> dict[str, Flags]:
+    """A saved anomalies view back into the model's answer, so it can be counted again.
+
+    Nothing is asked of a model: the readings, the band and the model's own
+    flags are all in the view. A filled step went out as null, so it comes back
+    as filled.
+    """
+
+    def arr(xs: list[float | None] | None) -> np.ndarray | None:
+        return None if xs is None else np.array([np.nan if x is None else x for x in xs])
+
+    out = {}
+    for s in view["signals"]:
+        t = np.asarray(s["t"], dtype="datetime64[s]").astype("datetime64[m]")
+        v = arr(s["v"])
+        flagged = np.zeros(len(t), dtype=bool)
+        flagged[s["flagged"]] = True
+        out[s["id"]] = Flags(t, v, arr(s["lo"]), arr(s["hi"]), flagged, arr(s["prob"]), np.isnan(v))
+    return out
+
+
+def made_from(view: dict[str, Any]) -> Made:
+    m = view["made"]
+    return Made(
+        m["engine"],
+        m["model"],
+        m["product"],
+        m.get("sql", ""),
+        dict(m.get("settings", {})),
+        m.get("computed_at", now()),
+        dict(m.get("cost", {})),
+    )
 
 
 #: The parts a breakdown may have, in the order they are drawn. A part the

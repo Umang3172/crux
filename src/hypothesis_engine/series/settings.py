@@ -70,14 +70,26 @@ FUTURE_COVARIATES = ("hour_sin", "hour_cos")
 #: air-drying towers is working (UCI variable description).
 METRO_COLUMNS = ("loaded", "motor_current", "oil_temp", "tp3", "reservoirs", "towers")
 
+#: Each leak moment is a replay of the day the leak happened, seen from a few
+#: hours before its report: the label names the leak, not a warning ahead of it.
+#: The times themselves are unchanged since they were fixed.
 METRO_PRESETS = (
     Preset("normal", "Normal week", "2020-03-10T08:00", "A week in March with no reported failure"),
-    Preset(
-        "leak1", "Before leak 1", "2020-04-17T08:00", "16 hours before the first reported air leak"
-    ),
-    Preset("leak2", "Before leak 2", "2020-05-29T08:00", "15.5 hours before the second"),
-    Preset("leak3", "Before leak 3", "2020-06-05T06:00", "4 hours before the third"),
-    Preset("leak4", "Before leak 4", "2020-07-15T08:00", "6.5 hours before the fourth"),
+    Preset("leak1", "Leak 1", "2020-04-17T08:00", "Seen from 16 h before the report"),
+    Preset("leak2", "Leak 2", "2020-05-29T08:00", "Seen from 15.5 h before the report"),
+    Preset("leak3", "Leak 3", "2020-06-05T06:00", "Seen from 4 h before the report"),
+    Preset("leak4", "Leak 4", "2020-07-15T08:00", "Seen from 6.5 h before the report"),
+)
+
+#: What the leak moments can and cannot show, for the tab. Measured on the
+#: one-minute table (docs/SERIES.md, "Does it warn early?"): on the ten days
+#: before each leak the compressor ran loaded for about as much of its running
+#: time as in the normal week, apart from single busy days that the normal
+#: months have too; each leak shows from around the hour it was reported.
+METRO_NOTE = (
+    "Each leak here is a replay of the day it happened. In this record a leak shows in the "
+    "readings around the time it is reported, not days before: the days before it look like "
+    "a normal week."
 )
 
 #: The control week for "what changed": the normal preset's window.
@@ -133,6 +145,14 @@ OFFLINE_DAYS = 14
 #: shifts; the dryer tower is which of the two drying towers was working.
 CHANGE_DIMENSIONS = ("hour_band", "day_type", "dryer_tower")
 OFF_BELOW_A = 1.0
+
+#: A reading outside the band counts only when the motor ran for at least this
+#: share of its step's minutes. A step mostly off reads near 0% loaded and 0 A,
+#: which a band learnt mostly on running hours flags: that says the train was
+#: parked, not how the compressor works. In the week of leak 2, 131 of the 194
+#: loaded-share readings TimesFM flagged fell while the motor was off (14 Oct
+#: 2026). Half is the plain cut between mostly running and mostly off.
+RUNNING_SHARE = 0.5
 #: Google's default: a segment must hold at least a tenth of either week.
 MIN_SUPPORT = 0.1
 TOP_CHANGES = 5

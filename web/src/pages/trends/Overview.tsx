@@ -9,7 +9,7 @@ import { Changes } from "./Changes";
 import { MadeLine, isGoogle } from "./Made";
 import { Slot } from "./slot";
 
-function Words({ view }: { view: SummaryView }) {
+function Words({ view, caveat }: { view: SummaryView; caveat?: string | null }) {
   const gemini = view.writer.startsWith("gemini");
   return (
     <>
@@ -18,6 +18,7 @@ function Words({ view }: { view: SummaryView }) {
           <p key={i}>{s}</p>
         ))}
       </div>
+      {caveat && <p className="tn-note tn-caveat">{caveat}</p>}
       <MadeLine
         made={view.made}
         what={`${gemini ? "Written by Gemini" : "Written from a template"} from numbers ${isGoogle(view.made) ? "Google's models computed in BigQuery" : "the stand-in computed"}. A sentence with any other number is dropped.`}
@@ -46,7 +47,7 @@ export function Overview({ source, preset, summary, changes }: { source: Source;
           In plain words
         </h2>
         <Slot a={summary} rows={3}>
-          {(v) => <Words view={v} />}
+          {(v) => <Words view={v} caveat={!bearing && preset?.id !== "normal" ? source.note : null} />}
         </Slot>
       </section>
 
@@ -69,7 +70,7 @@ export function Overview({ source, preset, summary, changes }: { source: Source;
               What changed against a normal week
             </h2>
             {preset?.id === "normal" ? (
-              <p className="tn-note">This is the normal week. Pick a week before a leak to see what changed against it.</p>
+              <p className="tn-note">This is the normal week. Pick a leak to see what changed against it.</p>
             ) : (
               <Slot a={changes} rows={4}>
                 {(v) => <Changes view={v} />}

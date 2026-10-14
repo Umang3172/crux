@@ -6,6 +6,8 @@
     uv run python scripts/series.py snapshot --engine bigquery --dry-run   # print what each job may cost
     uv run python scripts/series.py snapshot --engine bigquery             # the Google run
     uv run python scripts/series.py spent                      # what the Google run has cost so far
+    uv run python scripts/series.py recount                    # count saved weeks' unusual readings again, no network
+    uv run python scripts/series.py early                      # does the record show a leak before it is reported?
 
 `prepare` needs MetroPT-3 in data/metropt/ (a human download; docs/SERIES.md).
 The Google run needs the `series` extra and Google Cloud's login (ADC), uses
@@ -64,6 +66,51 @@ def snap(args: argparse.Namespace) -> int:
     return 0
 
 
+def recount(_: argparse.Namespace) -> int:
+    for engine in snapshot.ENGINES:
+        for path in snapshot.recount(engine):
+            print(f"  {path}")
+    return 0
+
+
+def early(_: argparse.Namespace) -> int:
+    """The share of running minutes spent loaded, by day before each leak and by hour on its day.
+
+    Read straight from the one-minute table, no model: a minute runs when the
+    motor draws at least OFF_BELOW_A and was not filled, and is loaded when the
+    compressor was loaded for most of it. A day counts when the motor ran an hour.
+    """
+    import numpy as np
+
+    t = sources.metro(1)
+    on = (t.cols["motor_current"] >= settings.OFF_BELOW_A) & ~t.filled
+    loaded = on & (t.cols["loaded"] > 50)
+
+    def share(a: np.datetime64, b: np.datetime64, least: int) -> str:
+        i, j = t.index(a), t.index(b)
+        n = int(on[i:j].sum())
+        return "  -" if n < least else f"{100 * loaded[i:j].sum() / n:3.0f}"
+
+    day, hour = np.timedelta64(1, "D"), np.timedelta64(1, "h")
+    a = np.datetime64(settings.preset("metro", "normal").as_of, "D")
+    print(
+        "normal week, by day:",
+        " ".join(share(d, d + day, 60) for d in np.arange(a - 7 * day, a, day)),
+    )
+    for f in sources.metro_failures():
+        start = np.datetime64(f["start"], "m")
+        d0 = start.astype("datetime64[D]")
+        days = " ".join(share(d, d + day, 60) for d in np.arange(d0 - 10 * day, d0 + day, day))
+        h0 = start.astype("datetime64[h]")
+        hours = " ".join(
+            share(h, h + hour, 20) for h in np.arange(h0 - 12 * hour, h0 + 3 * hour, hour)
+        )
+        print(f"{f['label']}, reported {f['start']}")
+        print(f"  ten days before, then the day reported: {days}")
+        print(f"  twelve hours before the report's hour, then three: {hours}")
+    return 0
+
+
 def spent(_: argparse.Namespace) -> int:
     ledger = bigquery.Ledger()
     for e in ledger.entries():
@@ -85,6 +132,8 @@ def main() -> int:
     s.add_argument("--budget", type=float, default=settings.BUDGET_USD)
     s.set_defaults(fn=snap)
     sub.add_parser("spent").set_defaults(fn=spent)
+    sub.add_parser("recount").set_defaults(fn=recount)
+    sub.add_parser("early").set_defaults(fn=early)
     args = ap.parse_args()
     return args.fn(args)
 

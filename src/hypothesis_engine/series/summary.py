@@ -17,6 +17,7 @@ import numpy as np
 
 from ..agents.factory import gemini_model_id, gemini_route, not_live
 from . import views
+from .settings import WINDOW_BEFORE_H
 
 Get = Callable[[str], dict[str, Any] | None]
 
@@ -24,8 +25,9 @@ PROMPT = """You write for a maintenance planner at a metro depot or a factory.
 Write exactly three short sentences, each under 25 words, from the facts below.
 Pick the facts that matter most to a planner and leave the rest out.
 Rules: use only these facts; copy every number exactly as written; add no other
-number; say what the readings show, never why (no diagnosis); no jargon, no
-lists, no headings.
+number; when a fact sets a number beside the normal week's, keep both in the
+same sentence; when a fact says a leak was reported, include it; say what the
+readings show, never why (no diagnosis); no jargon, no lists, no headings.
 
 Facts:
 """
@@ -53,32 +55,92 @@ def _r(x: float | None, digits: int = 1) -> str:
     return "n/a" if x is None else f"{x:.{digits}f}"
 
 
-def facts(source: str, get: Get) -> list[str]:
-    """Sentences, each carrying numbers straight from a view."""
+def _hours(seconds: float) -> str:
+    h = seconds / 3600
+    return f"{h:.0f}" if abs(h - round(h)) < 0.05 else f"{h:.1f}"
+
+
+def _loaded(fc: dict[str, Any]) -> tuple[float | None, float | None]:
+    ld = next(s for s in fc["signals"] if s["id"] == "loaded")
+    return _mean(ld["forecast"]["p50"]), _mean(ld["actual"]["v"])
+
+
+def _peaks(fc: dict[str, Any]) -> tuple[float | None, float | None, float | None]:
+    """Motor current over the day: the forecast's peak, its upper edge's, and the highest reading."""
+    mc = next(s for s in fc["signals"] if s["id"] == "motor_current")
+    return _max(mc["forecast"]["p50"]), _max(mc["forecast"]["hi"]), _max(mc["actual"]["v"])
+
+
+def _largest_step(bd: dict[str, Any]) -> float | None:
+    ld = next(s for s in bd["signals"] if s["id"] == "loaded")
+    if not ld["step_list"]:
+        return None
+    return max(ld["step_list"], key=lambda s: abs(s["size"] or 0))["size"]
+
+
+def facts(source: str, get: Get, normal: Get | None = None) -> list[str]:
+    """Sentences, each carrying numbers straight from a view.
+
+    `normal` reads the normal week's views: a number for a leak week is stated
+    beside the normal week's, because on its own it reads as more than it is
+    (the next-day forecast also misses on a normal day, and a normal week also
+    has readings outside the band).
+    """
     out: list[str] = []
+    later: list[str] = []
     if source == "metro":
         fc = get("forecast-day")
         if fc:
-            by = {s["id"]: s for s in fc["signals"]}
-            ld, mc = by["loaded"], by["motor_current"]
-            exp, act = _mean(ld["forecast"]["p50"]), _mean(ld["actual"]["v"])
-            out.append(
+            exp, act = _loaded(fc)
+            line = (
                 f"Over the next day {fc['made']['model']} expected the compressor to run loaded "
-                f"{_r(exp)}% of the time; the replay shows it ran loaded {_r(act)}%."
+                f"{_r(exp)}% of the time and it ran loaded {_r(act)}%"
             )
-            out.append(
-                f"Expected peak motor current over that day: {_r(_max(mc['forecast']['p50']))} A "
-                f"(upper edge {_r(_max(mc['forecast']['hi']))} A); the highest reading was "
-                f"{_r(_max(mc['actual']['v']))} A."
+            nfc = normal("forecast-day") if normal else None
+            if nfc:
+                nexp, nact = _loaded(nfc)
+                line += (
+                    f"; in the normal week the same forecast expected {_r(nexp)}% and it ran "
+                    f"loaded {_r(nact)}%"
+                )
+            out.append(line + ".")
+            leak = next((f for f in fc["failures"] if f["start"] >= fc["as_of"]), None)
+            if leak:
+                out.append(
+                    f"The operator reported an air leak {_hours(leak['start'] - fc['as_of'])} "
+                    "hours after the moment looked from, inside that day."
+                )
+            mc = _peaks(fc)
+            line = (
+                f"Expected peak motor current over that day: {_r(mc[0])} A "
+                f"(upper edge {_r(mc[1])} A); the highest reading was {_r(mc[2])} A"
             )
+            if nfc:
+                nmc = _peaks(nfc)
+                line += f"; in the normal week, expected {_r(nmc[0])} A and highest {_r(nmc[2])} A"
+            later.append(line + ".")
     an = get("anomalies")
-    if an:
+    if an and not an["relative"] and "counted" in an:
+        days = WINDOW_BEFORE_H // 24
+        before = an["counted"] - (an["counted_after_as_of"] or 0)
+        line = (
+            f"While the motor ran, {before} readings fell outside the expected band in the "
+            f"{days} days before the moment looked from and {an['counted_after_as_of']} in the day after"
+        )
+        nan = normal("anomalies") if normal else None
+        if nan and "counted" in nan:
+            t = views.tally(nan)
+            line += f"; in the normal week, {t['before']} and {t['after']}"
+        out.append(line + ".")
+        if an["not_counted_off"]:
+            later.append(
+                f"{an['not_counted_off']} more readings fell outside the band while the motor "
+                "was off, and are not counted."
+            )
+    elif an:
         per = ", ".join(f"{s['name'].lower()} {len(s['flagged'])}" for s in an["signals"])
         days = "the last week of the run" if an["relative"] else "the week checked"
-        line = f"{an['flagged']} readings in {days} fell outside the expected band ({per})"
-        if an.get("flagged_after_as_of") is not None:
-            line += f"; {an['flagged_after_as_of']} of them came after the moment looked from"
-        out.append(line + ".")
+        out.append(f"{an['flagged']} readings in {days} fell outside the expected band ({per}).")
     ch = get("changes") if source == "metro" else None
     if ch and ch["rows"]:
         top = ch["rows"][0]
@@ -88,15 +150,18 @@ def facts(source: str, get: Get) -> list[str]:
             f"week {_r(ch['overall']['test'])}% against {_r(ch['overall']['control'])}%."
         )
     bd = get("breakdown") if source == "metro" else None
-    if bd:
-        ld = next(s for s in bd["signals"] if s["id"] == "loaded")
-        if ld["step_list"]:
-            big = max(ld["step_list"], key=lambda s: abs(s["size"] or 0))
-            out.append(
-                f"The largest step change the two-week model found in the loaded share was "
-                f"{_r(big['size'])} points."
-            )
-    return out
+    big = _largest_step(bd) if bd else None
+    if big is not None:
+        line = (
+            f"The largest step change the two-week model found in the loaded share was "
+            f"{_r(big)} points"
+        )
+        nbd = normal("breakdown") if normal else None
+        nbig = _largest_step(nbd) if nbd else None
+        if nbig is not None:
+            line += f"; in the normal week, {_r(nbig)} points"
+        later.append(line + ".")
+    return out + later
 
 
 def _allowed(fact_lines: list[str]) -> set[str]:
@@ -152,9 +217,15 @@ def default_writer() -> tuple[Writer | None, str]:
 
 
 def summarise(
-    source: str, preset_id: str, get: Get, engine: str, writer: Writer | None, writer_name: str
+    source: str,
+    preset_id: str,
+    get: Get,
+    engine: str,
+    writer: Writer | None,
+    writer_name: str,
+    normal: Get | None = None,
 ) -> dict[str, Any]:
-    fact_lines = facts(source, get)
+    fact_lines = facts(source, get, normal)
     text = " ".join(fact_lines[:3])
     used = "template"
     if writer is not None and fact_lines:

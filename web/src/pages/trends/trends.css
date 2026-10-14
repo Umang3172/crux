@@ -35,6 +35,8 @@
 .tn-bar .seg { flex-wrap: wrap; }
 .tn-headline { margin: 0; font-size: var(--fs-16); line-height: 1.5; color: var(--text-2); text-wrap: balance; }
 .tn-headline b { color: var(--model); font-variant-numeric: tabular-nums; }
+.tn-normal { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tn-caveat { margin-top: var(--s-3); font-size: var(--fs-13); color: var(--text-3); }
 .tn-headline b.tn-really,
 .tn-plain b { color: var(--text); }
 .tn-absent { margin: 0; }

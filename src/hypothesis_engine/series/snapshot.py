@@ -93,7 +93,7 @@ def load(source: str, preset_id: str, view: str) -> dict[str, Any]:
     """The best saved view, or the stand-in computed now."""
     p = check(source, preset_id, view)
     for engine in ENGINES:
-        found = read(engine, source, preset_id, view)
+        found = read_view(engine, source, preset_id, view)
         if found is not None:
             return found
     data = build_offline(source, p, view)
@@ -101,7 +101,64 @@ def load(source: str, preset_id: str, view: str) -> dict[str, Any]:
         save("offline", data)
     except OSError:  # a read-only data folder still serves the view
         pass
-    return data
+    return with_normal("offline", data)
+
+
+def read_view(engine: str, source: str, preset_id: str, view: str) -> dict[str, Any] | None:
+    """A saved view as it is served: a week's unusual readings come with the normal week's."""
+    data = read(engine, source, preset_id, view)
+    return with_normal(engine, data) if data is not None else None
+
+
+def with_normal(engine: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Add the normal week's counted readings to a compressor week's, from the same engine.
+
+    A count of readings outside the band means little alone: the normal week has
+    them too. The normal week is the one the engine computed with the same model,
+    so the two counts compare like with like.
+    """
+    if (
+        data.get("source") != "metro"
+        or data.get("view") != "anomalies"
+        or data.get("preset") == settings.CONTROL_PRESET
+        or "counted" not in data
+    ):
+        return data
+    normal = read(engine, "metro", settings.CONTROL_PRESET, "anomalies")
+    if normal is None and engine == "offline":
+        try:
+            normal = build_offline(
+                "metro", settings.preset("metro", settings.CONTROL_PRESET), "anomalies"
+            )
+        except NotAvailable:
+            normal = None
+    if normal is None or "counted" not in normal:
+        return data
+    return {
+        **data,
+        "normal": {
+            "label": settings.preset("metro", settings.CONTROL_PRESET).label,
+            **views.tally(normal),
+        },
+    }
+
+
+def recount(engine: str) -> list[Path]:
+    """Count the saved compressor weeks' unusual readings again, with no call to any model.
+
+    The readings, the band and the model's flags are all in each saved view, so
+    a change to what counts (settings.RUNNING_SHARE) needs no new Google run.
+    """
+    written = []
+    for p in settings.METRO_PRESETS:
+        data = read(engine, "metro", p.id, "anomalies")
+        if data is None:
+            continue
+        rebuilt = views.anomalies_view(
+            "metro", p, settings.METRO_TARGETS, views.flags_from_view(data), views.made_from(data)
+        )
+        written.append(save(engine, rebuilt))
+    return written
 
 
 def build_offline(source: str, p: settings.Preset, view: str) -> dict[str, Any]:
@@ -126,7 +183,15 @@ def build_offline(source: str, p: settings.Preset, view: str) -> dict[str, Any]:
             return offline.changes(p)
         if view == "summary":
             return summary.summarise(
-                "metro", p.id, _getter("metro", p.id), views.OFFLINE, None, "template"
+                "metro",
+                p.id,
+                _getter("metro", p.id),
+                views.OFFLINE,
+                None,
+                "template",
+                normal=_getter("metro", settings.CONTROL_PRESET)
+                if p.id != settings.CONTROL_PRESET
+                else None,
             )
     except FileNotFoundError as exc:
         raise NotAvailable(f"the compressor history is not on this server ({exc})") from None
@@ -205,7 +270,7 @@ def catalog() -> dict[str, Any]:
                     {"start": _epoch(f["start"]), "end": _epoch(f["end"]), "label": f["label"]}
                     for f in sources.metro_failures()
                 ],
-                "note": None,
+                "note": settings.METRO_NOTE,
             },
             {
                 "id": "ims",

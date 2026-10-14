@@ -12,7 +12,7 @@ import { Legend, TimeChart } from "./TimeChart";
 /** Current is read by its peak; a share or a temperature by its average. */
 const BY_PEAK = new Set(["motor_current"]);
 
-function Chart({ view, signal, span }: { view: ForecastView; signal: string; span: SpanMeta | undefined }) {
+function Chart({ view, normal, signal, span }: { view: ForecastView; normal: ForecastView | undefined; signal: string; span: SpanMeta | undefined }) {
   const box = useRef<HTMLDivElement>(null);
   const height = useFitHeight(box, 150);
   const s = view.signals.find((x) => x.id === signal) ?? view.signals[0];
@@ -21,6 +21,8 @@ function Chart({ view, signal, span }: { view: ForecastView; signal: string; spa
   const read = byPeak ? peak : mean;
   const expected = read(s.forecast.p50);
   const really = read(s.actual.v);
+  // The same forecast also misses on a normal day; a leak day's miss reads true only beside it.
+  const n = normal?.signals.find((x) => x.id === s.id);
   const over = span?.label.toLowerCase() ?? "ahead";
   const helpers = span?.model.startsWith("TimesFM") ? ", three signals at once, with reservoir pressure and the time of day as helpers" : "";
   return (
@@ -28,6 +30,12 @@ function Chart({ view, signal, span }: { view: ForecastView; signal: string; spa
       <p className="tn-headline">
         {byPeak ? "Expected peak" : "Expected"} <b>{num(expected, s.unit)}</b> {byPeak ? "" : "on average "}over the {over}. Really{" "}
         <b className="tn-really">{num(really, s.unit)}</b>.
+        {n && (
+          <span className="tn-normal">
+            {" "}
+            Normal week: expected {num(read(n.forecast.p50), s.unit)}, really {num(read(n.actual.v), s.unit)}.
+          </span>
+        )}
       </p>
       <div ref={box}>
         <TimeChart
@@ -61,6 +69,7 @@ function Chart({ view, signal, span }: { view: ForecastView; signal: string; spa
 
 export function Forecast({
   forecast,
+  normal,
   spans,
   span,
   signal,
@@ -68,6 +77,8 @@ export function Forecast({
   set,
 }: {
   forecast: Async<ForecastView>;
+  /** The normal week at the same span, for a leak week; absent for the normal week itself. */
+  normal?: ForecastView;
   spans: SpanMeta[];
   span: string;
   signal: string;
@@ -82,7 +93,7 @@ export function Forecast({
         <Seg value={span} onChange={(v) => set("span", v)} options={spans.map((s) => ({ id: s.id, label: s.label, title: `${s.model} · ${s.product}` }))} label="How far ahead" />
       </div>
       <Slot a={forecast} rows={6}>
-        {(v) => <Chart view={v} signal={signal} span={meta} />}
+        {(v) => <Chart view={v} normal={normal} signal={signal} span={meta} />}
       </Slot>
     </div>
   );

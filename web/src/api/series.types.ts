@@ -75,6 +75,19 @@ export type AnomalySignal = SignalMeta & {
   hi: (number | null)[];
   flagged: number[];
   prob: (number | null)[] | null;
+  /** The flagged readings that count: for the compressor, only while the motor ran. */
+  counted?: number[];
+  counted_before?: number | null;
+  counted_after?: number | null;
+};
+
+/** A week's counted readings outside the band, before and after "as of". */
+export type Tally = {
+  preset: string;
+  label: string;
+  before: number;
+  after: number | null;
+  signals: Record<string, { before: number | null; after: number | null }>;
 };
 
 export type AnomaliesView = {
@@ -88,6 +101,13 @@ export type AnomaliesView = {
   window: Window;
   flagged: number;
   flagged_after_as_of: number | null;
+  counted?: number | null;
+  counted_after_as_of?: number | null;
+  /** Flagged while the motor was off most of the step: a parked train, not counted. */
+  not_counted_off?: number;
+  off?: number[];
+  /** The normal week's counts, sent with a leak week's. */
+  normal?: Tally | null;
   signals: AnomalySignal[];
   failures: Window[];
   made: Made;

@@ -15,7 +15,10 @@ only over HTTP.
 The tab is four screens, one at a time, each sized to fit a laptop without
 scrolling: Overview (Gemini's three sentences and what changed against the
 normal week), Forecast (one signal, one span), Unusual readings (one signal)
-and Ask the data. Each screen names the product that made it and opens the SQL
+and Ask the data. Every number for a leak is shown beside the normal week's.
+The tab shows the compressor only: the bearing rig's views are still served,
+but its screen could only count readings outside a band, and on bearings
+TimesFM does worse than the trained time-left model (below). Each screen names the product that made it and opens the SQL
 in a dialog. A live question draws the agent's steps as they stream in
 (`askPipeline.ts`, `AskFlow.tsx`); the diagram's arrow into the diagnosis is
 barred, because nothing said here reaches an investigation. The parts of a
@@ -30,13 +33,13 @@ with is the Forecast screen's third span.
 | Readings outside the expected band | TimesFM 3.0 through `AI.DETECT_ANOMALIES` | One query, one series per moment, signal and day |
 | Next two weeks, and what a signal is made of | BigQuery ML `ARIMA_PLUS` with `ML.EXPLAIN_FORECAST` | Past TimesFM 3.0's 2,048-point context. Splits a series into trend, daily and weekly pattern, spikes and dips, step changes and residual |
 | What changed against a normal week | BigQuery ML contribution analysis with `ML.GET_INSIGHTS` | Ranks the segments of time behind a change |
-| A summary in plain words | Gemini on Vertex AI | Words only: a reply stating a number that is not among the facts is dropped |
+| A summary in plain words | Gemini on Vertex AI | Words only: a reply stating a number that is not among the facts is dropped. For a leak, each fact carries the normal week's number and says when the leak was reported |
 | Ask the data | Conversational Analytics API (Gemini data agent over the BigQuery tables) | A question in plain words comes back as text, the SQL it wrote, the rows and a chart spec |
 | Storage | BigQuery dataset `crux_ts` in `asia-south1` | One home for the sensor history the models read |
 
 Bearing time left is not here. On held-out bearings TimesFM forecasts a growing
 fault levelling off, so its crossing of the danger line comes too late or never
-(FORECAST.md). Time left stays on the trained model; the tab says so.
+(FORECAST.md). Time left stays on the trained model.
 
 ## The data
 
@@ -59,10 +62,16 @@ The "as of" moments were fixed before any model ran, and not moved after:
 | Moment | As of | Before the reported leak |
 |---|---|---|
 | Normal week | 10 Mar 2020 08:00 | none reported; the control week |
-| Before leak 1 | 17 Apr 2020 08:00 | 16 h |
-| Before leak 2 | 29 May 2020 08:00 | 15.5 h |
-| Before leak 3 | 5 Jun 2020 06:00 | 4 h |
-| Before leak 4 | 15 Jul 2020 08:00 | 6.5 h |
+| Leak 1 | 17 Apr 2020 08:00 | 16 h |
+| Leak 2 | 29 May 2020 08:00 | 15.5 h |
+| Leak 3 | 5 Jun 2020 06:00 | 4 h |
+| Leak 4 | 15 Jul 2020 08:00 | 6.5 h |
+
+A leak moment is a replay of the day the leak happened, seen from a few hours
+before its report: the next day holds the leak. It is not a warning ahead of
+it, and the record gives no such warning (below). The moments were first
+labelled "Before leak N"; they were renamed on 14 Oct 2026 so the label does
+not promise one. The times are unchanged.
 
 | Span | Step | Context | Ahead | Model |
 |---|---|---|---|---|
@@ -84,6 +93,14 @@ the history before that day began, as a daily job would run. Checked as one
 stretch, the end of the week sat a week ahead of its history and its band grew
 wide enough to hide the leak.
 
+A reading outside the band counts only while the motor ran for at least half
+its step (`RUNNING_SHARE`). A step the train spent parked reads near 0% loaded
+and 0 A, which the band, learnt mostly on running hours, flags: in the week of
+leak 2, 301 of the 471 readings TimesFM flagged were parked steps. The model's
+own flags are kept in the view (`flagged`); the ones that count are `counted`,
+split at "as of", and a leak week is served with the normal week's counts
+beside it (`normal`). The chart draws the parked ones grey.
+
 "What changed" measures the loaded share while the motor runs: the share of
 running minutes spent loaded. A leak pushes it up, and unlike total current it
 does not fall when fewer trains run (spring 2020 had fewer). The week is split
@@ -91,17 +108,46 @@ by six-hour band, weekday or weekend, and drying tower.
 
 ## Results (BigQuery run of 14 Oct 2026)
 
-| Moment | Next day, loaded share: TimesFM expected / really | Readings outside the band: the week / the day after "as of" | Loaded while running: that week / normal week |
-|---|---|---|---|
-| Normal week | 12.4% / 20.7% | 163 / 32 | control |
-| Before leak 1 | 8.1% / 32.1% | 318 / 142 | 51.8% / 28.7% |
-| Before leak 2 | 15.1% / 36.5% | 471 / 97 | 35.7% / 28.7% |
-| Before leak 3 | 14.3% / 86.0% | 336 / 243 | 45.7% / 28.7% |
-| Before leak 4 | 38.0% / 39.7% | 252 / 77 | 32.4% / 28.7% |
+| Moment | Next day, loaded share: TimesFM expected / really | Outside the band while running: 6 days before "as of" / the day after | Outside while parked, not counted | Loaded while running: that week / normal week |
+|---|---|---|---|---|
+| Normal week | 12.4% / 20.7% | 74 / 32 | 57 | control |
+| Leak 1 | 8.1% / 32.1% | 158 / 89 | 71 | 51.8% / 28.7% |
+| Leak 2 | 15.1% / 36.5% | 88 / 82 | 301 | 35.7% / 28.7% |
+| Leak 3 | 14.3% / 86.0% | 69 / 243 | 24 | 45.7% / 28.7% |
+| Leak 4 | 38.0% / 39.7% | 74 / 77 | 101 | 32.4% / 28.7% |
 
-Read these as pictures of four leaks, not as a tested detector: four events on
-one machine, no threshold tuned, and the normal week also has readings outside
-the band. The watcher's own evaluation on this machine is in FORECAST.md.
+The day after "as of" holds each leak, and there every leak stands out from the
+normal week (77 to 243 readings against 32). The six days before do not, apart
+from leak 1 (158 against 74). The next-day forecast also misses on a normal day
+(12.4% expected, 20.7% real), so its miss on a leak day reads true only beside
+that. Read these as pictures of four leaks, not as a tested detector: four
+events on one machine, no threshold tuned. The watcher's own evaluation on this
+machine is in FORECAST.md. The counts were taken again from the saved views
+with `scripts/series.py recount` (no model ran); the 14 Oct 2026 run counted
+every flag and gave 163 for the normal week and 318, 471, 336 and 252 for the
+leaks.
+
+### Does it warn early?
+
+No: in this record a leak shows around the time it is reported.
+`scripts/series.py early` reads the share of running minutes spent loaded
+straight from the one-minute table:
+
+| | Ten days before the reported day | Reported day | Hours before the report |
+|---|---|---|---|
+| Normal week (7 days to "as of") | 20 to 32% | | |
+| Leak 1 (18 Apr 00:00) | 19 to 27%, except 12 Apr: 84% | 100% | parked; 100% from the reported hour |
+| Leak 2 (29 May 23:30) | 24 to 38%, except 20 May: 98% | 29%; the next day 54% | 17 to 32%; 100% from 23:00 |
+| Leak 3 (5 Jun 10:00) | 23 to 31%, except 30 May (leak 2): 54% | 83% | 19 to 36%, 50% at 09:00; 100% from 10:00 |
+| Leak 4 (15 Jul 14:30) | 24 to 26%, except 8 Jul: 44% | 50% | climbing from 33% at 02:00 to 60% at 13:00; 85% at 14:00 |
+
+Single busy days come before leaks 1 and 2, and the normal months have one too
+(29 Mar, over 80%, among 59 days of February and March), so they are not a
+warning on their own. Leak 4 is the only one that builds over hours. A plain
+rule, loaded for 80% of running time two hours in a row, catches all four 0.5
+to 2 hours after their reports and fires 4 times in February and March with no
+leak (14 Oct 2026, a check outside the code). What the tab can honestly offer
+is to notice a leak within hours, against a normal week, not to foresee it.
 
 ## Offline stand-ins
 
@@ -150,6 +196,8 @@ uv run python scripts/series.py snapshot --engine offline              # no netw
 uv run python scripts/series.py snapshot --engine bigquery --dry-run   # what each job may cost
 uv run python scripts/series.py snapshot --engine bigquery             # the Google run
 uv run python scripts/series.py spent                                  # the ledger
+uv run python scripts/series.py recount                                # count saved views again, no network
+uv run python scripts/series.py early                                  # loaded share before each leak
 ```
 
 The Google run reads `GOOGLE_CLOUD_PROJECT` and `BIGQUERY_LOCATION` (default
@@ -181,6 +229,7 @@ billed by tokens instead of bytes (AI.FORECAST reference).
 | `AI.DETECT_ANOMALIES` evaluates | the latest 1,024 points | AI.DETECT_ANOMALIES reference; bearings run one query each |
 | Check window | 6 days before "as of" to 1 day after, a day at a time | covers the next-day forecast's day; see above |
 | Running | motor at least 1 A | off draws about 0.04 A, idle 3.7 A, loaded 5.6 A (medians over the record) |
+| A reading counts | the motor ran at least half the step's minutes | a parked step reads near 0, which the band flags; half is the plain cut between mostly running and mostly off |
 | Contribution analysis support | 0.1 | Google's default |
 | Stand-in band | median of the same time of day over 14 days, plus or minus 3 robust standard deviations, spread floored at 2% of the usual range | chosen before any run; a floor, not a detector |
 | Ask the data | 100 MB per query, 60 questions an hour | 100 MB is the example in Google's cost guide |

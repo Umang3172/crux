@@ -255,6 +255,60 @@ def test_every_offline_view_builds_and_says_it_is_a_stand_in(synthetic) -> None:
         snapshot.build_offline("metro", settings.preset("metro", "normal"), "changes")
 
 
+def test_a_reading_outside_the_band_counts_only_while_the_motor_ran(synthetic) -> None:
+    p = settings.preset("metro", "normal")
+    table = synthetic[settings.WINDOW_CADENCE_MIN]
+    minute = synthetic[1]
+    i = table.index(views.as_of(p))
+    table.cols["oil_temp"][i : i + 4] += 50.0  # four steps far outside any band
+    m = minute.index(table.t[i])
+    minute.cols["motor_current"][m : m + 2 * settings.WINDOW_CADENCE_MIN] = 0.04  # parked for two
+    view = offline.anomalies("metro", p)
+    oil = next(s for s in view["signals"] if s["id"] == "oil_temp")
+    flagged = {oil["t"][k] for k in oil["flagged"]}
+    counted = {oil["t"][k] for k in oil["counted"]}
+    off, on = views.epoch(table.t[i : i + 2]), views.epoch(table.t[i + 2 : i + 4])
+    assert set(off + on) <= flagged
+    assert not set(off) & counted
+    assert set(on) <= counted
+    assert view["not_counted_off"] == view["flagged"] - view["counted"] >= 2
+
+
+def test_a_leak_week_is_served_beside_the_normal_weeks_count(synthetic) -> None:
+    leak = snapshot.load("metro", "leak1", "anomalies")
+    normal = snapshot.load("metro", "normal", "anomalies")
+    assert "normal" not in normal
+    assert leak["normal"]["before"] == views.tally(normal)["before"]
+    assert leak["normal"]["after"] == normal["counted_after_as_of"]
+
+
+def test_saved_weeks_are_counted_again_without_any_model(synthetic) -> None:
+    original = offline.anomalies("metro", settings.preset("metro", "leak2"))
+    stale = {k: v for k, v in original.items() if not k.startswith(("counted", "not_counted"))}
+    stale["signals"] = [
+        {k: v for k, v in s.items() if not k.startswith("counted")} for s in original["signals"]
+    ]
+    snapshot.save("bigquery", stale)
+    assert snapshot.recount("bigquery")
+    again = snapshot.read("bigquery", "metro", "leak2", "anomalies")
+    assert again["signals"] == original["signals"]
+    assert (again["counted"], again["not_counted_off"]) == (
+        original["counted"],
+        original["not_counted_off"],
+    )
+
+
+def test_the_facts_set_a_leak_week_beside_the_normal_week(synthetic) -> None:
+    lines = summary.facts(
+        "metro", snapshot._getter("metro", "leak1"), snapshot._getter("metro", "normal")
+    )
+    assert any("in the normal week the same forecast expected" in f for f in lines)
+    assert any(f.startswith("While the motor ran") and "in the normal week" in f for f in lines)
+    assert any("reported an air leak 16 hours after the moment" in f for f in lines)
+    alone = summary.facts("metro", snapshot._getter("metro", "normal"))
+    assert not any("normal week" in f or "air leak" in f for f in alone)
+
+
 # Gemini's words
 
 

@@ -913,11 +913,17 @@ def run(runner: Runner, steps: Sequence[str] = STEPS) -> list[Path]:
             for p in presets:
 
                 def get(view: str, source: str = source, pid: str = p.id) -> dict[str, Any] | None:
-                    return snapshot.read("bigquery", source, pid, view)
+                    return snapshot.read_view("bigquery", source, pid, view)
+
+                def normal(view: str) -> dict[str, Any] | None:
+                    return snapshot.read_view("bigquery", "metro", CONTROL_PRESET, view)
 
                 if get("anomalies") is None:
                     continue
-                data = summary.summarise(source, p.id, get, views.BIGQUERY, writer, name)
+                compare = source == "metro" and p.id != CONTROL_PRESET
+                data = summary.summarise(
+                    source, p.id, get, views.BIGQUERY, writer, name, normal if compare else None
+                )
                 print(f"  {source}/{p.id}: {data['writer']}")
                 written.append(snapshot.save("bigquery", data))
 

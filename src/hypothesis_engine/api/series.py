@@ -87,6 +87,18 @@ class AnomalySignal(BaseModel):
     hi: list[float | None]
     flagged: list[int]  # indexes into t
     prob: list[float | None] | None
+    # the flagged readings that count: for the compressor, only while the motor ran
+    counted: list[int] = []
+    counted_before: int | None = None
+    counted_after: int | None = None
+
+
+class Tally(BaseModel):
+    preset: str
+    label: str
+    before: int
+    after: int | None
+    signals: dict[str, dict[str, int | None]]
 
 
 class AnomaliesView(BaseModel):
@@ -100,6 +112,11 @@ class AnomaliesView(BaseModel):
     window: Window
     flagged: int
     flagged_after_as_of: int | None
+    counted: int | None = None
+    counted_after_as_of: int | None = None
+    not_counted_off: int = 0
+    off: list[int] = []  # steps where the motor was off most of the time
+    normal: Tally | None = None  # the normal week's counts, for a leak week
     signals: list[AnomalySignal]
     failures: list[Window]
     made: Made

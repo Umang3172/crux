@@ -23,7 +23,7 @@ import numpy as np
 from ..forecast import health
 from ..forecast.metropt import FAILURES, METRO_CSV
 from ..forecast.runs import DATA_ROOT
-from .settings import METRO_COLUMNS, SERIES_DIR
+from .settings import METRO_COLUMNS, OFF_BELOW_A, RUNNING_SHARE, SERIES_DIR
 
 #: Raw columns read, and the prepared column each becomes. `DV_eletric` (sic) is
 #: on while the compressor runs loaded; its mean over a minute is the loaded
@@ -202,6 +202,20 @@ def metro(cadence_min: int) -> Table:
     if missing:
         raise ValueError(f"{path} lacks {sorted(missing)}")
     return table
+
+
+def metro_running(t: np.ndarray, cadence_min: int) -> np.ndarray:
+    """Whether the motor ran for most of each step starting at `t` (settings.RUNNING_SHARE).
+
+    Read from the one-minute table, where a minute runs when the motor draws at
+    least `OFF_BELOW_A`; a filled minute is not known to run.
+    """
+    minute = metro(1)
+    on = (minute.cols["motor_current"] >= OFF_BELOW_A) & ~minute.filled
+    total = np.concatenate([[0], np.cumsum(on)])
+    i = np.clip(np.searchsorted(minute.t, np.asarray(t, dtype="datetime64[m]")), 0, len(on))
+    j = np.minimum(i + cadence_min, len(on))
+    return (total[j] - total[i]) >= RUNNING_SHARE * cadence_min
 
 
 def metro_failures() -> list[dict[str, str]]:
