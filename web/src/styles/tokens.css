@@ -1,7 +1,9 @@
 /* Design tokens. Every colour, size and timing on screen comes from here.
 
-   One theme: black ink on warm white, hairlines for structure. Colour is kept
-   for the few things a reader must not miss, and used small (a dot, a word):
+   Two themes with one idea: ink on paper, hairlines for structure. The light
+   one is black on warm white; the dark one turns it over, warm white on near
+   black. Colour is kept for the few things a reader must not miss, and used
+   small (a dot, a word):
      accent          the primary action and the engine's voice: plain ink
      model / sim     what a language model did, and what was simulated: greys,
                      told apart by their labels rather than by hue
@@ -21,6 +23,7 @@
   --text: #0a0a0a;
   --text-2: #3f3f3c;
   --text-3: #74746e;
+  --text-4: #a3a39d;
 
   --accent: #0a0a0a;
   --accent-solid: #0a0a0a;
@@ -52,6 +55,12 @@
   --overlay: rgba(10, 10, 10, 0.24);
   --shadow-1: none;
   --shadow-2: 0 24px 60px rgba(10, 10, 10, 0.12), 0 0 0 1px rgba(10, 10, 10, 0.05);
+  --shadow-lift: 0 10px 30px rgba(10, 10, 10, 0.06);
+
+  /* A toast is the page's ink turned over; its dot needs colours that read on that. */
+  --toast-ok: #7fd1a4;
+  --toast-warn: #f0b45c;
+  --toast-danger: #ff8a80;
 
   --font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -85,4 +94,55 @@
   --side: 0px;
   --top: 60px;
   --max: 1180px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0c0c0b;
+  --bg-2: #10100f;
+  --panel: #141413;
+  --panel-2: #191918;
+  --panel-3: #22221f;
+  --line: #262624;
+  --line-2: #363632;
+  --text: #f2f2ee;
+  --text-2: #c6c6c0;
+  --text-3: #8f8f88;
+  --text-4: #5f5f5a;
+
+  --accent: #f2f2ee;
+  --accent-solid: #f2f2ee;
+  --accent-solid-hover: #d8d8d3;
+  --on-accent: #0c0c0b;
+  --accent-soft: rgba(242, 242, 238, 0.06);
+  --accent-line: rgba(242, 242, 238, 0.3);
+
+  --model: #b5b5ae;
+  --model-soft: rgba(181, 181, 174, 0.09);
+  --model-line: rgba(181, 181, 174, 0.3);
+
+  --sim: #85857f;
+  --sim-soft: rgba(133, 133, 127, 0.12);
+  --sim-line: rgba(133, 133, 127, 0.4);
+
+  --ok: #5cc48a;
+  --ok-soft: rgba(92, 196, 138, 0.1);
+  --ok-line: rgba(92, 196, 138, 0.34);
+  --warn: #e3a547;
+  --warn-soft: rgba(227, 165, 71, 0.1);
+  --warn-line: rgba(227, 165, 71, 0.36);
+  --danger: #ff6d63;
+  --danger-soft: rgba(255, 109, 99, 0.1);
+  --danger-line: rgba(255, 109, 99, 0.38);
+  --danger-solid: #e2463d;
+
+  --focus: #f2f2ee;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  --toast-ok: #1f7a48;
+  --toast-warn: #a35f08;
+  --toast-danger: #c22a22;
 }

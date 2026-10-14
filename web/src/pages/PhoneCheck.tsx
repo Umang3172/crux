@@ -51,7 +51,7 @@ export default function PhoneCheck() {
       <header className="phone-head">
         <span className="mn-mark" aria-hidden>
           <svg width="12" height="12" viewBox="0 0 12 12">
-            <path d="M2 2l8 8M10 2L2 10" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </span>
         Crux

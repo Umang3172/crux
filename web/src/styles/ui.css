@@ -1075,14 +1075,14 @@ button.chip:hover,
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #7fd1a4;
+  background: var(--toast-ok);
   flex: none;
 }
 .toast.tone-warn::before {
-  background: #f0b45c;
+  background: var(--toast-warn);
 }
 .toast.tone-danger::before {
-  background: #ff8a80;
+  background: var(--toast-danger);
 }
 .toast.tone-accent::before,
 .toast.tone-model::before,

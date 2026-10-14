@@ -520,7 +520,7 @@ a.owner:hover {
 .tile:hover {
   border-color: var(--line-2);
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(10, 10, 10, 0.06);
+  box-shadow: var(--shadow-lift);
 }
 .tile:focus-within {
   border-color: var(--focus);

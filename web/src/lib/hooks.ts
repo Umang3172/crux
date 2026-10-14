@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { ApiError } from "../api/client";
 import { agentAbout, catalogue, getCase, health, machineModel } from "../api/crux";
 import type { AgentAbout, CatalogTest, Health, Investigation, MachineModel } from "../api/types";
@@ -115,13 +115,67 @@ export function useHotkey(test: (e: KeyboardEvent) => boolean, run: () => void) 
   }, []);
 }
 
-export type Theme = "light";
+export type Theme = "light" | "dark";
+// A new key: the old console stored "dark" as its default, and this app opens light.
+const THEME_KEY = "crux.theme.v2";
+const GROUND: Record<Theme, string> = { light: "#fafaf9", dark: "#0c0c0b" };
 
-/** The app has one theme. The figures read it from the root to pick their light inks. */
-export function applyStoredTheme() {
-  document.documentElement.dataset.theme = "light";
+function storedTheme(): Theme {
+  try {
+    if (window.localStorage.getItem(THEME_KEY) === "dark") return "dark";
+  } catch {
+    /* fall through */
+  }
+  return "light";
+}
+
+let theme: Theme = typeof window === "undefined" ? "light" : storedTheme();
+const themeListeners = new Set<() => void>();
+const onTheme = (l: () => void) => {
+  themeListeners.add(l);
+  return () => themeListeners.delete(l);
+};
+
+/** The figures read the theme from the root to pick their inks; the browser's bar takes the ground colour. */
+function paint(t: Theme) {
+  const root = document.documentElement;
+  root.dataset.theme = t;
   // index.html paints a ground colour before the bundle loads; from here the tokens own it.
-  document.documentElement.style.removeProperty("background");
+  root.style.removeProperty("background");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", GROUND[t]);
+}
+
+export function applyStoredTheme() {
+  paint(theme);
+}
+
+/**
+ * Turn the page over: light to dark or back. Where the browser can, the new
+ * theme opens as a circle from the point pressed (`at`, in the viewport).
+ */
+export function toggleTheme(at?: { x: number; y: number }) {
+  const next: Theme = theme === "dark" ? "light" : "dark";
+  const swap = () => {
+    theme = next;
+    try {
+      window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      /* the choice lasts for this page only */
+    }
+    paint(next);
+    themeListeners.forEach((l) => l());
+  };
+  const doc = document as Document & { startViewTransition?: (update: () => void) => { finished: Promise<void> } };
+  if (!doc.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return swap();
+  const root = document.documentElement;
+  root.style.setProperty("--turn-x", `${at?.x ?? window.innerWidth / 2}px`);
+  root.style.setProperty("--turn-y", `${at?.y ?? 0}px`);
+  root.classList.add("theme-turning");
+  void doc.startViewTransition(swap).finished.finally(() => root.classList.remove("theme-turning"));
+}
+
+export function useTheme(): [Theme, typeof toggleTheme] {
+  return [useSyncExternalStore(onTheme, () => theme, () => theme), toggleTheme];
 }
 
 /** A value that climbs from 0 to `count`, one step at a time: used to replay a finished run in order. */

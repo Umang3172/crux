@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { Compass, CornerDownLeft, FolderOpen, Keyboard, Play, Plus, RotateCcw, Search, Sunrise } from "lucide-react";
+import { Compass, CornerDownLeft, FolderOpen, Keyboard, Moon, Play, Plus, RotateCcw, Search, Sun, Sunrise } from "lucide-react";
 import { modelOf } from "../lib/casemodel";
 import { shortId } from "../lib/format";
+import type { Theme } from "../lib/hooks";
 import { launchScenario } from "../lib/launch";
 import { machineOfCase } from "../lib/plant";
 import { SCENARIOS } from "../lib/scenarios";
@@ -29,7 +30,7 @@ const keysHint = (keys: string) => (
   </>
 );
 
-export function CommandPalette({ open, onClose, onKeys }: { open: boolean; onClose: () => void; onKeys?: () => void }) {
+export function CommandPalette({ open, onClose, onKeys, theme, onTheme }: { open: boolean; onClose: () => void; onKeys?: () => void; theme: Theme; onTheme: () => void }) {
   const navigate = useNavigate();
   const session = useSession();
   const [q, setQ] = useState("");
@@ -85,6 +86,7 @@ export function CommandPalette({ open, onClose, onKeys }: { open: boolean; onClo
       ...pages,
       ...recent,
       { id: "tour", group: "Crux", label: "Take the tour", icon: <Compass size={15} />, run: beginTour },
+      { id: "theme", group: "Crux", label: theme === "dark" ? "Light theme" : "Dark theme", icon: theme === "dark" ? <Sun size={15} /> : <Moon size={15} />, run: onTheme },
       ...(onKeys ? [{ id: "keys", group: "Crux", label: "Keyboard shortcuts", hint: keysHint("?"), icon: <Keyboard size={15} />, run: onKeys }] : []),
       {
         id: "reset",
@@ -101,7 +103,7 @@ export function CommandPalette({ open, onClose, onKeys }: { open: boolean; onClo
     ];
     const needle = q.trim().toLowerCase();
     return needle ? all.filter((i) => `${i.label} ${typeof i.hint === "string" ? i.hint : ""} ${i.group}`.toLowerCase().includes(needle)) : all;
-  }, [q, session.cases, navigate, onKeys]);
+  }, [q, session.cases, navigate, onKeys, theme, onTheme]);
 
   useEffect(() => {
     if (open) {

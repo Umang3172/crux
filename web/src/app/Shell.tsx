@@ -5,10 +5,10 @@
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, Outlet, useLocation, useNavigation } from "react-router";
-import { Menu, Plus, Search, ShieldAlert, X } from "lucide-react";
+import { Menu, Moon, Plus, Search, ShieldAlert, Sun, X } from "lucide-react";
 import { onWaking } from "../api/client";
 import { brainOf } from "../lib/ai";
-import { useHealth } from "../lib/hooks";
+import { useHealth, useTheme, type Theme } from "../lib/hooks";
 import { machineOfCase } from "../lib/plant";
 import { openHazards, patchCase, useSession } from "../lib/session";
 import { Button, Toasts, cx, toast } from "../ui/kit";
@@ -27,14 +27,25 @@ export function Mark() {
   return (
     <span className="mn-mark" aria-hidden>
       <svg width="12" height="12" viewBox="0 0 12 12">
-        <path d="M2 2l8 8M10 2L2 10" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     </span>
   );
 }
 
+/** Light or dark: the icon shows the theme a press turns to. */
+function ThemeButton({ theme, onTurn }: { theme: Theme; onTurn: (at: { x: number; y: number }) => void }) {
+  const to = theme === "dark" ? "light" : "dark";
+  return (
+    <button type="button" className="mn-icon-btn mn-theme" onClick={(e) => onTurn({ x: e.clientX, y: e.clientY })} aria-label={`Switch to the ${to} theme`} title={`Switch to the ${to} theme`}>
+      {to === "dark" ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}
+    </button>
+  );
+}
+
 export function Shell() {
   const health = useHealth();
+  const [theme, turnTheme] = useTheme();
   const session = useSession();
   const { pathname } = useLocation();
   const navigation = useNavigation();
@@ -97,6 +108,7 @@ export function Shell() {
             <button type="button" className="mn-icon-btn mn-search" onClick={() => setPalette(true)} aria-label="Search and commands" title={`Search (${MOD_KEY}K)`}>
               <Search size={16} aria-hidden />
             </button>
+            <ThemeButton theme={theme} onTurn={turnTheme} />
             <button type="button" className="mn-btn sm" onClick={() => openLauncher()} data-tour="investigate">
               <Plus size={15} aria-hidden />
               <span className="mn-hide-sm">Investigate</span>
@@ -159,12 +171,12 @@ export function Shell() {
         </div>
       </footer>
 
-      {menu && <SheetMenu pathname={pathname} onClose={() => setMenu(false)} />}
+      {menu && <SheetMenu pathname={pathname} theme={theme} onTurn={turnTheme} onClose={() => setMenu(false)} />}
 
       <Launcher />
       <Tour />
       <Toasts />
-      <CommandPalette open={palette} onClose={closePalette} onKeys={() => setKeys(true)} />
+      <CommandPalette open={palette} onClose={closePalette} onKeys={() => setKeys(true)} theme={theme} onTheme={turnTheme} />
       <ShortcutsDialog open={keys} onClose={closeKeys} />
       {waitingForLetter && <GoHint />}
     </div>
@@ -172,7 +184,7 @@ export function Shell() {
 }
 
 /** On a phone, the sections and their pages fill the screen: one tap to anywhere. */
-function SheetMenu({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+function SheetMenu({ pathname, theme, onTurn, onClose }: { pathname: string; theme: Theme; onTurn: (at: { x: number; y: number }) => void; onClose: () => void }) {
   return (
     <div className="mn-sheet" role="dialog" aria-modal="true" aria-label="Menu">
       <div className="mn-sheet-head mn-wrap">
@@ -180,9 +192,12 @@ function SheetMenu({ pathname, onClose }: { pathname: string; onClose: () => voi
           <Mark />
           Crux
         </Link>
-        <button type="button" className="mn-icon-btn" onClick={onClose} aria-label="Close the menu" autoFocus>
-          <X size={18} aria-hidden />
-        </button>
+        <span className="row">
+          <ThemeButton theme={theme} onTurn={onTurn} />
+          <button type="button" className="mn-icon-btn" onClick={onClose} aria-label="Close the menu" autoFocus>
+            <X size={18} aria-hidden />
+          </button>
+        </span>
       </div>
       <nav className="mn-sheet-body mn-wrap" aria-label="Main">
         {SECTIONS.map((s, i) => (

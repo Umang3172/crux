@@ -429,7 +429,7 @@
 .pipe-node.now .pipe-dot {
   border-color: var(--accent);
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
   animation: pipe-now 1.6s ease-in-out infinite;
 }

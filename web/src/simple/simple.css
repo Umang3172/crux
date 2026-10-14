@@ -8,7 +8,7 @@
   --mn-ink: var(--text);
   --mn-ink-2: var(--text-2);
   --mn-grey: var(--text-3);
-  --mn-faint: #9c9c97;
+  --mn-faint: var(--text-4);
   --mn-line: var(--line);
   --mn-line-2: var(--line-2);
   --mn-radius: var(--r-3);
@@ -454,7 +454,7 @@
 }
 
 .mn-error {
-  color: #b42318;
+  color: var(--danger);
   font-size: 14px;
   margin: 0;
 }
