@@ -143,6 +143,22 @@ hr {
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Turning the theme: the new one opens as a circle from the switch that was pressed. */
+.theme-turning::view-transition-old(root) {
+  animation: none;
+}
+.theme-turning::view-transition-new(root) {
+  animation: theme-turn 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes theme-turn {
+  from {
+    clip-path: circle(0 at var(--turn-x, 50%) var(--turn-y, 0));
+  }
+  to {
+    clip-path: circle(150vmax at var(--turn-x, 50%) var(--turn-y, 0));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),

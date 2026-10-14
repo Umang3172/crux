@@ -2,8 +2,7 @@
 // survives a refresh and a QR scan with no server change.
 
 import type { ComponentType } from "react";
-import { createHashRouter, type RouteObject } from "react-router";
-import { useRole, type Role } from "../lib/role";
+import { Navigate, createHashRouter, useParams, type RouteObject } from "react-router";
 import { PageError } from "./PageError";
 import { PAGES } from "./pages";
 import { Shell } from "./Shell";
@@ -17,12 +16,10 @@ const page = (path: string, load: () => Promise<ComponentType>): RouteObject => 
   hydrateFallbackElement: <Blank />,
 });
 
-/** The first page is the one the person's job starts from. All three are loaded, so switching view is immediate. */
-let homes: Record<Role, ComponentType> | null = null;
-function Home() {
-  const role = useRole();
-  const Page = homes?.[role];
-  return Page ? <Page /> : null;
+/** A machine has one page; the console's old address for it lands there. */
+function ToMachine() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/m/${encodeURIComponent(id)}`} replace />;
 }
 
 export const router = createHashRouter([
@@ -34,19 +31,16 @@ export const router = createHashRouter([
         // A page that fails shows its error inside the frame, with the menu still there.
         errorElement: <PageError />,
         children: [
-          {
-            index: true,
-            lazy: async () => {
-              const [control, crew, manager] = await Promise.all([PAGES.plant(), PAGES.crew(), PAGES.manager()]);
-              homes = { control, crew, manager };
-              return { Component: Home };
-            },
-            hydrateFallbackElement: <Blank />,
-          },
+          // The first page: what Crux does, and every machine.
+          { index: true, lazy: async () => ({ Component: (await import("../simple/Home")).default }), hydrateFallbackElement: <Blank /> },
+          page("m/:id", () => import("../simple/Machine").then((m) => m.default)),
+          page("how", () => import("../simple/How").then((m) => m.default)),
+          // The old address of the console's home still lands somewhere sensible.
+          { path: "console", element: <Navigate to="/plant" replace /> },
           page("plant", PAGES.plant),
           page("crew", PAGES.crew),
           page("manager", PAGES.manager),
-          page("machines/:id", PAGES.plantMachine),
+          { path: "machines/:id", element: <ToMachine /> },
           page("lives/*", PAGES.machinePage),
           page("cases", PAGES.cases),
           page("cases/:id", PAGES.casePage),

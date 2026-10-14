@@ -1,54 +1,65 @@
+// The one frame every page sits in: a name, five sections, a search and the
+// one action that starts an investigation. Inside a section, its pages are a
+// row of tabs under the bar. A hazard someone reported stays on top of every
+// page until a person puts their name to it.
+
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, Outlet, useLocation, useNavigate, useNavigation } from "react-router";
-import { Building2, Compass, Menu, Moon, Plus, Search, ShieldAlert, Sun } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigation } from "react-router";
+import { Menu, Moon, Plus, Search, ShieldAlert, Sun, X } from "lucide-react";
 import { onWaking } from "../api/client";
 import { brainOf } from "../lib/ai";
-import { modelOf } from "../lib/casemodel";
-import { useHealth, useTheme } from "../lib/hooks";
-import { SITE, machineOfCase } from "../lib/plant";
-import { ROLES, setRole, useRole } from "../lib/role";
+import { useHealth, useTheme, type Theme } from "../lib/hooks";
+import { machineOfCase } from "../lib/plant";
 import { openHazards, patchCase, useSession } from "../lib/session";
-import { Button, CountUp, Hint, Toasts, cx, toast } from "../ui/kit";
+import { Button, Toasts, cx, toast } from "../ui/kit";
 import { CommandPalette } from "./CommandPalette";
 import { GoHint, MOD_KEY, ShortcutsDialog, useShortcuts } from "./keys";
 import { Launcher, openLauncher } from "./Launcher";
 import { Tour } from "../tour/Tour";
-import { beginTour } from "../tour/steps";
 import { LivePill } from "./LiveNow";
-import { isHere, navFor } from "./nav";
+import { SECTIONS, isHere, pageOf, sectionOf } from "./nav";
 import { preloadPages } from "./pages";
 import "../styles/plant.css";
 import "./shell.css";
 
-function Mark() {
+export function Mark() {
   // The crux: two lines of evidence crossing at the one point that decides.
   return (
-    <span className="brand-mark" aria-hidden>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-        <path d="M3 3l10 10M13 3L3 13" />
-        <circle cx="8" cy="8" r="2.1" fill="currentColor" stroke="none" />
+    <span className="mn-mark" aria-hidden>
+      <svg width="12" height="12" viewBox="0 0 12 12">
+        <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     </span>
   );
 }
 
+/** Light or dark: the icon shows the theme a press turns to. */
+function ThemeButton({ theme, onTurn }: { theme: Theme; onTurn: (at: { x: number; y: number }) => void }) {
+  const to = theme === "dark" ? "light" : "dark";
+  return (
+    <button type="button" className="mn-icon-btn mn-theme" onClick={(e) => onTurn({ x: e.clientX, y: e.clientY })} aria-label={`Switch to the ${to} theme`} title={`Switch to the ${to} theme`}>
+      {to === "dark" ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}
+    </button>
+  );
+}
+
 export function Shell() {
   const health = useHealth();
+  const [theme, turnTheme] = useTheme();
   const session = useSession();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const navigation = useNavigation();
-  const navigate = useNavigate();
-  const role = useRole();
-  const nav = navFor(role);
-  const [theme, toggleTheme] = useTheme();
   const [palette, setPalette] = useState(false);
   const [keys, setKeys] = useState(false);
-  const [drawer, setDrawer] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [waking, setWaking] = useState(false);
   const togglePalette = useCallback(() => setPalette((p) => !p), []);
   const closePalette = useCallback(() => setPalette(false), []);
   const closeKeys = useCallback(() => setKeys(false), []);
   const waitingForLetter = useShortcuts({ palette: togglePalette, help: () => setKeys(true) });
+
+  const section = sectionOf(pathname);
+  const here = pageOf(pathname);
 
   useEffect(() => onWaking(setWaking), []);
   useEffect(() => {
@@ -57,126 +68,66 @@ export function Shell() {
     else setTimeout(preloadPages, 1200);
   }, []);
   useEffect(() => {
-    setDrawer(false);
-    const here = nav.flatMap((g) => g.items).find((n) => isHere(n, location.pathname));
-    document.title = here ? `${here.label} · Crux` : "Crux";
+    setMenu(false);
+    document.title = here && here.to !== "/" ? `${here.label} · Crux` : "Crux";
     // A new page starts at its top, wherever the last one was scrolled to.
     window.scrollTo(0, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, role]);
+  }, [pathname, here]);
   useEffect(() => {
-    if (!drawer) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
+    if (!menu) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
     window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [drawer]);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [menu]);
 
   const brain = brainOf(health.data?.models.investigator);
-  const waitingCount = session.cases.filter((c) => modelOf(c)?.status === "waiting").length;
   const hazards = openHazards(session);
+  const tabs = section && section.pages.length > 1 ? section.pages : null;
 
   return (
-    <div className="app">
-      {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
-      <aside className={cx("side", drawer && "open")}>
-        <Link to="/" viewTransition className="brand" aria-label="Crux, home">
-          <Mark />
-          Crux
-        </Link>
-
-        <div className="side-context">
-          <div className="site">
-            <Building2 size={14} aria-hidden />
-            <span className="truncate">{SITE.name}</span>
-            <Hint label="About this plant">{SITE.note}</Hint>
-          </div>
-          <div className="views" role="group" aria-labelledby="views-label">
-            <div className="views-label">
-              <span id="views-label">Viewing as</span>
-              <Hint label="About views">A view, not a login. It sets the first page and the menu order, and hides nothing.</Hint>
-            </div>
-            <div className="views-tabs">
-              {ROLES.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={cx(role === r.id && "on")}
-                  aria-pressed={role === r.id}
-                  title={r.who}
-                  onClick={() => {
-                    if (role === r.id) return;
-                    setRole(r.id);
-                    navigate("/", { viewTransition: true });
-                  }}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <nav className="nav" aria-label="Main">
-          {nav.map((g, gi) => (
-            <div className="nav-group" key={g.group || gi}>
-              {g.group && <span>{g.group}</span>}
-              {g.items.map((n) => {
-                const on = isHere(n, location.pathname);
-                return (
-                  <Link key={n.to} to={n.to} viewTransition className={cx(on && "on")} aria-current={on ? "page" : undefined}>
-                    <n.icon size={16} aria-hidden />
-                    <span className="grow truncate">{n.label}</span>
-                    {n.to === "/cases" && session.cases.length > 0 && (
-                      <span className={cx("nav-count", waitingCount > 0 && "warn")} title={waitingCount > 0 ? `${waitingCount} waiting for a measurement` : `${session.cases.length} in this browser`}>
-                        <CountUp value={waitingCount > 0 ? waitingCount : session.cases.length} ms={300} />
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        <div className="side-foot">
-          <Link to="/system" viewTransition className="ai-note" title="Which model runs each AI job">
-            <span className={cx("ai-dot", brain.live && "live")} aria-hidden />
-            <span className="truncate">
-              Crux's AI · <b>{health.data ? brain.name : health.error ? "engine unreachable" : "…"}</b>
-            </span>
+    <div className="app mn">
+      <header className="mn-top">
+        <div className="mn-wrap mn-top-in">
+          <Link to="/" viewTransition className="mn-brand" aria-label="Crux, home">
+            <Mark />
+            Crux
           </Link>
-          <button type="button" className="kbd keys-btn" onClick={() => setKeys(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
-            ?
-          </button>
+          <nav className="mn-nav" aria-label="Main">
+            {SECTIONS.map((s) => (
+              <Link key={s.id} to={s.to} viewTransition aria-current={section?.id === s.id ? "page" : undefined}>
+                {s.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mn-top-end">
+            <LivePill />
+            <button type="button" className="mn-icon-btn mn-search" onClick={() => setPalette(true)} aria-label="Search and commands" title={`Search (${MOD_KEY}K)`}>
+              <Search size={16} aria-hidden />
+            </button>
+            <ThemeButton theme={theme} onTurn={turnTheme} />
+            <button type="button" className="mn-btn sm" onClick={() => openLauncher()} data-tour="investigate">
+              <Plus size={15} aria-hidden />
+              <span className="mn-hide-sm">Investigate</span>
+            </button>
+            <button type="button" className="mn-icon-btn mn-menu-btn" onClick={() => setMenu(true)} aria-label="Open the menu" aria-expanded={menu}>
+              <Menu size={18} aria-hidden />
+            </button>
+          </div>
         </div>
-      </aside>
+        {(waking || navigation.state === "loading") && <div className={cx("progress top-progress", !waking && "later")} aria-hidden />}
+      </header>
+
+      {waking && (
+        <div className="waking" role="status">
+          <div className="mn-wrap">Waking the engine: a few seconds.</div>
+        </div>
+      )}
 
       <div className="main">
-        <header className="top">
-          <Button className="menu-btn" variant="ghost" icon={<Menu size={18} />} onClick={() => setDrawer(true)} aria-label="Open the menu" />
-          <button type="button" className="search" onClick={() => setPalette(true)} aria-label="Search and commands">
-            <Search size={15} aria-hidden />
-            <span className="search-text">Search or jump to…</span>
-            <span className="kbd">{MOD_KEY}K</span>
-          </button>
-          <div className="top-end">
-            <LivePill />
-            <Button variant="ghost" className="tour-btn" icon={<Compass size={16} />} onClick={beginTour} aria-label="Take the tour">
-              <span className="long">Tour</span>
-            </Button>
-            <Button variant="ghost" icon={theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"} />
-            <Button variant="primary" className="top-primary" icon={<Plus size={15} />} onClick={() => openLauncher()}>
-              <span className="long">Investigate a machine</span>
-              <span className="short">Investigate</span>
-            </Button>
-          </div>
-          {(waking || navigation.state === "loading") && <div className={cx("progress top-progress", !waking && "later")} aria-hidden />}
-        </header>
-        {waking && (
-          <div className="waking" role="status">
-            Waking the engine: a few seconds.
-          </div>
-        )}
         {hazards.length > 0 && (
           <div className="banners">
             {hazards.map((h) => (
@@ -184,6 +135,22 @@ export function Shell() {
             ))}
           </div>
         )}
+
+        {tabs && (
+          <div className="mn-tabsrow">
+            <nav className="mn-wrap mn-tabs" aria-label={section!.label}>
+              {tabs.map((n) => {
+                const on = isHere(n, pathname);
+                return (
+                  <Link key={n.to} to={n.to} viewTransition className={cx(on && "on")} aria-current={on ? "page" : undefined}>
+                    {n.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        )}
+
         <main className="content">
           <Suspense fallback={null}>
             <Outlet />
@@ -191,17 +158,69 @@ export function Shell() {
         </main>
       </div>
 
+      <footer className="mn-foot">
+        <div className="mn-wrap">
+          <span>A demo plant. Readings come from a physics model of each machine.</span>
+          <span className="mn-foot-end">
+            <span className={cx("ai-dot", brain.live && "live")} aria-hidden />
+            {health.data ? (brain.live ? `AI: ${brain.name}` : "AI: offline stand-in") : health.error ? "Engine unreachable" : "Checking the engine…"}
+            <button type="button" className="mn-link" onClick={() => setKeys(true)}>
+              Shortcuts
+            </button>
+          </span>
+        </div>
+      </footer>
+
+      {menu && <SheetMenu pathname={pathname} theme={theme} onTurn={turnTheme} onClose={() => setMenu(false)} />}
+
       <Launcher />
       <Tour />
       <Toasts />
-      <CommandPalette open={palette} onClose={closePalette} onTheme={toggleTheme} onKeys={() => setKeys(true)} theme={theme} />
+      <CommandPalette open={palette} onClose={closePalette} onKeys={() => setKeys(true)} theme={theme} onTheme={turnTheme} />
       <ShortcutsDialog open={keys} onClose={closeKeys} />
       {waitingForLetter && <GoHint />}
     </div>
   );
 }
 
-/** A hazard someone reported stays on top of every page until a person puts their name to it. */
+/** On a phone, the sections and their pages fill the screen: one tap to anywhere. */
+function SheetMenu({ pathname, theme, onTurn, onClose }: { pathname: string; theme: Theme; onTurn: (at: { x: number; y: number }) => void; onClose: () => void }) {
+  return (
+    <div className="mn-sheet" role="dialog" aria-modal="true" aria-label="Menu">
+      <div className="mn-sheet-head mn-wrap">
+        <Link to="/" className="mn-brand" onClick={onClose}>
+          <Mark />
+          Crux
+        </Link>
+        <span className="row">
+          <ThemeButton theme={theme} onTurn={onTurn} />
+          <button type="button" className="mn-icon-btn" onClick={onClose} aria-label="Close the menu" autoFocus>
+            <X size={18} aria-hidden />
+          </button>
+        </span>
+      </div>
+      <nav className="mn-sheet-body mn-wrap" aria-label="Main">
+        {SECTIONS.map((s, i) => (
+          <section key={s.id} style={{ animationDelay: `${i * 40}ms` }}>
+            <Link to={s.to} className="mn-sheet-section" onClick={onClose}>
+              {s.label}
+            </Link>
+            {s.pages.length > 1 && (
+              <div className="mn-sheet-pages">
+                {s.pages.map((n) => (
+                  <Link key={n.to} to={n.to} onClick={onClose} aria-current={isHere(n, pathname) ? "page" : undefined}>
+                    {n.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 function HazardBanner({ id, text, machine }: { id: string; text: string; machine: string }) {
   const [by, setBy] = useState("");
   const acknowledge = (e: FormEvent) => {
@@ -213,19 +232,21 @@ function HazardBanner({ id, text, machine }: { id: string; text: string; machine
   };
   return (
     <div className="banner" role="alert">
-      <ShieldAlert size={16} aria-hidden />
-      <p className="banner-text" title={text}>
-        <b>Hazard on {machine}.</b> {text}
-      </p>
-      <form className="banner-actions" onSubmit={acknowledge}>
-        <Link to={`/cases/${id}`} viewTransition className="btn btn-sm">
-          Open investigation
-        </Link>
-        <input className="input input-sm" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to acknowledge the hazard" />
-        <Button size="sm" variant="danger" type="submit" disabled={!by.trim()}>
-          Acknowledge hazard
-        </Button>
-      </form>
+      <div className="mn-wrap banner-in">
+        <ShieldAlert size={16} aria-hidden />
+        <p className="banner-text" title={text}>
+          <b>Hazard on {machine}.</b> {text}
+        </p>
+        <form className="banner-actions" onSubmit={acknowledge}>
+          <Link to={`/cases/${id}`} viewTransition className="btn btn-sm">
+            Open
+          </Link>
+          <input className="input input-sm" placeholder="Your name" value={by} onChange={(e) => setBy(e.target.value)} aria-label="Your name, to acknowledge the hazard" />
+          <Button size="sm" variant="danger" type="submit" disabled={!by.trim()}>
+            Acknowledge
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

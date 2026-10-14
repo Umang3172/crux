@@ -19,7 +19,7 @@
 }
 @keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .ll-screen { animation: none; } }
-.ll-title { margin: 0; font-size: var(--fs-20); font-weight: 600; letter-spacing: -0.01em; }
+.ll-title { margin: 0; font-size: var(--fs-20); font-weight: 500; letter-spacing: -0.01em; }
 
 /* The step bar. */
 .ll-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; }
@@ -31,10 +31,10 @@
   height: 20px;
   border-radius: 50%;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   box-shadow: inset 0 0 0 1px var(--line-2);
 }
-.ll-steps li[data-state="now"] { color: var(--text); font-weight: 600; }
+.ll-steps li[data-state="now"] { color: var(--text); font-weight: 500; }
 .ll-steps li[data-state="now"] .ll-step-dot { background: var(--accent-solid); color: var(--on-accent); box-shadow: none; }
 .ll-steps li[data-state="done"] { color: var(--text-2); }
 .ll-steps li[data-state="done"] .ll-step-dot { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
@@ -202,7 +202,7 @@
 .lf-node[data-kind="engine"] { --k: var(--text-3); --k-soft: transparent; --k-line: var(--line-2); }
 .lf-head { display: flex; align-items: center; gap: 0.45cqw; color: var(--text-2); min-width: 0; }
 .lf-head svg { flex: none; color: var(--k); width: clamp(10px, 1.25cqw, 14px); height: clamp(10px, 1.25cqw, 14px); }
-.lf-head b { font-size: clamp(10px, 1.2cqw, 13.5px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lf-head b { font-size: clamp(10px, 1.2cqw, 13.5px); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lf-time { flex: none; white-space: nowrap; margin-left: auto; font-family: var(--mono); font-size: clamp(9px, 0.95cqw, 11px); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .lf-who { display: flex; gap: 6px; font-size: clamp(9px, 0.98cqw, 11.5px); color: var(--k); min-width: 0; }
 .lf-who > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -283,7 +283,7 @@
   border-radius: 3px 3px 0 0;
   font-size: 9.5px;
   line-height: 1.5;
-  font-weight: 600;
+  font-weight: 500;
   color: #fff;
   background: var(--warn);
 }

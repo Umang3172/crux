@@ -1,8 +1,7 @@
-// The menu, in the words of the people who use the console. What comes first
-// depends on who is looking; nothing is hidden from anyone.
+// The menu: five sections across the top, and inside a section the pages it
+// holds as a row of tabs. The words are a visitor's, not the engine's.
 
-import { Activity, BookOpen, Box, ChartLine, ClipboardList, Factory, FolderOpen, HardHat, LayoutDashboard, ScanLine, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
-import type { Role } from "../lib/role";
+import { BookOpen, ChartLine, ClipboardList, Cpu, Factory, FolderOpen, HardHat, LayoutGrid, ListChecks, Box, ScanLine, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 
 export type NavItem = {
   to: string;
@@ -14,41 +13,58 @@ export type NavItem = {
   /** The "go to" keys for it, as typed: "g p". */
   keys?: string;
 };
-/** An empty `group` is the role's own work: listed first, with no heading. */
-export type NavGroup = { group: string; items: NavItem[] };
 
-const investigations: NavItem = { to: "/cases", label: "Investigations", icon: FolderOpen, keys: "g i" };
-const orders: NavItem = { to: "/work-orders", label: "Work orders", icon: ClipboardList, keys: "g w" };
-const scans: NavItem = { to: "/lens", label: "Phone scans", icon: ScanLine };
-const lessons: NavItem = { to: "/network", label: "Lessons and updates", icon: BookOpen };
-const record: NavItem = { to: "/proof", label: "Track record", icon: ShieldCheck };
-const how: NavItem = { to: "/agents", label: "How Crux works", icon: Sparkles };
-const system: NavItem = { to: "/system", label: "System", icon: Activity };
-const anatomy: NavItem = { to: "/anatomy", label: "Anatomy", icon: Box, keys: "g a" };
-const trends: NavItem = { to: "/trends", label: "Trends", icon: ChartLine, keys: "g t" };
-const plant = (home: boolean): NavItem =>
-  home ? { to: "/", label: "Plant", icon: Factory, end: true, also: ["/plant"], keys: "g p" } : { to: "/plant", label: "Plant", icon: Factory, keys: "g p" };
+export type Section = { id: string; label: string; to: string; pages: NavItem[] };
 
-export function navFor(role: Role): NavGroup[] {
-  if (role === "crew") {
-    return [
-      { group: "", items: [{ to: "/", label: "My work", icon: HardHat, end: true, also: ["/crew"], keys: "g m" }, plant(false), orders, scans] },
-      { group: "About", items: [how, anatomy, record] },
-    ];
-  }
-  if (role === "manager") {
-    return [
-      { group: "", items: [{ to: "/", label: "Summary", icon: LayoutDashboard, end: true, also: ["/manager"], keys: "g m" }, plant(false), investigations, orders] },
-      { group: "Learn", items: [trends, anatomy, lessons, record] },
-      { group: "About", items: [how, system] },
-    ];
-  }
-  return [
-    { group: "", items: [plant(true), investigations, orders, scans] },
-    { group: "Learn", items: [trends, anatomy, lessons, record] },
-    { group: "About", items: [how, system] },
-  ];
-}
+export const SECTIONS: Section[] = [
+  {
+    id: "machines",
+    label: "Machines",
+    to: "/",
+    pages: [
+      { to: "/", label: "Overview", icon: LayoutGrid, end: true, also: ["/m", "/machines"], keys: "g m" },
+      { to: "/plant", label: "Control room", icon: Factory, also: ["/lives"], keys: "g p" },
+    ],
+  },
+  {
+    id: "cases",
+    label: "Investigations",
+    to: "/cases",
+    pages: [{ to: "/cases", label: "Investigations", icon: FolderOpen, keys: "g i" }],
+  },
+  {
+    id: "work",
+    label: "Work",
+    to: "/crew",
+    pages: [
+      { to: "/crew", label: "To do", icon: HardHat },
+      { to: "/manager", label: "Sign-offs", icon: ListChecks },
+      { to: "/work-orders", label: "Work orders", icon: ClipboardList, keys: "g w" },
+      { to: "/lens", label: "Phone scans", icon: ScanLine },
+    ],
+  },
+  {
+    id: "insights",
+    label: "Insights",
+    to: "/trends",
+    pages: [
+      { to: "/trends", label: "Trends", icon: ChartLine, keys: "g t" },
+      { to: "/proof", label: "Track record", icon: ShieldCheck },
+      { to: "/network", label: "Lessons", icon: BookOpen },
+    ],
+  },
+  {
+    id: "how",
+    label: "How it works",
+    to: "/how",
+    pages: [
+      { to: "/how", label: "Overview", icon: Sparkles },
+      { to: "/agents", label: "The AI at work", icon: Cpu },
+      { to: "/anatomy", label: "Anatomy", icon: Box, keys: "g a" },
+      { to: "/system", label: "System", icon: Cpu },
+    ],
+  },
+];
 
 /** Whether a menu item is the page at `path`. */
 export function isHere(n: NavItem, path: string): boolean {
@@ -56,5 +72,12 @@ export function isHere(n: NavItem, path: string): boolean {
   return at(n.to, n.end) || (n.also ?? []).some((p) => at(p));
 }
 
-/** Where "g p" goes: the plant is the control room's home, and a page of its own for everyone else. */
-export const plantPath = (role: Role) => (role === "control" ? "/" : "/plant");
+/** The section a path belongs to, if any. */
+export function sectionOf(path: string): Section | undefined {
+  return SECTIONS.find((s) => s.pages.some((n) => isHere(n, path)));
+}
+
+/** The page of the menu a path shows, if any. */
+export function pageOf(path: string): NavItem | undefined {
+  return SECTIONS.flatMap((s) => s.pages).find((n) => isHere(n, path));
+}

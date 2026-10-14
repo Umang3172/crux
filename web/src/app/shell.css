@@ -1,306 +1,118 @@
-.app {
-  display: grid;
-  grid-template-columns: var(--side) minmax(0, 1fr);
+/* The frame: one bar across the top, the section's pages as a row of tabs
+   under it, the page, and a footer line. Ink on warm white throughout. */
+
+.mn {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 1.55;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Sidebar. Scoped to the frame: other drawings use a "side" class of their own. */
-.app > .side {
+.mn-wrap {
+  width: 100%;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* Top bar */
+.mn-top {
   position: sticky;
   top: 0;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  border-right: 1px solid var(--line);
-  background: var(--bg-2);
   z-index: 30;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid var(--line);
 }
-.brand {
+.mn-top-in {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 28px;
   height: var(--top);
-  padding: 0 var(--s-4);
-  border-bottom: 1px solid var(--line);
+}
+.mn-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--text);
-  font-weight: 650;
-  font-size: var(--fs-16);
-  letter-spacing: -0.015em;
-}
-.brand:hover {
-  text-decoration: none;
-}
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--accent-solid);
-  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   flex: none;
 }
-
-/* The plant and the view: one quiet block under the brand */
-.side-context {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-3) 0;
+.mn-brand:hover {
+  text-decoration: none;
 }
-.site {
+.mn-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  transition: transform var(--t-med) var(--ease);
+}
+.mn-brand:hover .mn-mark {
+  transform: rotate(90deg);
+}
+.mn-nav {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+.mn-nav a {
+  position: relative;
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  font-size: 14px;
+  white-space: nowrap;
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+.mn-nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.mn-nav a[aria-current="page"] {
+  color: var(--text);
+  background: var(--panel-3);
+}
+.mn-top-end {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 24px;
-  padding: 0 4px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  font-weight: 550;
+  margin-left: auto;
+  min-width: 0;
 }
-.site svg {
-  color: var(--text-3);
-  flex: none;
-}
-.views-label {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 18px;
-  padding: 0 4px;
-  color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.views-tabs {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--s-1);
-  padding: 0 4px;
-  border-bottom: 1px solid var(--line);
-}
-.views-tabs button {
-  position: relative;
-  height: 30px;
-  padding: 0;
-  border: 0;
+.mn-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--r-2);
   background: none;
   color: var(--text-2);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  white-space: nowrap;
-  transition: color var(--t-fast);
-}
-.views-tabs button:hover {
-  color: var(--text);
-}
-.views-tabs button.on {
-  color: var(--accent);
-}
-/* The marker grows under the view that was picked, so the change is seen. */
-.views-tabs button::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-  transform: scaleX(0);
-  transition: transform var(--t-med) var(--ease);
-}
-.views-tabs button.on::after {
-  transform: scaleX(1);
-}
-/* A hint inside the narrow sidebar opens to the right, not off the screen. */
-.app > .side .hint-pop {
-  left: -6px;
-  transform: translate(0, -3px);
-  max-width: 220px;
-}
-.app > .side .hint:hover .hint-pop,
-.app > .side .hint:focus-within .hint-pop,
-.app > .side .hint.open .hint-pop {
-  transform: none;
-}
-.views-label .hint-pop {
-  letter-spacing: 0;
-  text-transform: none;
-  font-weight: 450;
-}
-
-.nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--s-1) var(--s-2) var(--s-4);
-}
-.nav-group {
-  margin-top: var(--s-4);
-}
-.nav-group > span {
-  display: block;
-  padding: 0 10px 6px;
-  color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.nav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: var(--r-2);
-  color: var(--text-2);
-  font-weight: 520;
   transition:
     background var(--t-fast),
     color var(--t-fast);
 }
-.nav a:hover {
-  background: var(--panel-2);
-  color: var(--text);
-  text-decoration: none;
-}
-.nav a.on {
+.mn-icon-btn:hover {
   background: var(--panel-3);
   color: var(--text);
 }
-.nav a.on svg {
-  color: var(--accent);
-}
-.nav a svg {
-  flex: none;
-  color: var(--text-3);
-}
-.nav-count {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: var(--r-pill);
-  background: var(--panel-3);
-  color: var(--text-2);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  line-height: 18px;
-  text-align: center;
-}
-.nav-count.warn {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.side-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  border-top: 1px solid var(--line);
-}
-.ai-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 4px;
-  border-radius: var(--r-2);
-  color: var(--text-3);
-  font-size: var(--fs-12);
-}
-.ai-note:hover {
-  background: var(--panel-2);
-  text-decoration: none;
-}
-.ai-note b {
-  color: var(--text-2);
-  font-weight: 600;
-}
-.ai-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-3);
-  flex: none;
-}
-.ai-dot.live {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px var(--ok-soft);
-}
-.keys-btn {
-  height: 22px;
-  min-width: 22px;
-  cursor: pointer;
-}
-.keys-btn:hover {
-  color: var(--text);
-  border-color: var(--text-3);
-}
-
-/* Top bar */
-.main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  height: var(--top);
-  padding: 0 var(--s-6);
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 86%, transparent);
-  backdrop-filter: blur(10px);
-}
-.menu-btn {
+.mn-menu-btn {
   display: none;
 }
-.search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: min(380px, 100%);
-  min-width: 0;
-  height: 32px;
-  padding: 0 8px 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  background: var(--panel);
-  color: var(--text-3);
-  text-align: left;
-  transition: border-color var(--t-fast);
-}
-.search:hover {
-  border-color: var(--line-2);
-  color: var(--text-2);
-}
-.search-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.top-end {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  margin-left: auto;
-  min-width: 0;
-}
-.top-primary .short {
-  display: none;
-}
-/* A page or the engine is on its way: a line under the bar, shown only if it takes a moment. */
 .top-progress {
   position: absolute;
   left: 0;
@@ -317,6 +129,314 @@
   }
 }
 
+/* Black buttons: one per screen, for the thing to do next */
+.mn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--text);
+  border-radius: var(--r-2);
+  background: var(--text);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform var(--t-fast) ease,
+    opacity var(--t-fast),
+    border-color var(--t-fast);
+}
+.mn-btn.sm {
+  height: 36px;
+  padding: 0 14px;
+}
+.mn a.mn-btn {
+  color: var(--on-accent);
+  text-decoration: none;
+}
+.mn-btn:hover:not(:disabled) {
+  opacity: 0.86;
+}
+.mn-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.mn-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mn-btn.ghost,
+.mn a.mn-btn.ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line-2);
+}
+.mn-btn.ghost:hover:not(:disabled) {
+  opacity: 1;
+  border-color: var(--text);
+}
+.mn-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.mn-link:hover {
+  color: var(--text);
+  text-decoration-color: var(--text);
+}
+
+/* The section's pages: words in a row, the current one underlined */
+.mn-tabsrow {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.mn-tabs {
+  display: flex;
+  gap: 26px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mn-tabs::-webkit-scrollbar {
+  display: none;
+}
+.mn-tabs a {
+  position: relative;
+  padding: 14px 0 13px;
+  color: var(--text-3);
+  font-size: 14px;
+  white-space: nowrap;
+  transition: color var(--t-fast);
+}
+.mn-tabs a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.mn-tabs a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: var(--text);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t-med) var(--ease);
+}
+.mn-tabs a.on {
+  color: var(--text);
+}
+.mn-tabs a.on::after {
+  transform: scaleX(1);
+}
+
+/* The page */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 44px 28px 88px;
+}
+/* The simple pages lay out their own width. */
+.content:has(> .mn-page) {
+  max-width: none;
+  padding: 0;
+}
+
+/* A page: a large title in regular weight, a line under it, then the work.
+   Each page rises in as it opens. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.page > * {
+  animation: page-in var(--t-slow) var(--ease) both;
+}
+.page > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.page > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.page > *:nth-child(n + 4) {
+  animation-delay: 150ms;
+}
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+/* The title keeps its width; the actions wrap under it on a narrow screen. */
+.page-head > .grow {
+  flex: 1 1 320px;
+  gap: 10px;
+}
+.page-head h1 {
+  font-size: clamp(32px, 4.2vw, 48px);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+.page-sub {
+  max-width: 60ch;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1.5;
+}
+/* One column of reading width, for a list or a single answer. */
+.narrow {
+  width: 100%;
+  max-width: 820px;
+}
+.narrow:empty {
+  display: none;
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+}
+.crumbs a {
+  color: var(--text-2);
+}
+/* A link inside a sentence looks like one: ink, with a quiet underline. */
+.mn p a:not(.btn):not(.mn-btn),
+.mn dd a:not(.btn),
+.mn .small a:not(.btn),
+.mn .foot-note a {
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 3px;
+}
+.mn p a:not(.btn):hover,
+.mn dd a:not(.btn):hover {
+  text-decoration-color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page,
+  .page > * {
+    animation: none;
+  }
+}
+
+/* Footer */
+.mn-foot {
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 13px;
+}
+.mn-foot .mn-wrap {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 22px;
+  padding-bottom: 28px;
+  flex-wrap: wrap;
+}
+.mn-foot-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mn-foot-end .mn-link {
+  margin-left: 12px;
+  font-size: 13px;
+}
+.ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-3);
+  flex: none;
+}
+.ai-dot.live {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+/* The phone menu: the sections and their pages, filling the screen */
+.mn-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: fade var(--t-med) var(--ease);
+  overflow-y: auto;
+}
+.mn-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--top);
+  border-bottom: 1px solid var(--line);
+}
+.mn-sheet-body {
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+  padding-bottom: 40px;
+}
+.mn-sheet-body section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  animation: rise var(--t-med) var(--ease) both;
+}
+.mn-sheet-section {
+  color: var(--text);
+  font-size: 28px;
+  letter-spacing: -0.025em;
+}
+.mn-sheet-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 8px;
+}
+.mn-sheet-pages a {
+  color: var(--text-3);
+  font-size: 14.5px;
+}
+.mn-sheet-pages a[aria-current="page"] {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.mn-show-sm {
+  display: none;
+}
+
 /* What Crux is investigating right now */
 .live-pill {
   display: inline-flex;
@@ -330,7 +450,7 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-size: var(--fs-12);
-  font-weight: 550;
+  font-weight: 500;
   white-space: nowrap;
   animation: live-in var(--t-med) var(--ease);
 }
@@ -340,7 +460,7 @@
 }
 .live-pill b {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .live-pill.leaving {
   animation: live-out 200ms var(--ease) forwards;
@@ -391,17 +511,20 @@
   z-index: 19;
 }
 .banner {
+  border-bottom: 1px solid var(--danger-line);
+  background: color-mix(in srgb, var(--danger) 7%, var(--bg));
+  color: var(--text);
+  animation: fade var(--t-med) var(--ease);
+}
+.banner-in {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--s-2) var(--s-3);
-  padding: 8px var(--s-6);
-  border-bottom: 1px solid var(--danger-line);
-  background: color-mix(in srgb, var(--danger) 16%, var(--bg));
-  color: var(--text);
-  animation: fade var(--t-med) var(--ease);
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
-.banner > svg {
+.banner-in > svg {
   color: var(--danger);
   flex: none;
 }
@@ -414,6 +537,7 @@
 }
 .banner-text b {
   color: var(--danger);
+  font-weight: 500;
 }
 .banner-actions {
   display: flex;
@@ -424,53 +548,10 @@
   width: 132px;
 }
 .waking {
-  padding: 5px var(--s-6);
+  padding: 6px 0;
   border-bottom: 1px solid var(--line);
   color: var(--text-2);
   font-size: var(--fs-12);
-}
-
-.content {
-  flex: 1;
-  width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: var(--s-6) var(--s-6) 56px;
-}
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-5);
-  animation: page-in var(--t-med) var(--ease);
-}
-@keyframes page-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s-3) var(--s-4);
-  flex-wrap: wrap;
-}
-/* The title keeps its width; the actions wrap under it on a narrow screen. */
-.page-head > .grow {
-  flex: 1 1 260px;
-}
-.page-sub {
-  max-width: 78ch;
-}
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-3);
-  font-size: var(--fs-12);
-}
-.crumbs a {
-  color: var(--text-2);
 }
 
 /* Command palette */
@@ -507,10 +588,8 @@
 .palette-group {
   padding: 8px 10px 4px;
   color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: var(--fs-12);
+  font-weight: 400;
 }
 .palette-item {
   display: flex;
@@ -630,7 +709,7 @@
   background: var(--panel-2);
   color: var(--text);
   text-align: left;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.3;
   transition:
     border-color var(--t-fast),
@@ -657,7 +736,7 @@
   background: var(--panel-2);
   color: var(--text);
   text-align: left;
-  font-weight: 520;
+  font-weight: 500;
   line-height: 1.3;
   transition:
     border-color var(--t-fast),
@@ -701,53 +780,24 @@
   opacity: 0.45;
 }
 
-/* Narrow screens: the sidebar becomes a drawer */
-@media (max-width: 960px) {
-  .app {
-    grid-template-columns: minmax(0, 1fr);
+/* Narrow screens: the sections fold into a menu */
+@media (max-width: 980px) {
+  .mn-nav {
+    display: none;
   }
-  .app > .side {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: 264px;
-    transform: translateX(-100%);
-    transition: transform var(--t-med) var(--ease);
-    box-shadow: var(--shadow-2);
+  .mn-menu-btn {
+    display: inline-grid;
   }
-  .app > .side.open {
-    transform: none;
-  }
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 25;
-    background: var(--overlay);
-    animation: fade var(--t-fast) ease;
-  }
-  .menu-btn {
-    display: inline-flex;
-  }
-  .top,
-  .banner,
-  .waking {
-    padding-left: var(--s-4);
-    padding-right: var(--s-4);
-  }
-  .top {
-    gap: var(--s-2);
+}
+@media (max-width: 720px) {
+  .mn-wrap {
+    padding: 0 16px;
   }
   .content {
-    padding: var(--s-4) var(--s-4) 48px;
+    padding: 28px 16px 64px;
   }
-  .search {
-    width: 32px;
-    flex: none;
-    justify-content: center;
-    padding: 0;
-  }
-  .search-text,
-  .search .kbd {
-    display: none;
+  .mn-top-in {
+    gap: 12px;
   }
   .banner-text {
     white-space: normal;
@@ -757,13 +807,11 @@
   }
 }
 @media (max-width: 560px) {
+  .mn-hide-sm,
   .live-word {
     display: none;
   }
-  .top-primary .long {
-    display: none;
-  }
-  .top-primary .short {
+  .mn-show-sm {
     display: inline;
   }
   .banner-actions {
@@ -771,6 +819,9 @@
   }
   .banner .input {
     flex: 1 1 120px;
+  }
+  .mn-tabs {
+    gap: 20px;
   }
 }
 
@@ -788,6 +839,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 650;
+  font-weight: 500;
   font-size: var(--fs-16);
 }

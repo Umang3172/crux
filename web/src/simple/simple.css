@@ -1,0 +1,495 @@
+/* The simple pages: the machines, one machine, how it works. They share the
+   frame's tokens; these names are kept for the pages' own rules. */
+
+.mn {
+  --mn-page: var(--bg);
+  --mn-panel: var(--panel);
+  --mn-sunk: var(--panel-3);
+  --mn-ink: var(--text);
+  --mn-ink-2: var(--text-2);
+  --mn-grey: var(--text-3);
+  --mn-faint: var(--text-4);
+  --mn-line: var(--line);
+  --mn-line-2: var(--line-2);
+  --mn-radius: var(--r-3);
+  --mn-max: var(--max);
+}
+
+/* ---------------------------------------------------------------- type */
+
+.mn-eyebrow {
+  color: var(--mn-grey);
+  font-size: 14px;
+}
+
+.mn-h1 {
+  margin: 14px 0 0;
+  font-size: clamp(36px, 5.4vw, 60px);
+  line-height: 1.04;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+.mn-h2 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.12;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.mn-lede {
+  margin: 18px 0 0;
+  max-width: 54ch;
+  color: var(--mn-grey);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.mn-muted {
+  color: var(--mn-grey);
+}
+
+/* ---------------------------------------------------------------- page */
+
+.mn-main {
+  flex: 1;
+}
+
+.mn-hero {
+  padding: 88px 0 56px;
+}
+
+.mn-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 32px;
+  flex-wrap: wrap;
+}
+
+.mn-section {
+  padding: 24px 0 72px;
+}
+
+.mn-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.mn-section-head p {
+  margin: 8px 0 0;
+  color: var(--mn-grey);
+  max-width: 52ch;
+}
+
+/* The hairline grid: cells share their borders, as on a printed sheet. */
+.mn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  border-top: 1px solid var(--mn-line);
+  border-left: 1px solid var(--mn-line);
+  background: var(--mn-panel);
+}
+
+.mn-grid > * {
+  border-right: 1px solid var(--mn-line);
+  border-bottom: 1px solid var(--mn-line);
+}
+
+.mn-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .mn-grid.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- machine card */
+
+.mn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 22px 20px;
+  min-height: 248px;
+  transition: background 0.2s ease;
+  position: relative;
+}
+
+.mn-card:hover {
+  background: var(--mn-page);
+}
+
+.mn-card-art {
+  height: 108px;
+  display: grid;
+  place-items: center;
+  color: var(--mn-ink);
+}
+
+.mn-card-art svg {
+  width: 100%;
+  max-width: 200px;
+  height: 100%;
+}
+
+.mn-card-name {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mn-card-type {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+  margin-top: 2px;
+}
+
+.mn-card-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mn-open {
+  color: var(--mn-faint);
+  font-size: 13px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.mn-card:hover .mn-open,
+.mn-card:focus-visible .mn-open {
+  opacity: 1;
+  transform: none;
+}
+
+/* A state is a dot and a few words: filled when someone has to act, a ring when all is calm. */
+.mn-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--mn-ink-2);
+}
+
+.mn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mn-ink);
+  flex: none;
+}
+
+.mn-dot.act {
+  background: var(--mn-ink);
+}
+
+.mn-dot.calm {
+  border-color: var(--mn-faint);
+}
+
+.mn-dot.busy {
+  border-color: var(--mn-ink);
+  border-right-color: transparent;
+  animation: mn-spin 0.9s linear infinite;
+}
+
+@keyframes mn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- steps strip */
+
+.mn-steps .mn-step {
+  padding: 26px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mn-step-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--mn-sunk);
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+}
+
+.mn-step h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mn-step p {
+  margin: 0;
+  color: var(--mn-grey);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.mn-step-n {
+  color: var(--mn-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- machine page */
+
+.mn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-grey);
+  font-size: 14px;
+  margin-top: 28px;
+}
+
+.mn-back:hover {
+  color: var(--mn-ink);
+}
+
+.mn-machine {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  gap: 48px;
+  align-items: start;
+  padding: 28px 0 72px;
+}
+
+.mn-stage {
+  position: sticky;
+  top: 84px;
+}
+
+.mn-stage-note {
+  margin: 12px 4px 0;
+  color: var(--mn-faint);
+  font-size: 12.5px;
+}
+
+.mn-side {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 8px;
+}
+
+.mn-title {
+  margin: 0;
+  font-size: clamp(30px, 3.4vw, 42px);
+  line-height: 1.06;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+
+.mn-sub {
+  color: var(--mn-grey);
+  margin-top: 8px;
+}
+
+.mn-now {
+  border-top: 1px solid var(--mn-line);
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mn-now-label {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+}
+
+.mn-now-text {
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  text-wrap: pretty;
+}
+
+.mn-now-detail {
+  color: var(--mn-grey);
+  margin: 0;
+  max-width: 46ch;
+}
+
+.mn-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.mn-answer {
+  border: 1px solid var(--mn-line);
+  border-radius: var(--mn-radius);
+  background: var(--mn-panel);
+  padding: 22px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: mn-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes mn-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.mn-answer-name {
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.mn-sure {
+  color: var(--mn-grey);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-answer p {
+  margin: 0;
+  color: var(--mn-ink-2);
+}
+
+.mn-kv {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 6px 16px;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.mn-kv dt {
+  color: var(--mn-grey);
+}
+
+.mn-kv dd {
+  margin: 0;
+}
+
+/* How Crux got there: three plain rows. */
+.mn-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--mn-line);
+}
+
+.mn-trail li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--mn-line);
+  font-size: 14.5px;
+}
+
+.mn-trail li span:first-child {
+  color: var(--mn-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-trail li.off {
+  color: var(--mn-faint);
+}
+
+/* A machine's past investigations or scans: one line each, the whole line a link. */
+.mn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--mn-line);
+}
+
+.mn-list a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--mn-line);
+  font-size: 14.5px;
+  transition: padding var(--t-med) var(--ease);
+}
+
+.mn-list a:hover {
+  padding-left: 8px;
+  text-decoration: none;
+}
+
+.mn-list-meta {
+  color: var(--mn-grey);
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-side .tabs {
+  margin-bottom: -8px;
+}
+
+.mn-error {
+  color: var(--danger);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* The figure sits on the page's white, without the plate's frame or caption. */
+.mn-stage .iso.fx {
+  --anatomy-paper: var(--mn-panel);
+  --anatomy-card: var(--mn-panel);
+}
+
+.mn-stage .fx-plate {
+  border: 0;
+  background: transparent;
+}
+
+@media (max-width: 860px) {
+  .mn-machine {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .mn-stage {
+    position: static;
+  }
+  .mn-hero {
+    padding: 56px 0 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-dot.busy,
+  .mn-answer {
+    animation: none;
+  }
+}
+
+.mn-stage .fx-caption {
+  display: none;
+}

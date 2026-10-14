@@ -67,7 +67,7 @@
 .twin-label {
   fill: var(--text-3);
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 500;
   text-anchor: middle;
 }
 .twin-note {
@@ -77,7 +77,7 @@
 }
 .twin-note.asked {
   fill: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
 }
 .twin-sensor {
   fill: var(--panel-3);
@@ -162,7 +162,7 @@
 }
 .twin-fact b {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .twin-slow {
   margin-left: auto;
@@ -226,13 +226,13 @@
 .stage-node text {
   fill: var(--text-2);
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 500;
   text-anchor: middle;
 }
 .stage-node text.title {
   fill: var(--text);
   font-size: 13.5px;
-  font-weight: 640;
+  font-weight: 500;
 }
 .stage-node text.sub {
   fill: var(--text-3);
@@ -296,7 +296,7 @@
   min-height: 58px;
 }
 .stage-cap code {
-  font-weight: 600;
+  font-weight: 500;
 }
 .stage-who {
   display: inline-flex;
@@ -307,7 +307,7 @@
   background: var(--model-soft);
   color: var(--model);
   font-size: var(--fs-12);
-  font-weight: 600;
+  font-weight: 500;
 }
 .stage-asked {
   color: var(--text-2);
@@ -429,7 +429,7 @@
 .pipe-node.now .pipe-dot {
   border-color: var(--accent);
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
   animation: pipe-now 1.6s ease-in-out infinite;
 }
@@ -451,7 +451,7 @@
 }
 .pipe-node b {
   font-size: var(--fs-12);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-2);
   line-height: 1.25;
 }
@@ -510,7 +510,7 @@
 }
 .exp-head b {
   font-size: var(--fs-12);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.25;
 }
 .exp svg {

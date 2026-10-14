@@ -1,6 +1,6 @@
 /* Figures drawn with the isometric kit. The kit's own rules (kit/iso.css) stay
    as shipped; here its tokens are set from the console's, so a figure's paper is
-   the card it sits on and it follows the console's light and dark themes.
+   the card it sits on and it follows the app's light and dark themes.
    Colour keeps the console's meanings: danger for the damage a verdict names,
    accent for where a reading comes from. Everything else is grey. */
 
@@ -13,22 +13,22 @@
   --anatomy-strong: var(--text);
   --anatomy-muted: var(--text-3);
   --anatomy-paper: var(--panel);
-  --anatomy-face: #1c2330;
-  --anatomy-top: #1b2230;
-  --anatomy-shade-0: #0d1118;
-  --anatomy-shade-1: #10151d;
-  --anatomy-shade-2: #131923;
-  --anatomy-shade-3: #171d28;
-  --anatomy-lit-top: #283041;
-  --anatomy-lit-shade: #1e2533;
-  --anatomy-hi: #d3d9e4;
-  --anatomy-mid: #6c7689;
-  --anatomy-lo: #3d4657;
-  --anatomy-faint: #272e3c;
+  --anatomy-face: #1d1d1b;
+  --anatomy-top: #1c1c1a;
+  --anatomy-shade-0: #0e0e0d;
+  --anatomy-shade-1: #121211;
+  --anatomy-shade-2: #161615;
+  --anatomy-shade-3: #1a1a19;
+  --anatomy-lit-top: #2a2a27;
+  --anatomy-lit-shade: #20201e;
+  --anatomy-hi: #e2e2dd;
+  --anatomy-mid: #7a7a74;
+  --anatomy-lo: #46463f;
+  --anatomy-faint: #2a2a27;
   --anatomy-lit: #ffffff;
-  --anatomy-halo: #030407;
+  --anatomy-halo: #050505;
   --anatomy-halo-opacity: 0.9;
-  --anatomy-dot: #e6eaf2;
+  --anatomy-dot: #ececea;
   --fx-pit: var(--danger);
   --fx-pit-ink: #2a0d10;
   --fx-pick: var(--accent);
@@ -150,16 +150,16 @@
 /* Steel balls: the same four-tone shading on a lighter ramp, so they read as
    polished parts against the rings. The tracked ball is a step brighter. */
 .fig-ball {
-  --anatomy-shade-0: #1a212d;
-  --anatomy-shade-1: #232c3b;
-  --anatomy-shade-2: #303a4c;
-  --anatomy-shade-3: #424e63;
+  --anatomy-shade-0: #1e1e1c;
+  --anatomy-shade-1: #282826;
+  --anatomy-shade-2: #363633;
+  --anatomy-shade-3: #4a4a46;
 }
 .fig-ball.is-lit {
-  --anatomy-shade-0: #2c3647;
-  --anatomy-shade-1: #3d495e;
-  --anatomy-shade-2: #536179;
-  --anatomy-shade-3: #75849e;
+  --anatomy-shade-0: #31312e;
+  --anatomy-shade-1: #43433f;
+  --anatomy-shade-2: #5b5b56;
+  --anatomy-shade-3: #85857f;
 }
 :root[data-theme="light"] .fig-ball {
   --anatomy-shade-0: #b7bfcb;
@@ -175,7 +175,7 @@
 }
 
 /* The second figure: the phone's glass, its progress ring, the infrared beam. */
-.fx-screen { fill: #090c12; stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+.fx-screen { fill: #0c0c0b; stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
 .fx-ring { fill: none; stroke: var(--fx-pick); stroke-width: 1.6; stroke-linecap: round; }
 .fx-beam { fill: none; stroke: var(--fx-pick); stroke-width: 1; stroke-dasharray: 0.01 3.2; stroke-linecap: round; }
 .fx-spot { fill: var(--accent-soft); stroke: var(--fx-pick); stroke-width: 0.8; }

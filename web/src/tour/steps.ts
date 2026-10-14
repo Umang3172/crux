@@ -3,7 +3,6 @@
 // reading, verdict and repair check in it is the engine's own, made then.
 
 import { CRUX, TOTAL } from "../data/evaluation";
-import { setRole } from "../lib/role";
 import { getSession, patchCase, resetSession } from "../lib/session";
 import { getShift, startShift } from "../lib/shift";
 import { startTour, type TourStep } from "./store";
@@ -49,7 +48,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: "needs",
-    route: "/plant",
+    route: "/plant?tab=needs",
     target: '[data-tour="plant-needs"]',
     title: "It settles what it can",
     body: "Where the evidence carries a cause, Crux names it. Where it cannot tell, it stops and asks a person.",
@@ -83,8 +82,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: "approve",
-    before: () => setRole("manager"),
-    route: "/",
+    route: "/manager",
     target: '[data-tour="manager-decisions"]',
     title: "A manager signs off",
     body: "Nothing happens to a machine until a person puts their name to it.",
@@ -96,8 +94,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: "crew",
-    before: () => setRole("crew"),
-    route: "/",
+    route: "/crew",
     target: '[data-tour="crew-todo"]',
     title: "The technician's list",
     body: "The approved repair arrives here. After it, a new reading checks the work.",
@@ -118,7 +115,6 @@ const STEPS: TourStep[] = [
   },
   {
     id: "how",
-    before: () => setRole("control"),
     route: "/agents",
     target: "#who-may-do-what",
     title: "Two AI investigators, split by permission",
@@ -144,6 +140,5 @@ export function beginTour() {
   const lose = getSession().cases.length > 0;
   if (lose && !window.confirm("The tour starts a fresh demo session in this browser. Your investigations here will be cleared. Start it?")) return;
   if (lose) resetSession();
-  setRole("control");
   startTour(STEPS);
 }

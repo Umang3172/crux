@@ -111,7 +111,7 @@ export default function MachinePage() {
 
   const crumbs = (name: ReactNode) => (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <Link to="/plant">Plant</Link>
+      <Link to="/plant">Control room</Link>
       <ChevronRight size={12} aria-hidden />
       <span>{name}</span>
     </nav>

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark light" />
-    <meta name="theme-color" content="#0a0c11" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fafaf9" />
     <meta
       name="description"
       content="Crux diagnoses rotating-machine faults by testing every suspect cause on a virtual copy, and asks for the one measurement that decides when it can't tell."
@@ -12,21 +12,21 @@
     <title>Crux</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233d6bf5'/%3E%3Cpath d='M10 10l12 12M22 10L10 22' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%23fff'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0a'/%3E%3Cpath d='M10 10l12 12M22 10L10 22' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%23fff'/%3E%3C/svg%3E"
     />
     <script>
-      // Apply the chosen theme before the first paint, so a light-theme visitor sees no dark flash.
+      // Apply a chosen dark theme before the first paint, so a dark-theme visitor sees no white flash.
       try {
-        if (localStorage.getItem("crux.theme") === "light") {
-          document.documentElement.dataset.theme = "light";
-          document.documentElement.style.background = "#f4f5f8";
+        if (localStorage.getItem("crux.theme.v2") === "dark") {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.style.background = "#0c0c0b";
         }
       } catch (e) {}
     </script>
     <style>
-      /* Paint the ground before the bundle loads, so there is no white flash. */
+      /* Paint the ground before the bundle loads, so the first frame is already the page's colour. */
       html {
-        background: #0a0c11;
+        background: #fafaf9;
       }
     </style>
   </head>
