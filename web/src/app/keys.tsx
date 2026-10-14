@@ -24,6 +24,7 @@ export function goKeys(role: Role): GoKey[] {
     { key: "p", label: "Plant", to: plantPath(role) },
     { key: "i", label: "Investigations", to: "/cases" },
     { key: "w", label: "Work orders", to: "/work-orders" },
+    { key: "t", label: "Trends", to: "/trends" },
     { key: "m", label: role === "control" ? "Home" : (ROLES.find((r) => r.id === role)?.home ?? "Home"), to: "/" },
   ];
 }

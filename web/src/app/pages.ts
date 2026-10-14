@@ -24,6 +24,7 @@ export const PAGES = {
   phoneCheck: () => import("../pages/PhoneCheck").then((m) => m.default),
   notFound: () => import("../pages/NotFound").then((m) => m.default),
   go: () => import("../pages/Go").then((m) => m.default),
+  trends: () => import("../pages/trends/TrendsPage").then((m) => m.default),
 } satisfies Record<string, Load>;
 
 /**
