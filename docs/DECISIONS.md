@@ -846,3 +846,32 @@ a ball then meets a damaged spot at the rate the engine listens for, without
 that rate being typed anywhere. Streamed with the offline stand-ins only; not
 with Gemini.
 
+
+---
+
+## ADR-0032 · A soft photo is looked at with a warning, and a scan reports each step as it runs
+
+**Context.** The photo gate turned back any still under a sharpness of 100, a
+published rule of thumb that no calibration split has checked. It has turned
+back both real photos of a plainly visible fault it has met: a fractured
+bearing (10 Oct 2026) and a leaking welded pipe joint from a phone-style clip
+(14 Oct 2026, sharpness 9 over the whole still and 8 on the joint itself). A
+soft but legible photo is common: a phone focused close, a smooth painted
+surface. And a Lens scan answered only when it was done, so a page could show a
+spinner and nothing about what ran.
+
+**Decision.** `photo.quality` still turns back a still that is too small, too
+dark or blown out. Under the sharpness bar it marks the still `soft` and lets
+the look go ahead; the look's note says the photo was soft and that a miss is
+likelier. Every first-look finding must still survive the cropped second look.
+`camera.inspect` and `lens.scan.new_scan` take an optional `on_step` hook, told
+each step (read, identify, gate, look, confirm, motion, sound, save) as it
+starts and ends, with what it found. `POST /lens/scans/live` runs the same scan
+as `POST /lens/scans` and answers one JSON line per step, then the scan.
+
+**Consequence.** A blurrier photo now reaches the model. The second look is the
+guard against what a model makes up; a model that cannot see any item still
+asks for a retake. The bar stays provisional until `scripts/photo_eval.py
+--calibrate` has a calibration split. Camera findings still never move a
+belief (ADR-0007). Nothing in a scan depends on the hook, and `POST
+/lens/scans` is unchanged.

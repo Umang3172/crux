@@ -52,6 +52,12 @@ _SCHEMA = {
 #: Boxes smaller than this fraction of a side are too small to track.
 MIN_BOX = 0.05
 
+#: How long Gemini may take to name the machine before the scan goes on without
+#: a name. Naming took 11 to 14 s in four runs on 14 Oct 2026; one request that
+#: day sent nothing back for over three minutes, holding the whole scan. Three
+#: times the slowest run seen.
+GEMINI_TIMEOUT_S = 45
+
 
 @dataclass(frozen=True)
 class Identity:
@@ -105,12 +111,17 @@ def _gemini(prompt: str, schema: dict, still: bytes) -> tuple[dict, str]:  # pra
     model = gemini_model_id("lens_look")
     # Held in a name: the SDK closes a client when it is collected, so a client
     # made inline is closed before its request goes out.
-    client = genai.Client()
+    client = genai.Client(
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000)  # milliseconds
+    )
+    # Temperature is left at Gemini 3's default of 1.0: Google's Gemini 3 guide
+    # (read 10 Oct 2026) asks for it and warns that lower values can make the
+    # model loop, as the camera look already follows (docs/LENS.md).
     response = client.models.generate_content(
         model=model,
         contents=[types.Part.from_bytes(data=still, mime_type="image/jpeg"), prompt],
         config=types.GenerateContentConfig(
-            response_mime_type="application/json", response_schema=schema, temperature=0.0
+            response_mime_type="application/json", response_schema=schema
         ),
     )
     return json.loads(response.text or "{}"), f"gemini:{model}"
@@ -167,7 +178,11 @@ def identify(still: bytes) -> Identity:
 
 
 def visible(
-    still: bytes, context: str, reference: bytes | None = None, reference_label: str = ""
+    still: bytes,
+    context: str,
+    reference: bytes | None = None,
+    reference_label: str = "",
+    on_step: camera.Step | None = None,
 ) -> camera.CameraLook:
     """The checklist on the still, kept only where a cropped second look confirms it.
 
@@ -180,4 +195,4 @@ def visible(
         if reference
         else None
     )
-    return camera.inspect(s, context, reference=ref, use_registry=False)
+    return camera.inspect(s, context, reference=ref, use_registry=False, on_step=on_step)

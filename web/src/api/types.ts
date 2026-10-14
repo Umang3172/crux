@@ -366,7 +366,7 @@ export type CameraLook = {
   note: string;
   checklist: Finding[];
   retake: string;
-  quality: { width: number; height: number; sharpness: number; p1: number; p99: number; measured: boolean };
+  quality: { width: number; height: number; sharpness: number; p1: number; p99: number; measured: boolean; soft?: boolean };
   reference: string;
   dropped: number;
   zooms: number;
@@ -478,6 +478,14 @@ export type Scan = {
   candidates: { hz: number; px: number; rpm_if_1x: number }[];
   normal: boolean;
   analysis: ScanAnalysis | null;
+};
+
+/** One line of POST /lens/scans/live: a step of the scan as it starts or ends, or the scan itself. */
+export type ScanStep = {
+  step: "read" | "identify" | "gate" | "look" | "confirm" | "motion" | "sound" | "save" | "scan" | "error";
+  state: "start" | "done" | "off" | "skipped" | "waiting" | "failed";
+  detail?: Record<string, unknown>;
+  scan?: Scan;
 };
 
 export type ScanRow = { id: string; machine: string; created: string; normal: boolean; analysed: boolean; summary: string[] };
