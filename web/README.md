@@ -68,7 +68,7 @@ so the three views have to be used in turn to move the plant on.
 | Investigations, Investigation | A whole investigation on one page: where it is in its pipeline, Crux's AI at work on it (live while the run streams, a record afterwards), the verdict, the measurement the engine asked for with what each suspect predicts it reads, the machine with the named part marked, the virtual experiments side by side, every suspect, measured against simulated spectra, the evidence ledger, the report with its sentence check, the repair check, notes | `/investigations…`, `/agent/stream`, `/machine`, `/replay`, `/capture`, `/spectrum`, `/tests` |
 | A watched life | A part's health over its life against a clock, the alarm, the time-left range, risk before a planned stop, an investigation at an hour | `/maintenance/…` |
 | Work orders | Work orders drafted from alarms, with cited evidence and approval by name; what a repair found | `/maintenance/tickets…`, `/fleet/outcome` |
-| Phone scans | A phone video read for motion and sound | `/lens/…` |
+| Phone scans | Four screens: record (the demo clip) or upload a phone video; upload; the pipeline drawn step by step as the server reports it; then a drawing of the clip's machine with the part the scan points at in red (what the model saw, or where the video shakes most), marked unconfirmed | `/lens/scans/live`, `/lens/…` |
 | Lessons and updates | This site's forecasting model, an update waiting for a decision, lessons | `/fleet/…` |
 | Track record | The evaluation run's figures, each with its source | none: `src/data/evaluation.ts` |
 | How Crux works | The two AI investigators, the tools each was given and what each takes, the limits on a run, which model does each job | `/agent/about`, `/health` |

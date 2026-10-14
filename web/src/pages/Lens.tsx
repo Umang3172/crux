@@ -2,112 +2,78 @@
 // sound. A camera sees slow motion only, so its result is a screen, and it
 // names the measurement to take next.
 
-import { useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { ChevronRight, ScanLine, Star, Upload } from "lucide-react";
-import { ApiError } from "../api/client";
-import { LENS_MAX_BYTES, analyseScan, markNormalScan, scan as fetchScan, scanStillUrl, scans as fetchScans, uploadScan } from "../api/crux";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+import { ChevronRight, History, ScanLine, Star } from "lucide-react";
+import { analyseScan, markNormalScan, scan as fetchScan, scanStillUrl, scans as fetchScans } from "../api/crux";
 import type { Scan, ScanAnalysis } from "../api/types";
 import { num, stamp } from "../lib/format";
 import { useAsync } from "../lib/hooks";
 import { fault } from "../lib/plain";
 import { SpectrumChart } from "../ui/charts";
-import { Badge, Button, Callout, Card, Details, Empty, ErrorState, Hint, PageHead, SkeletonRows, Stat, toast } from "../ui/kit";
+import { Badge, Button, Callout, Card, Details, Dialog, Empty, ErrorState, Hint, PageHead, SkeletonRows, Stat, toast } from "../ui/kit";
+import { LensLive } from "./lens/LensLive";
 import "./pages.css";
 import "../styles/trust.css";
-
-const MAX_MB = Math.round(LENS_MAX_BYTES / (1024 * 1024));
 
 export function Lens() {
   const navigate = useNavigate();
   const list = useAsync(() => fetchScans(), []);
-  const file = useRef<HTMLInputElement>(null);
-  const [search] = useSearchParams();
-  const [machine, setMachine] = useState(search.get("machine") ?? "");
-  const [progress, setProgress] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function upload(f: File | undefined) {
-    if (!f) return;
-    setError(null);
-    if (f.size > LENS_MAX_BYTES) return setError(`Keep the clip under ${MAX_MB} MB: about ten seconds at 1080p.`);
-    setProgress(0);
-    try {
-      const s = await uploadScan(f, machine.trim(), setProgress);
-      navigate(`/lens/${s.id}`);
-    } catch (e) {
-      setError(e instanceof ApiError && e.status === 501 ? "Video support is not installed on this server." : (e as Error).message);
-    } finally {
-      setProgress(null);
-      if (file.current) file.current.value = "";
-    }
-  }
+  const [history, setHistory] = useState(false);
 
   return (
-    <div className="page tr-page">
-      <PageHead title="Phone scans" sub="For a machine with no sensor: a phone video, read for motion and sound." />
+    <div className="page tr-page ll-page">
+      <PageHead
+        title="Phone scans"
+        actions={
+          <Button size="sm" variant="ghost" icon={<History size={14} />} onClick={() => setHistory(true)}>
+            Earlier scans{list.data?.length ? ` (${list.data.length})` : ""}
+          </Button>
+        }
+      />
 
-      <div className="split-even">
-        <Card title="Scans" icon={<ScanLine size={15} />} flush actions={<Hint label="Who sees these scans">Scans are shared by everyone using this server.</Hint>}>
-          {list.error ? (
-            <ErrorState error={list.error} onRetry={list.reload} />
-          ) : !list.data ? (
-            <SkeletonRows />
-          ) : list.data.length === 0 ? (
-            <Empty icon={<ScanLine size={18} />} title="No scans yet">
-              Upload a short clip of a running machine.
-            </Empty>
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Machine</th>
-                    <th>State</th>
-                    <th>What it found</th>
-                    <th className="t-num">Taken</th>
+      <LensLive onScanned={() => list.reload()} />
+
+      <Dialog open={history} onClose={() => setHistory(false)} title="Earlier scans" sub="Shared by everyone using this server." wide>
+        {list.error ? (
+          <ErrorState error={list.error} onRetry={list.reload} />
+        ) : !list.data ? (
+          <SkeletonRows />
+        ) : list.data.length === 0 ? (
+          <Empty icon={<ScanLine size={18} />} title="No scans yet">
+            Record one, or upload a clip of a running machine.
+          </Empty>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Machine</th>
+                  <th>State</th>
+                  <th className="t-num">Taken</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.data.map((s) => (
+                  <tr key={s.id} className="hover link" tabIndex={0} onClick={() => navigate(`/lens/${s.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/lens/${s.id}`)}>
+                    <td>
+                      <b>{s.machine || "unnamed machine"}</b>
+                      <div className="tiny dim mono">{s.id}</div>
+                    </td>
+                    <td>
+                      <span className="row gap-1 row-wrap">
+                        <Badge tone={s.analysed ? "ok" : "warn"}>{s.analysed ? "analysed" : "speed not confirmed"}</Badge>
+                        {s.normal && <Badge tone="accent">its normal</Badge>}
+                      </span>
+                    </td>
+                    <td className="t-num dim-cell">{stamp(s.created)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {list.data.map((s) => (
-                    <tr key={s.id} className="hover link" tabIndex={0} onClick={() => navigate(`/lens/${s.id}`)} onKeyDown={(e) => e.key === "Enter" && navigate(`/lens/${s.id}`)}>
-                      <td>
-                        <b>{s.machine || "unnamed machine"}</b>
-                        <div className="tiny dim mono">{s.id}</div>
-                      </td>
-                      <td>
-                        <span className="row gap-1 row-wrap">
-                          <Badge tone={s.analysed ? "ok" : "warn"}>{s.analysed ? "analysed" : "confirm the speed"}</Badge>
-                          {s.normal && <Badge tone="accent">its normal</Badge>}
-                        </span>
-                      </td>
-                      <td className="muted">{s.summary[0] ?? "–"}</td>
-                      <td className="t-num dim-cell">{stamp(s.created)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <Card title="New scan" icon={<Upload size={15} />}>
-          <div className="tr-upload">
-            <div className="field">
-              <label className="label" htmlFor="lens-machine">
-                Machine
-              </label>
-              <input id="lens-machine" className="input" placeholder="For example: exhaust fan F-3" value={machine} onChange={(e) => setMachine(e.target.value)} />
-            </div>
-            <input ref={file} type="file" accept="video/*" hidden onChange={(e) => void upload(e.target.files?.[0])} />
-            <Button variant="primary" icon={<Upload size={14} />} busy={progress !== null} onClick={() => file.current?.click()}>
-              {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : "Upload a video"}
-            </Button>
-            <span className="small dim">About ten seconds, held still, machine filling the frame. Up to {MAX_MB} MB.</span>
-            {error && <Callout tone="danger">{error}</Callout>}
+                ))}
+              </tbody>
+            </table>
           </div>
-        </Card>
-      </div>
+        )}
+      </Dialog>
     </div>
   );
 }

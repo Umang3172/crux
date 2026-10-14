@@ -184,3 +184,42 @@
 .fx-steps li { transition: color var(--t-med) var(--ease); }
 .fx-steps li[data-on] { color: var(--text); }
 .fx-steps li[data-done] { color: var(--text-2); }
+
+/* Lens: the pipework figure. The part the model pointed at keeps its shading
+   on a red ramp; rust the model saw is drawn in rust; water is pale. */
+.fig-fault {
+  --anatomy-paper: #4a1117;
+  --anatomy-shade-0: #34090e;
+  --anatomy-shade-1: #4f0f16;
+  --anatomy-shade-2: #6d161f;
+  --anatomy-shade-3: #92202a;
+  --anatomy-top: #b52d37;
+}
+.fig-fault > .iso-edge,
+.fig-fault > .iso-crease { stroke: var(--danger); }
+:root[data-theme="light"] .fig-fault {
+  --anatomy-paper: #fbd5d6;
+  --anatomy-shade-0: #c62f37;
+  --anatomy-shade-1: #db4b51;
+  --anatomy-shade-2: #ea7377;
+  --anatomy-shade-3: #f5a3a5;
+  --anatomy-top: #fbc9ca;
+}
+.fig-rust { --anatomy-lo: #c07033; --anatomy-weight: 1.2px; }
+:root[data-theme="light"] .fig-rust { --anatomy-lo: #a0521a; }
+.fig-drop { fill: #cfe6f3; stroke: #7fb1cc; stroke-width: 0.5; }
+:root[data-theme="light"] .fig-drop { fill: #d7ecf7; stroke: #4f8fb3; }
+.fig-wet { fill: rgba(120, 170, 200, 0.16); stroke: rgba(150, 195, 220, 0.35); stroke-width: 0.5; }
+:root[data-theme="light"] .fig-wet { fill: rgba(70, 130, 170, 0.12); stroke: rgba(70, 130, 170, 0.35); }
+.fig-splash { fill: none; stroke: #9cc8df; stroke-width: 0.7; }
+:root[data-theme="light"] .fig-splash { stroke: #4f8fb3; }
+.fx-swatch[data-mark="rust"] { height: 3px; background: #b8672a; }
+.fx-swatch[data-mark="water"] { background: #9cc8df; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; width: 9px; }
+
+/* The motor-and-pump figure: the gauge's face and needle, the oil sight glass. */
+.fx-dial { fill: var(--anatomy-paper); stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+.fx-needle { fill: none; stroke: var(--danger); stroke-width: 1.1; stroke-linecap: round; }
+.fx-glass { fill: var(--accent-soft); stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+/* A handwheel's rim and a lifting eye: round bar seen edge-on, drawn as a heavy stroke. */
+.fx-wheel { fill: none; stroke: var(--anatomy-mid); stroke-width: 1.8; }
+.fx-eye { fill: none; stroke: var(--anatomy-mid); stroke-width: 1.6; }

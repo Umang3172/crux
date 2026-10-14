@@ -131,10 +131,13 @@ Gemini's convention, for every model. The reply is constrained by a JSON schema
 (Gemini structured output; Ollama's `format`). Smoke, or anything graded high, is
 marked a hazard.
 
-1. **Quality gate, before any model.** A still that is too small, too dark, blown
-   out or blurred is turned back with the measured reason and no model sees it;
-   the ticket then says, truly, that nobody has looked at it. A model answering
-   "cannot see" for every item counts the same.
+1. **Quality gate, before any model.** A still that is too small, too dark or
+   blown out is turned back with the measured reason and no model sees it; the
+   ticket then says, truly, that nobody has looked at it. A model answering
+   "cannot see" for every item counts the same. A still under the sharpness bar
+   is marked soft and looked at anyway, and the look's note says a miss is
+   likelier (ADR-0032): the uncalibrated bar turned back both real damage photos
+   it met.
 2. **Reference photo.** In Lens, the middle still of the scan a person marked as
    the machine's normal one. For CCTV, an optional `normal` still per machine in
    `data/cameras.json`. Both photos go in one request, labelled reference
@@ -181,7 +184,7 @@ normal scan was taken). The gate's blur and exposure bars are provisional (below
 | `experiments.GROWN` | 2 x | the watcher's doubling rule |
 | `photo.MIN_SHORT_SIDE_PX` | 224 px | smallest input common vision encoders were trained at (CLIP ViT-B/32, Radford et al. 2021); below it a model only enlarges the photo |
 | `photo.MEASURE_LONG_SIDE_PX` | 1024 px | stills are measured at the Lens still size, downscaled only |
-| `photo.MIN_SHARPNESS` | 100 | **provisional**: variance of the Laplacian (Pech-Pacheco et al., ICPR 2000) with a published rule-of-thumb bar (Rosebrock, PyImageSearch, 2015); replaced by `photo_eval.py --calibrate` |
+| `photo.MIN_SHARPNESS` | 100 | **provisional**: variance of the Laplacian (Pech-Pacheco et al., ICPR 2000) with a published rule-of-thumb bar (Rosebrock, PyImageSearch, 2015); replaced by `photo_eval.py --calibrate`. Below it a still is marked soft and still looked at (ADR-0032) |
 | `photo.DARK_P99`, `photo.BRIGHT_P1` | 32, 223 of 255 | **provisional**: the brightest 1% in the bottom eighth, or the darkest 1% in the top eighth, is a near-black or near-white frame |
 | `photo.CROP_MARGIN`, `photo.CROP_MIN_FRACTION` | half the box each side; a quarter of the short side at least | design choice: the second look sees a leak's source and the floor under it; not fitted |
 
@@ -213,6 +216,36 @@ cd web && VITE_API_BASE= npm run dev -- --host   # --host: open it from a phone 
 Open the **Lens** tab. On a phone, use the laptop's address that Vite prints
 under "Network". Record a clip of a desk fan, mark it as normal, tape a coin to
 one blade, record again: the second scan should read as out of balance.
+
+**Record** on the Phone scans page sends the demo clip named in
+`web/src/pages/lens/demo.ts` through `POST /lens/scans/live`, which answers one
+JSON line per step as it runs (read, identify, gate, look, confirm, motion,
+sound, save), then the scan. The page draws the steps as they arrive, then a
+drawing of the clip's machine with the part the scan points at in red: the part
+a damage finding names, or else the part where the cells over the shake map's
+bar sit, placed by where each part sits in the clip's frame. Two clips are in
+`web/public/demo/`, each with its drawing:
+
+- `motor-pump-shake.mp4`, the default: a motor and pump shaking on a channel
+  base, generated for the demo (Veo, in the Gemini app), drawn in
+  `web/src/figures/skid/`. It is not a recording, so its motion is whatever the
+  generator drew: its shake rate is never quoted as a machine's. Two runs on 14
+  Oct 2026 with gemini-3-flash-preview (about 42 s each) named it "motor-driven
+  centrifugal pump" and "centrifugal pump and electric motor"; the first look
+  answered all 7 checklist items and found none present, so the second look had
+  nothing to confirm. The shake map was the same both times, as code should be:
+  the motor's fan end, the strongest cell 6.7 times the median cell, lines at
+  8.33 Hz (0.147 px) and 7.13 Hz (0.061 px).
+- `pipe-leak.mp4`: water dripping from a rusty welded pipe joint (Pexels video
+  5571839, free to use under the Pexels licence), drawn in
+  `web/src/figures/pipe/`. Two runs on 14 Oct 2026 (about 37 s each: naming 11
+  to 12 s, first look 16 s, second look 8 s) named it "piping system" and
+  reported a leak at the pipe junction and corrosion around it, both kept by the
+  second look; the severities swapped between the runs (leak low and corrosion
+  medium, then the reverse). The motion check found only lines under 0.04 px.
+
+Two runs of one clip are not a score, and with no shaft speed confirmed nothing
+was tested on the motion or the sound.
 
 ## Data for testing
 
@@ -354,6 +387,9 @@ one normal pair with the normal photo beside it. Results:
   retake on 1 of 1 damage photos, from the provisional bar. The bar is not moved
   to pass it; the fix is the calibration split (30 photos or more) or a sharpness
   measured only where the photo has detail, and either needs photos to justify it.
+  14 Oct 2026: the pipe-leak demo clip was turned back too (sharpness 9 over the
+  whole still, 8 on the joint itself), so a soft still now warns instead
+  (ADR-0032); the bar is still not moved.
 - Diagnostic, with the gate bypassed, not a score: Gemma 4 answered crack
   "absent" on that photo and reported low-severity corrosion on the bearing
   body, which the cropped second look confirmed. On the only real damage photo

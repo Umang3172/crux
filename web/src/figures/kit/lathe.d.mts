@@ -37,6 +37,8 @@ export function solidOf(profile: Knot[], F: Frame, P: Projection, options?: Lath
 export function disc(s0: number, s1: number, r: number, F: Frame, P: Projection, options?: LatheOptions): SolidPaths;
 export function ringBand(s0: number, s1: number, rIn: number, rOut: number, F: Frame, P: Projection, options?: LatheOptions): SolidPaths;
 export function prismOf(F: Frame, polygon: [number, number][], s0: number, s1: number, P: Projection): SolidPaths;
+/** A branch of radius `a` cut by a host pipe of radius `start` whose axis is F.v; F.u is across both. */
+export function saddleOf(F: Frame, a: number, start: number | ((angle: number) => number), s1: number, P: Projection, options?: { steps?: number }): SolidPaths;
 export function sphereOf(centre: Point3, r: number, P: Projection, options?: { steps?: number }): SolidPaths;
 
 export function arcOf(

@@ -5,7 +5,7 @@
 import type { ReactNode, Ref } from "react";
 import "./figures.css";
 
-export type Key = { mark: "lit" | "pit" | "pick" | "mid" | "line"; label: ReactNode };
+export type Key = { mark: "lit" | "pit" | "pick" | "mid" | "line" | "rust" | "water"; label: ReactNode };
 
 export function Plate({
   fig,
@@ -23,7 +23,7 @@ export function Plate({
   hint: string;
   readout: Ref<HTMLSpanElement>;
   keys: Key[];
-  caption: ReactNode;
+  caption?: ReactNode;
   children: ReactNode;
   plateRef?: Ref<HTMLDivElement>;
 } & React.HTMLAttributes<HTMLDivElement>) {
@@ -42,17 +42,19 @@ export function Plate({
         </span>
         <span className="fx-corner" data-at="readout" data-readout aria-hidden ref={readout} />
       </div>
-      <figcaption className="fx-legend">
-        <div className="fx-keys">
-          {keys.map((k, i) => (
-            <span className="fx-key" key={i}>
-              <i className="fx-swatch" data-mark={k.mark} aria-hidden />
-              {k.label}
-            </span>
-          ))}
-        </div>
-        <p className="fx-caption muted">{caption}</p>
-      </figcaption>
+      {(keys.length > 0 || caption) && (
+        <figcaption className="fx-legend">
+          <div className="fx-keys">
+            {keys.map((k, i) => (
+              <span className="fx-key" key={i}>
+                <i className="fx-swatch" data-mark={k.mark} aria-hidden />
+                {k.label}
+              </span>
+            ))}
+          </div>
+          {caption && <p className="fx-caption muted">{caption}</p>}
+        </figcaption>
+      )}
     </figure>
   );
 }
