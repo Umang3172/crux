@@ -1,95 +1,131 @@
-/* Design tokens. Every colour, face, size, space and timing on screen comes
-   from here; components never hard-code them.
+/* Design tokens. Every colour, size and timing on screen comes from here.
 
-   The world is the inspection tag hung on plant machinery: concrete-grey
-   ground, tag-stock panels, ink, and tag classes that each carry one meaning.
-   Blue is the measurement Crux asks for (and the primary action), yellow
-   needs attention or is under test, green is normal or verified, and red is
-   kept for a hazard. Colour stays flat: no gradients, no shadows. */
+   Colour carries meaning, one job each:
+     accent (blue)   the engine's voice, the measurement it asks for, the primary action
+     model  (violet) anything a language model did or wrote
+     sim    (cyan)   a simulation: virtual experiments, simulated traces
+     ok / warn / danger   an outcome, something waiting on a person, a hazard
+   Nothing else is coloured. */
 
 :root {
+  color-scheme: dark;
+
+  --bg: #0a0c11;
+  --bg-2: #0d1016;
+  --panel: #10141c;
+  --panel-2: #151a24;
+  --panel-3: #1c2230;
+  --line: #1f2532;
+  --line-2: #2c3446;
+  --text: #e9ecf3;
+  --text-2: #a9b2c2;
+  --text-3: #7a8497;
+
+  --accent: #7aa2ff;
+  --accent-solid: #3d6bf5;
+  --accent-solid-hover: #5580ff;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(109, 155, 255, 0.13);
+  --accent-line: rgba(109, 155, 255, 0.4);
+
+  --model: #b9a3ff;
+  --model-soft: rgba(181, 157, 255, 0.13);
+  --model-line: rgba(181, 157, 255, 0.4);
+
+  --sim: #45c8f1;
+  --sim-soft: rgba(63, 197, 240, 0.13);
+  --sim-line: rgba(63, 197, 240, 0.4);
+
+  --ok: #3fd39f;
+  --ok-soft: rgba(58, 209, 154, 0.13);
+  --ok-line: rgba(58, 209, 154, 0.4);
+  --warn: #f6b93b;
+  --warn-soft: rgba(246, 185, 59, 0.13);
+  --warn-line: rgba(246, 185, 59, 0.42);
+  --danger: #ff7676;
+  --danger-soft: rgba(255, 107, 107, 0.13);
+  --danger-line: rgba(255, 107, 107, 0.45);
+  --danger-solid: #d83a3a;
+
+  --focus: #9db9ff;
+  --overlay: rgba(4, 6, 10, 0.66);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03);
+
+  --font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --fs-10: 0.6875rem; /* 11 */
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-28: 1.75rem;
+
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --r-pill: 999px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 120ms;
+  --t-med: 220ms;
+  --t-slow: 520ms;
+
+  --side: 236px;
+  --top: 52px;
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
 
-  /* Grounds and text */
-  --bg: #e6e7e2;
-  --surface: #fbfaf6;
-  --surface-2: #f0f0eb;
-  --ink: #1d1d1b;
-  --ink-2: #464743;
-  --ink-3: #5f605b;
-  --line: #cdcec8;
-  --line-strong: #1d1d1b;
+  --bg: #f4f5f8;
+  --bg-2: #fbfbfc;
+  --panel: #ffffff;
+  --panel-2: #f6f7fa;
+  --panel-3: #eceef3;
+  --line: #e3e6ec;
+  --line-2: #cdd3dd;
+  --text: #0f131a;
+  --text-2: #465061;
+  --text-3: #6b7586;
 
-  /* Shell */
-  --shell: #1d1d1b;
-  --shell-ink: #fbfaf6;
-  --shell-ink-2: #b7b8b1;
+  --accent: #2b59e0;
+  --accent-solid: #2b59e0;
+  --accent-solid-hover: #1f49c8;
+  --accent-soft: rgba(43, 89, 224, 0.08);
+  --accent-line: rgba(43, 89, 224, 0.35);
 
-  /* Tag classes: each colour has one job */
-  --accent: #0b5cad; /* NOTICE: the requested measurement, the primary action */
-  --accent-ink: #ffffff;
-  --accent-soft: #dbe7f4;
-  --attention: #f2c200; /* CAUTION: needs attention, under test (a fill; text on it is ink) */
-  --attention-ink: #1d1d1b;
-  --attention-soft: #faefc2;
-  --danger: #c62828; /* DANGER: a reported hazard only */
-  --danger-soft: #f7e0de;
-  --ok: #1f7a3a; /* SAFETY: normal, verified */
-  --ok-soft: #dcefe1;
-  --void: #66675f; /* ruled out: still on the rack, quiet, and still readable (4.5:1 on tag stock) */
-  --figure: #1d1d1b; /* measured numbers */
-  --model: #464743; /* a language model's words: told apart by their label, never by belief colours */
+  --model: #6340d9;
+  --model-soft: rgba(99, 64, 217, 0.08);
+  --model-line: rgba(99, 64, 217, 0.35);
 
-  /* Machine scene */
-  --scene-ground: #e6e7e2;
-  --scene-body: #b9bab3;
-  --scene-metal: #8f9089;
-  --scene-base: #3c3d39;
-  --scene-ink: #1d1d1b;
-  --scene-hot: #f2c200;
-  --scene-marker: #0b5cad;
+  --sim: #0a7ea8;
+  --sim-soft: rgba(10, 126, 168, 0.09);
+  --sim-line: rgba(10, 126, 168, 0.35);
 
-  /* Type: one family, two widths, one strict ladder */
-  --font-ui: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --step--2: 0.75rem; /* 12 */
-  --step--1: 0.875rem; /* 14 */
-  --step-0: 1rem; /* 16 */
-  --step-1: 1.25rem; /* 20 */
-  --step-2: 1.625rem; /* 26 */
-  --step-3: 2.125rem; /* 34 */
-  --step-4: 3rem; /* 48 */
-  --step-5: 6rem; /* 96: the deciding values, at specimen scale */
-  --leading: 1.5;
-  --leading-tight: 1.1;
-  --tracking-caps: 0.08em;
+  --ok: #0b8a5d;
+  --ok-soft: rgba(11, 138, 93, 0.09);
+  --ok-line: rgba(11, 138, 93, 0.35);
+  --warn: #a35f00;
+  --warn-soft: rgba(196, 122, 0, 0.11);
+  --warn-line: rgba(196, 122, 0, 0.4);
+  --danger: #cf2a2a;
+  --danger-soft: rgba(207, 42, 42, 0.08);
+  --danger-line: rgba(207, 42, 42, 0.4);
+  --danger-solid: #cf2a2a;
 
-  /* Space (4px module; tag fields sit on it) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
-
-  /* Shape */
-  --radius-s: 2px;
-  --radius-m: 3px;
-  --hairline: 1px;
-  --tag-clip: 14px; /* the clipped top corners of a tag */
-
-  /* Motion: tags drop and punch, numbers count; nothing loops for decoration */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-drop: cubic-bezier(0.16, 1, 0.3, 1); /* a tag or marker falling into place: fast, then a long settle, no bounce */
-  --dur-fast: 140ms;
-  --dur-med: 260ms;
-  --dur-slow: 480ms;
-
-  /* Layout */
-  --page-max: 1440px;
-  --gutter: clamp(16px, 2.2vw, 32px);
+  --focus: #2b59e0;
+  --overlay: rgba(15, 19, 26, 0.38);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 18px 50px rgba(16, 24, 40, 0.18), 0 0 0 1px rgba(16, 24, 40, 0.04);
 }

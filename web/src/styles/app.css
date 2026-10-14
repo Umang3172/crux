@@ -1,0 +1,245 @@
+/* Page-level rules for the list of investigations and the phone page. */
+
+/* The list's filters */
+.list-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-3);
+  padding: 10px var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: 550;
+  white-space: nowrap;
+  animation: fade var(--t-med) var(--ease);
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast),
+    color var(--t-fast);
+}
+.chip-filter:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.chip-filter.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.chip-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--panel-3);
+  color: var(--text-2);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+.chip-filter.on .chip-count {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+}
+.list-select {
+  width: auto;
+  max-width: 100%;
+  margin-left: auto;
+  height: 28px;
+  font-size: var(--fs-12);
+}
+
+/* The list itself */
+.case-link {
+  color: var(--text);
+}
+.state-in {
+  display: inline-flex;
+  animation: state-in var(--t-med) var(--ease);
+}
+@keyframes state-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+.table.case-table tr.row-in td {
+  animation: row-in 320ms var(--ease);
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+/* On a phone each investigation is a short block instead of a row. */
+@media (max-width: 640px) {
+  .table.case-table thead {
+    display: none;
+  }
+  .table.case-table,
+  .table.case-table tbody {
+    display: block;
+  }
+  .table.case-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "machine state" "finding finding" "belief belief" "who when";
+    gap: 6px var(--s-3);
+    align-items: center;
+    padding: 12px var(--s-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .table.case-table.brief tr {
+    grid-template-areas: "machine state" "finding finding" "belief when";
+  }
+  .table.case-table tr:last-child {
+    border-bottom: 0;
+  }
+  .table.case-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .table.case-table .c-machine {
+    grid-area: machine;
+  }
+  .table.case-table .c-state {
+    grid-area: state;
+    justify-self: end;
+  }
+  .table.case-table .c-finding {
+    grid-area: finding;
+  }
+  .table.case-table .c-belief {
+    grid-area: belief;
+  }
+  .table.case-table .c-belief:empty {
+    display: none;
+  }
+  .table.case-table .c-who {
+    grid-area: who;
+    color: var(--text-2);
+    font-size: var(--fs-12);
+  }
+  .table.case-table .c-when {
+    grid-area: when;
+    justify-self: end;
+    font-size: var(--fs-12);
+  }
+  .table.case-table .belief-cell {
+    min-width: 0 !important;
+  }
+}
+
+/* The phone page: one job, big type, one big button */
+.phone h1 {
+  font-size: var(--fs-28);
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.ph-job,
+.ph-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-5) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+.ph-job {
+  border-color: var(--accent-line);
+}
+.ph-job .eyebrow {
+  color: var(--accent);
+}
+.ph-machine {
+  color: var(--text-2);
+  font-size: var(--fs-16);
+  font-weight: 550;
+}
+.ph-job .muted {
+  font-size: var(--fs-14);
+}
+.ph-steps h2 {
+  font-size: var(--fs-16);
+}
+.ph-steps .steps {
+  font-size: var(--fs-14);
+}
+.ph-action {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: auto calc(-1 * var(--s-4)) calc(-1 * var(--s-4));
+  padding: var(--s-4) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg) 22%);
+}
+.ph-action .btn {
+  height: 56px;
+  border-radius: var(--r-3);
+  font-size: var(--fs-16);
+}
+.ph-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 48px var(--s-4) var(--s-6);
+  text-align: center;
+  animation: rise var(--t-slow) var(--ease);
+}
+.ph-done .muted {
+  max-width: 34ch;
+  font-size: var(--fs-14);
+}
+/* The tick draws itself once, then stays. */
+.ph-tick {
+  width: 72px;
+  height: 72px;
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ph-tick circle {
+  stroke-dasharray: 151;
+  animation: tick-draw 480ms var(--ease) both;
+  fill: var(--ok-soft);
+}
+.ph-tick path {
+  stroke-dasharray: 36;
+  animation: tick-draw 320ms 300ms var(--ease) both;
+}
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: var(--len, 151);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.ph-tick path {
+  --len: 36;
+}

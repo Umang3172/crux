@@ -1,0 +1,631 @@
+/* The moving drawings: the machine, the agents at work, the pipeline and the
+   virtual experiments. Grey by default; a colour means what tokens.css says. */
+
+/* The machine */
+.twin > svg {
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+}
+.twin-part {
+  fill: var(--panel-2);
+  stroke: var(--line-2);
+  stroke-width: 1.4;
+  transition:
+    stroke var(--t-med),
+    fill var(--t-med);
+}
+.twin-part.named,
+.twin-ring.named,
+.twin-ball.named {
+  stroke: var(--warn);
+  fill: var(--warn-soft);
+}
+.twin-base {
+  fill: var(--panel-3);
+  stroke: var(--line-2);
+}
+.twin-fin {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.twin-shaft {
+  fill: var(--panel-3);
+  stroke: var(--line-2);
+  stroke-width: 1.2;
+}
+.twin-inner {
+  fill: var(--bg-2);
+  stroke: var(--line-2);
+  stroke-width: 1.2;
+}
+.twin-flex {
+  fill: var(--line-2);
+}
+.twin-tick {
+  stroke: var(--text-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.twin-belt {
+  stroke: var(--line-2);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 3;
+}
+.twin-rotor {
+  fill: var(--text-3);
+}
+.twin-blade {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+}
+.twin-blade.named {
+  stroke: var(--warn);
+}
+.twin-label {
+  fill: var(--text-3);
+  font-size: 11px;
+  font-weight: 550;
+  text-anchor: middle;
+}
+.twin-note {
+  fill: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.twin-note.asked {
+  fill: var(--accent);
+  font-weight: 600;
+}
+.twin-sensor {
+  fill: var(--panel-3);
+  stroke: var(--text-3);
+  stroke-width: 1.2;
+}
+.twin-sensor.asked {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.twin-wire {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1.2;
+}
+.twin-wire.asked {
+  stroke: var(--accent);
+}
+.twin-ask {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+.twin-zoom {
+  fill: none;
+  stroke: var(--line);
+  stroke-dasharray: 2 4;
+}
+.twin-ring {
+  fill: var(--panel-3);
+  stroke: var(--line-2);
+  stroke-width: 1.4;
+}
+.twin-race {
+  fill: var(--bg-2);
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.twin-bore {
+  fill: var(--bg-2);
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.twin-cage {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+}
+.twin-ball {
+  fill: var(--panel-2);
+  stroke: var(--text-3);
+  stroke-width: 1.2;
+}
+.twin-mark {
+  stroke: var(--text-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.twin-defect {
+  fill: var(--warn);
+}
+.twin-flash {
+  fill: var(--warn);
+  filter: blur(1.5px);
+}
+.twin-pulse {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 1.6;
+}
+.twin-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+.twin-fact b {
+  color: var(--text);
+  font-weight: 600;
+}
+.twin-slow {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+/* The agents at work */
+.stage > svg {
+  width: 100%;
+  height: auto;
+}
+.stage.compact > svg {
+  max-height: 232px;
+}
+/* Drawn small, the stage keeps its names readable and drops the second lines. */
+.stage.compact .stage-node text {
+  font-size: 15px;
+}
+.stage.compact .stage-node text.title {
+  font-size: 19px;
+}
+.stage.compact .stage-node text.sub {
+  display: none;
+}
+.stage-edge {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.4;
+}
+.stage-edge.dashed {
+  stroke-dasharray: 3 4;
+}
+.stage-edge.on {
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  animation: stage-flow 0.6s linear infinite;
+}
+.stage-edge.on.ask {
+  stroke: var(--model);
+}
+.stage-edge.on.answer {
+  stroke: var(--accent);
+}
+/* A paused replay holds still: the lit edge shows where it stopped, without moving. */
+.stage.paused .stage-edge.on {
+  animation-play-state: paused;
+}
+@keyframes stage-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+.stage-node rect {
+  fill: var(--panel-2);
+  stroke: var(--line-2);
+  stroke-width: 1.4;
+  transition:
+    stroke var(--t-fast),
+    fill var(--t-fast);
+}
+.stage-node text {
+  fill: var(--text-2);
+  font-size: 11px;
+  font-weight: 550;
+  text-anchor: middle;
+}
+.stage-node text.title {
+  fill: var(--text);
+  font-size: 13.5px;
+  font-weight: 640;
+}
+.stage-node text.sub {
+  fill: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 450;
+}
+.stage-node.investigator.hot rect {
+  stroke: var(--model);
+  fill: var(--model-soft);
+  filter: drop-shadow(0 0 8px var(--model-line));
+}
+.stage-node.critic.hot rect {
+  stroke: var(--model);
+  fill: var(--model-soft);
+  filter: drop-shadow(0 0 8px var(--model-line));
+}
+.stage-node.engine rect {
+  stroke: var(--accent-line);
+}
+.stage-node.engine.hot rect {
+  stroke: var(--accent);
+  fill: var(--accent-soft);
+  filter: drop-shadow(0 0 10px var(--accent-line));
+}
+.stage-node.gate.hot rect,
+.stage-node.side.hot rect {
+  stroke: var(--text);
+  fill: var(--panel-3);
+}
+.stage-node.thinking rect {
+  animation: stage-think 1.2s ease-in-out infinite;
+}
+@keyframes stage-think {
+  50% {
+    stroke-opacity: 0.35;
+  }
+}
+.stage-packet circle {
+  fill: var(--model);
+}
+.stage-packet .halo {
+  opacity: 0.25;
+}
+.stage-packet.answer circle {
+  fill: var(--accent);
+}
+.stage-sim {
+  fill: var(--sim);
+}
+.stage-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 74px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+.stage.compact .stage-cap {
+  min-height: 58px;
+}
+.stage-cap code {
+  font-weight: 600;
+}
+.stage-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--model-soft);
+  color: var(--model);
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+.stage-asked {
+  color: var(--text-2);
+}
+.stage-said {
+  padding-left: 9px;
+  border-left: 2px solid var(--model-line);
+  font-style: italic;
+}
+.stage-answer {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  color: var(--text);
+  animation: step-in var(--t-med) var(--ease);
+}
+.stage-answer svg {
+  margin-top: 3px;
+  color: var(--accent);
+}
+.stage-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.stage-toolrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.stage-toolrow .stage-who {
+  min-width: 92px;
+  justify-content: center;
+}
+.tool.used {
+  border-color: var(--model-line);
+  color: var(--model);
+}
+.tool.now {
+  border-color: var(--model);
+  background: var(--model);
+  color: var(--bg);
+  font-weight: 700;
+}
+.stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.stage-bar input[type="range"] {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--model);
+}
+
+/* The pipeline */
+.pipe {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+}
+.pipe-node {
+  position: relative;
+  flex: 1 0 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  text-align: center;
+}
+.pipe-node::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: calc(-50% + 18px);
+  right: calc(50% + 18px);
+  height: 2px;
+  background: var(--line);
+}
+.pipe-node:first-child::before {
+  display: none;
+}
+.pipe-node.done::before,
+.pipe-node.now::before {
+  background: var(--accent);
+}
+.pipe-node.now::before {
+  background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 12px);
+  background-size: 24px 2px;
+  animation: pipe-flow 0.7s linear infinite;
+}
+@keyframes pipe-flow {
+  to {
+    background-position: 24px 0;
+  }
+}
+.pipe-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text-3);
+}
+.pipe-node.done .pipe-dot {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pipe-node.now .pipe-dot {
+  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  animation: pipe-now 1.6s ease-in-out infinite;
+}
+.pipe-node.now.person .pipe-dot {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: var(--bg);
+  box-shadow: 0 0 0 4px var(--warn-soft);
+}
+.pipe-node.ok .pipe-dot {
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+@keyframes pipe-now {
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.pipe-node b {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1.25;
+}
+.pipe-node.done b,
+.pipe-node.now b,
+.pipe-node.ok b {
+  color: var(--text);
+}
+.pipe-node span {
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  line-height: 1.3;
+}
+.pipe-node.skip {
+  opacity: 0.42;
+}
+
+/* The virtual experiments */
+.theatre {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: var(--s-3);
+}
+.exp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+  text-align: left;
+  color: inherit;
+  transition:
+    border-color var(--t-fast),
+    opacity var(--t-med);
+}
+.exp:hover {
+  border-color: var(--line-2);
+}
+.exp.on {
+  border-color: var(--sim);
+  box-shadow: 0 0 0 1px var(--sim) inset;
+}
+.exp.out {
+  opacity: 0.5;
+}
+.exp.wait {
+  opacity: 0.35;
+}
+.exp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.exp-head b {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.exp svg {
+  width: 100%;
+  height: 54px;
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+}
+.exp-real {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+.exp-sim {
+  fill: none;
+  stroke: var(--sim);
+  stroke-width: 1.4;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.exp-sim.run {
+  animation: exp-draw 0.3s linear both;
+}
+@keyframes exp-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+.exp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-edge.on,
+  .exp-sim.run,
+  .pipe-node.now::before,
+  .pipe-node.now .pipe-dot,
+  .stage-node.thinking rect {
+    animation: none;
+  }
+}
+
+.twin-blade.paddle {
+  fill: var(--panel-3);
+  stroke-width: 1.6;
+}
+
+/* A machine at a glance */
+.glyph {
+  flex: none;
+}
+.glyph-base {
+  fill: var(--line-2);
+}
+.glyph-body {
+  fill: var(--panel-3);
+  stroke: var(--line-2);
+  stroke-width: 1.2;
+}
+.glyph-hole {
+  fill: var(--panel);
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.glyph-fin {
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.glyph-shaft {
+  fill: var(--line-2);
+}
+.glyph-ball {
+  fill: var(--panel);
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+.glyph-blade {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.glyph-hub {
+  fill: var(--text-2);
+}
+.glyph-wave {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.glyph-rotor.spin {
+  animation: glyph-spin 3.2s linear infinite;
+}
+@keyframes glyph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.glyph.tone-warn .glyph-body {
+  stroke: var(--warn);
+}
+.glyph.tone-danger .glyph-body {
+  stroke: var(--danger);
+}
+.glyph.tone-accent .glyph-body {
+  stroke: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .glyph-rotor.spin {
+    animation: none;
+  }
+}

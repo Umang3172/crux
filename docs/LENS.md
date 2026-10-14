@@ -11,7 +11,7 @@ reads three things from that one clip:
 
 The result is plain sentences, each traceable to a number, and the one
 catalog check that would settle what is still possible. Code:
-`src/hypothesis_engine/lens/`, API `api/lens.py`, screen `web/src/lens/`.
+`src/hypothesis_engine/lens/`, API `api/lens.py`, screen `web/src/pages/Lens.tsx`.
 
 ## Motion: every pixel is a displacement sensor
 

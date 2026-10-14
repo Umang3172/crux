@@ -1,13 +1,14 @@
-import { Link } from "react-router";
+import { Compass } from "lucide-react";
+import { Card, Empty, LinkButton } from "../ui/kit";
 
 export default function NotFound() {
   return (
-    <section style={{ display: "grid", gap: "var(--space-3)", maxWidth: 560 }}>
-      <h1 style={{ fontSize: "var(--step-3)" }}>Nothing here</h1>
-      <p style={{ color: "var(--ink-2)" }}>This link doesn't lead to a page of this demo.</p>
-      <p>
-        <Link to="/">Back to the plant</Link>
-      </p>
-    </section>
+    <div className="page">
+      <Card>
+        <Empty icon={<Compass size={18} />} title="Page not found" action={<LinkButton to="/" variant="primary">Go home</LinkButton>}>
+          The link may be from an older version.
+        </Empty>
+      </Card>
+    </div>
   );
 }

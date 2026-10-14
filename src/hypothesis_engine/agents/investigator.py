@@ -136,6 +136,13 @@ class ToolStep:
     agent: str = "investigator"  # which of the two agents made it
 
 
+#: Called as a run happens: once when a tool call is made (its `result` is still
+#: None) and once more when the tools answer it. The number is the step's place in
+#: the run. A screen uses it to show a run while it is going; nothing in the loop
+#: depends on it.
+StepHook = Callable[[int, ToolStep], None]
+
+
 @dataclass
 class InvestigationRun:
     """One run of the loop, for the screen and for tests."""
@@ -258,6 +265,7 @@ async def _drive(
     max_rounds: int,
     max_model_calls: int,
     max_seconds: float,
+    on_step: StepHook | None = None,
 ) -> None:
     """One pass of the workflow with one model, recording what it did on `run`."""
     from google.adk.agents.invocation_context import LlmCallsLimitExceededError
@@ -288,13 +296,17 @@ async def _drive(
                 for call in event.get_function_calls():
                     run.tool_calls.append((call.name, dict(call.args or {})))
                     run.steps.append(ToolStep(call.name, dict(call.args or {}), by=name, agent=who))
+                    if on_step is not None:
+                        on_step(len(run.steps) - 1, run.steps[-1])
                 for response in event.get_function_responses():
                     answer = dict(response.response or {})
                     answer = answer.get("result", answer)
                     # The answer belongs to the oldest call of that tool still open.
-                    for step in run.steps:
+                    for index, step in enumerate(run.steps):
                         if step.tool == response.name and step.result is None:
                             step.result = answer if isinstance(answer, dict) else {"value": answer}
+                            if on_step is not None:
+                                on_step(index, step)
                             break
                 for part in (event.content.parts if event.content else None) or []:
                     if getattr(part, "thought", False) and part.text:
@@ -312,6 +324,7 @@ async def investigate_async(
     max_rounds: int = MAX_ROUNDS,
     max_model_calls: int = MAX_MODEL_CALLS,
     max_seconds: float = MAX_SECONDS,
+    on_step: StepHook | None = None,
 ) -> InvestigationRun:
     """Run the investigator on an open case until the gate stops it, or until it
     spends its model calls or its time.
@@ -328,7 +341,7 @@ async def investigate_async(
     run = InvestigationRun(model=name)
     budgets = (max_rounds, max_model_calls, max_seconds)
     try:
-        await _drive(store, case_id, model, name, run, *budgets)
+        await _drive(store, case_id, model, name, run, *budgets, on_step)
     except Exception as exc:
         if not isinstance(model, str):
             raise  # the offline investigator itself failed: a bug, not an outage
@@ -336,7 +349,9 @@ async def investigate_async(
 
         why = f"{type(exc).__name__}: {exc}".strip().rstrip(":")
         run.fallback = f"{name} could not finish the case ({why[:240]})."
-        await _drive(store, case_id, ScriptedInvestigator(), "offline-scripted", run, *budgets)
+        await _drive(
+            store, case_id, ScriptedInvestigator(), "offline-scripted", run, *budgets, on_step
+        )
     if run.stopped is not None:
         _close_by_rule(store, case_id, run.stopped)
     run.case = InvestigatorTools(store).get_case(case_id)

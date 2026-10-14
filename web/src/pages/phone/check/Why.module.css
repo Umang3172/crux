@@ -1,9 +1,0 @@
-.why {
-  font-size: var(--step-1);
-  line-height: 1.35;
-  text-wrap: pretty;
-}
-
-.why strong {
-  font-weight: 600;
-}

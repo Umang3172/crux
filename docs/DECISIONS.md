@@ -823,3 +823,26 @@ backed: the check decides. Every draft the check rejects stays listed.
 first; after the loop 10 sentences stood and 5 rejected drafts were listed.
 The limit of the check is unchanged (ADR-0021).
 
+## ADR-0031 · A run can be read while it happens, and the machine's parts come from its spec
+
+**Context.** `/agent/replay` returns an agent run when it has finished. With a
+live model that is a minute of nothing on screen; a screen could only replay a
+record. And a drawing of the machine had no source for its numbers: the
+bearing's geometry and the rates of its parts were in the code and in no
+response, so a screen would have had to carry its own copy.
+
+**Decision.** `investigate_async` takes an optional hook, called when a tool
+call is made and again when the tools answer it. `POST /agent/stream` runs the
+same case as `/agent/replay` and sends those steps as server-sent events, then
+the finished run. The words in a step are written by the same code either way
+(`agents/trace.py`). `GET /machine` returns the machine's spec and, per turn of
+the shaft, how far the cage turns, how often a ball spins and how often a ball
+passes a point on each ring, from `physics/frequencies.py`.
+
+**Consequence.** Nothing in the loop depends on the hook, and `/agent/replay`
+is unchanged. A screen can show the active agent, the tool and the answer as
+they occur, and a drawing in which each part turns at the engine's own ratio:
+a ball then meets a damaged spot at the rate the engine listens for, without
+that rate being typed anywhere. Streamed with the offline stand-ins only; not
+with Gemini.
+

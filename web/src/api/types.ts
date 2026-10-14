@@ -488,4 +488,20 @@ export type RunParams = {
   severity: number;
   seed: number;
   extra_noise: number;
+  /** Shaft speed. Left out, the model runs at its own nominal speed. */
+  rpm?: number;
 };
+
+/** The pump model's parts and how fast each moves for one turn of the shaft (`GET /machine`). */
+export type MachineModel = {
+  id: string;
+  name: string;
+  nominal_rpm: number;
+  sample_rate_hz: number;
+  blade_count: number;
+  bearing: { label: string; rolling_elements: number; ball_diameter_mm: number; pitch_diameter_mm: number; contact_angle_deg: number };
+  /** ftf: turns of the cage; bsf: spins of a ball; bpfo, bpfi: balls passing a point on the outer and inner ring. */
+  per_shaft_turn: { ftf: number; bpfo: number; bpfi: number; bsf: number };
+  auxiliary_pump: { belt_ratio: number; lobes: number; passes_per_shaft_turn: number };
+};
+
