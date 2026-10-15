@@ -2,10 +2,11 @@
 // what TimesFM expected from the history before it, as a daily job would run.
 
 import { useRef } from "react";
-import type { AnomaliesView } from "../../api/series.types";
+import type { AnomaliesView, BenchView } from "../../api/series.types";
 import type { Async } from "../../lib/hooks";
 import { Seg } from "../../ui/kit";
 import { MadeLine } from "./Made";
+import { Trust } from "./Trust";
 import { Slot, useFitHeight } from "./slot";
 import { Legend, TimeChart } from "./TimeChart";
 
@@ -14,10 +15,12 @@ function Normal({ n }: { n: number | null | undefined }) {
   return n === undefined || n === null ? null : <span className="tn-normal"> (normal week {n})</span>;
 }
 
-function Chart({ view, signal, set }: { view: AnomaliesView; signal: string; set: (k: string, v: string) => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const height = useFitHeight(box, 150);
+function Chart({ view, signal, set, bench }: { view: AnomaliesView; signal: string; set: (k: string, v: string) => void; bench?: BenchView | null }) {
   const s = view.signals.find((x) => x.id === signal) ?? view.signals[0];
+  // The benchmark scores the check on the loaded share, so it speaks for that chart only.
+  const scored = Boolean(bench) && s?.id === "loaded";
+  const box = useRef<HTMLDivElement>(null);
+  const height = useFitHeight(box, scored ? 182 : 150);
   if (!s) return null;
   const counted = s.counted ?? s.flagged;
   const kept = new Set(counted);
@@ -71,15 +74,26 @@ function Chart({ view, signal, set }: { view: AnomaliesView; signal: string; set
         ]}
       />
       <MadeLine made={view.made} what={`${view.made.model} in BigQuery, each day held to what the days before it predicted`} />
+      {scored && <Trust bench={bench} what="detector" />}
     </>
   );
 }
 
-export function Unusual({ anomalies, signal, set }: { anomalies: Async<AnomaliesView>; signal: string; set: (k: string, v: string) => void }) {
+export function Unusual({
+  anomalies,
+  signal,
+  set,
+  bench,
+}: {
+  anomalies: Async<AnomaliesView>;
+  signal: string;
+  set: (k: string, v: string) => void;
+  bench?: BenchView | null;
+}) {
   return (
     <div className="tn-panel tn-plot">
       <Slot a={anomalies} rows={6}>
-        {(v) => <Chart view={v} signal={signal} set={set} />}
+        {(v) => <Chart view={v} signal={signal} set={set} bench={bench} />}
       </Slot>
     </div>
   );

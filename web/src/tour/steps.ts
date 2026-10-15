@@ -123,7 +123,7 @@ const STEPS: TourStep[] = [
   {
     id: "record",
     route: "/proof",
-    target: "#result",
+    target: "#bench-diagnosis",
     title: "It would rather say \"I can't tell\"",
     body: `On ${TOTAL} hard synthetic tests it named a wrong cause ${CRUX.wrong} times, and declined ${CRUX.cantTell} times rather than guess.`,
   },

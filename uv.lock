@@ -1081,6 +1081,9 @@ series = [
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-geminidataanalytics" },
 ]
+timesfm = [
+    { name = "google-cloud-bigquery" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1089,6 +1092,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-adk", marker = "extra == 'llm'", specifier = ">=1.0" },
     { name = "google-cloud-bigquery", marker = "extra == 'series'", specifier = ">=3.20" },
+    { name = "google-cloud-bigquery", marker = "extra == 'timesfm'", specifier = ">=3.20" },
     { name = "google-cloud-geminidataanalytics", marker = "extra == 'series'", specifier = ">=0.2" },
     { name = "google-genai", marker = "extra == 'llm'", specifier = ">=1.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
@@ -1108,7 +1112,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-provides-extras = ["llm", "jev", "forecast", "series", "dev", "lens"]
+provides-extras = ["llm", "jev", "forecast", "timesfm", "series", "dev", "lens"]
 
 [[package]]
 name = "idna"

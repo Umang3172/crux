@@ -297,11 +297,13 @@ DEFAULT_MODEL = DATA_ROOT / "forecast" / "model.pkl"
 
 
 def get_forecaster(path: str | Path | None = None) -> Forecaster:
-    """The learned model if it was trained and scikit-learn is installed, else the trend."""
+    """The learned model (calibrated, if trained so) when scikit-learn is installed, else the trend."""
+    from .calibrate import load
+
     p = Path(path) if path is not None else DEFAULT_MODEL
     if p.exists():
         try:
-            return QuantileGBM.load(p)
+            return load(p)
         except ImportError:
             pass
     return TrendExtrapolation()

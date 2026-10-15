@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..series import ask as ask_data
+from ..series import bench as bench_board
 from ..series import snapshot
 
 router = APIRouter(prefix="/series", tags=["time series"])
@@ -240,6 +241,17 @@ def changes(source: str, preset: str) -> dict[str, Any]:
 @router.get("/{source}/summary", response_model=SummaryView)
 def summary(source: str, preset: str) -> dict[str, Any]:
     return _view(source, preset, "summary")
+
+
+@router.get("/{source}/bench")
+def bench(source: str) -> dict[str, Any]:
+    """Every day of the record scored: the next-day forecasts and the leak detectors."""
+    if source != "metro":
+        raise HTTPException(404, f"no benchmark for {source}")
+    try:
+        return bench_board.load()
+    except FileNotFoundError as exc:
+        raise HTTPException(404, f"no recorded history on this server: {exc}") from None
 
 
 @router.get("/ask/examples", response_model=Examples)

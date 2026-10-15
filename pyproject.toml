@@ -32,6 +32,11 @@ jev = [
 forecast = [
     "scikit-learn>=1.4",
 ]
+# Google's TimesFM through BigQuery, a forecaster that needs Google Cloud's
+# login. Only `scripts/forecast.py timesfm` and an opted-in server use it.
+timesfm = [
+    "google-cloud-bigquery>=3.20",
+]
 # The Trends tab's Google run: BigQuery (TimesFM 3.0, ARIMA_PLUS, contribution
 # analysis) and the Conversational Analytics API. Only `scripts/series.py` and a
 # server with CRUX_SERIES_LIVE or CRUX_SERIES_ASK set use it; snapshots need none.

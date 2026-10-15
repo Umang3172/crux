@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { ChartLine } from "lucide-react";
 import { useSearchParams } from "react-router";
-import { askExamples, seriesAnomalies, seriesCatalog, seriesChanges, seriesForecast, seriesSummary } from "../../api/series";
+import { askExamples, seriesAnomalies, seriesBench, seriesCatalog, seriesChanges, seriesForecast, seriesSummary } from "../../api/series";
 import type { AnomaliesView, ChangesView, ForecastView, Source, SummaryView } from "../../api/series.types";
 import { useAsync } from "../../lib/hooks";
 import { Callout, Card, Empty, ErrorState, PageHead, Seg, SkeletonRows, Tabs } from "../../ui/kit";
@@ -85,6 +85,7 @@ export default function TrendsPage() {
   const changes = useAsync((sig) => (ready && metro && preset !== "normal" ? seriesChanges(sid, preset, sig) : skip<ChangesView>()), [sid, preset, metro]);
   const summary = useAsync((sig) => (ready ? seriesSummary(sid, preset, sig) : skip<SummaryView>()), [sid, preset]);
   const examples = useAsync((sig) => askExamples(sig), []);
+  const bench = useAsync((sig) => (ready && metro ? seriesBench(sid, sig) : skip<null>()), [sid, metro]);
 
   const made = summary.data?.made ?? anomalies.data?.made;
   const head = (
@@ -132,11 +133,11 @@ export default function TrendsPage() {
       {screen !== "ask" && !source.available && <Callout tone="warn">This server holds no recorded history for this machine, so only saved Google results can show.</Callout>}
 
       <div className="tn-screen" key={screen}>
-        {screen === "overview" && <Overview source={source} preset={source.presets.find((p) => p.id === preset)} summary={summary} changes={changes} />}
+        {screen === "overview" && <Overview source={source} preset={source.presets.find((p) => p.id === preset)} summary={summary} changes={changes} bench={bench.data} />}
         {screen === "forecast" && (
-          <Forecast forecast={forecast} normal={preset !== "normal" ? (normalForecast.data ?? undefined) : undefined} spans={source.spans} span={span} signal={signal} signals={source.signals} set={set} />
+          <Forecast forecast={forecast} normal={preset !== "normal" ? (normalForecast.data ?? undefined) : undefined} spans={source.spans} span={span} signal={signal} signals={source.signals} set={set} bench={bench.data} />
         )}
-        {screen === "unusual" && <Unusual anomalies={anomalies} signal={signal} set={set} />}
+        {screen === "unusual" && <Unusual anomalies={anomalies} signal={signal} set={set} bench={bench.data} />}
         {screen === "ask" && examples.data && <Ask examples={examples.data} />}
       </div>
     </div>

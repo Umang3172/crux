@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -72,6 +72,12 @@ class PartReplay:
     level: list[float]  # RMS as a multiple of its healthy mean
     time_left: list[TimeLeft]
     method: str
+    # Share of moments the same method's range held the truth on every other
+    # failed part, each forecast by a model that never saw that part. None
+    # until `with_record` has scored them. Never this part's own score: that
+    # would give away how its life ended.
+    held_elsewhere: float | None = None
+    held_parts: int = 0
 
 
 @dataclass(frozen=True)
@@ -182,6 +188,31 @@ def held_out(
     return for_part
 
 
+def held_share(p: PartReplay) -> float | None:
+    """Share of this part's ranges that held the truth, if it failed and was forecast."""
+    if not p.failed or not p.time_left:
+        return None
+    return float(np.mean([t.p10_h <= p.end_h - t.at_h <= t.p90_h for t in p.time_left]))
+
+
+def with_record(machines: Sequence[MachineReplay]) -> list[MachineReplay]:
+    """Each part told how its method's ranges did on the other failed parts.
+
+    Each other part counts once, however many ranges it has, as in
+    `evaluate.py`. Parts on a different method are not counted.
+    """
+    parts = [p for m in machines for p in m.parts]
+    scores = {(p.part, p.method): s for p in parts if (s := held_share(p)) is not None}
+
+    def record(p: PartReplay) -> PartReplay:
+        other = [s for (part, method), s in scores.items() if method == p.method and part != p.part]
+        if not other:
+            return p
+        return replace(p, held_elsewhere=round(float(np.mean(other)), 4), held_parts=len(other))
+
+    return [replace(m, parts=[record(p) for p in m.parts]) for m in machines]
+
+
 def available_runs(directory: Path = FORECAST_DIR) -> list[RunHealth]:
     """Every health table built so far, with snapshots after the machine stopped removed."""
     found = []
@@ -224,4 +255,4 @@ def load_or_build(path: Path | None = None) -> list[dict]:
     if path.exists():
         return json.loads(path.read_text())
     runs = available_runs(path.parent)
-    return to_json(build_all(runs, lambda _h: TrendExtrapolation()))
+    return to_json(with_record(build_all(runs, lambda _h: TrendExtrapolation())))

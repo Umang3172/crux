@@ -431,6 +431,13 @@ _WORDS = {
     "loaded": "running loaded",
     "idle": "running idle",
     "off": "motor off",
-    "tower_0": "dryer tower 0",
-    "tower_1": "dryer tower 1",
+    "tower_0": "while drying tower 0 worked",
+    "tower_1": "while drying tower 1 worked",
 }
+
+
+def plain_segment(label: str) -> str:
+    """A saved label in today's words: a tower names a stretch of time, not a part to inspect."""
+    for k in ("0", "1"):
+        label = label.replace(f"dryer tower {k}", _WORDS[f"tower_{k}"])
+    return label

@@ -57,7 +57,11 @@ uv run python scripts/forecast.py replay     # writes data/forecast/replay.json
 ```
 
 `replay` gives every part a time-left model fitted on every *other* failed
-part, so no range on screen comes from a model that saw that bearing. Without
+part, so no range on screen comes from a model that saw that bearing. By default
+that model is the calibrated one (below). Each part also carries
+`held_elsewhere`: how often the same method's ranges held the truth on the
+*other* failed parts, so the screen can say how far to trust a range without
+giving away how this part's life ended. Without
 `replay.json` the API falls back to the trend. `GET /maintenance/machines` and
 `GET /maintenance/machines/{id}` serve it (`api/maintenance.py`); with no health
 tables on the server the list is empty and says why.
@@ -96,8 +100,59 @@ third of the time even the early end is too late.
 
 **Learned at one lab, used at another:** trained on XJTU-SY and tested on IMS
 with no refitting, gbm-residual scores 0.45 / 32% / 17% and gbm-direct 0.41 /
-22% / 2%; trained on three IMS bearings instead (development run), gbm-residual
+22% / 2% (average-life 0.45 / 8% / 9%, trend 1.76 / 20% / 74%); trained on three IMS bearings instead (development run), gbm-residual
 scored 1.59 / 43% / 28%. Four IMS bearings: a hint, not proof.
+
+**Calibrated ranges (13 Oct 2026, `calibrate.py`):** every range was too
+narrow, so each end is moved by what held-out bearings showed. Inside each
+fold, every training bearing is left out in turn and forecast by a model fitted
+on the rest; each end then moves by the amount 90% of those moments fell
+within, in log(1 + minutes), every bearing weighing the same. This is
+conformalised quantile regression (Romano, Patterson and Candes, NeurIPS 2019)
+done by bearing. p50 does not move, so the error does not change.
+`scripts/forecast.py calibrate` reproduces it:
+
+| method | split | median error / life after alarm | inside p10–p90 (aim 80%) | p10 too late |
+|---|---|---|---|---|
+| trend | XJTU-SY, one held out | 0.69 | 27% | 49% |
+| trend, calibrated | XJTU-SY, one held out | 0.69 | 79% | 11% |
+| gbm-residual | XJTU-SY, one held out | 0.60 | 42% | 33% |
+| **gbm-residual, calibrated (shipped)** | XJTU-SY, one held out | 0.60 | **80%** | **9%** |
+| trend | trained on XJTU-SY, tested on IMS | 1.76 | 20% | 74% |
+| trend, calibrated | trained on XJTU-SY, tested on IMS | 1.76 | 76% | 22% |
+| gbm-residual | trained on XJTU-SY, tested on IMS | 0.45 | 32% | 17% |
+| gbm-residual, calibrated | trained on XJTU-SY, tested on IMS | 0.45 | 65% | 8% |
+
+The ranges now hold what they claim on bearings from the same lab, and the
+dangerous mistake (even the early end too late) falls from a third to under a
+tenth. At another lab they hold 65%, short of 80%: four bearings, and the
+correction was measured at XJTU-SY only. The guarantee in the paper needs
+exchangeable points, and moments of one bearing are not, so this is a
+correction measured on held-out bearings, not a guarantee.
+
+**Google's TimesFM (13 Oct 2026, `timesfm.py`):** a pretrained time-series model,
+run through BigQuery's `AI.FORECAST` with no training, so leave-one-out cannot
+leak. It forecasts log(peak) with an 80% band; the time left is when each edge
+of the band reaches the danger line, with the trend's cap. The settings were
+fixed before the run (80% band, 1,024 steps ahead, 2,048 past points). The
+"running maximum" signal was added after TimesFM, on the recorded peak,
+forecast a fault's jump falling back on one test bearing (Bearing2_4), as if
+it were noise. `scripts/forecast.py timesfm` reproduces it:
+
+| method | XJTU-SY, one held out: error / inside / p10 too late | IMS: error / inside / p10 too late |
+|---|---|---|
+| gbm-residual (ours, before calibration) | 0.60 / 42% / 33% | 0.45 / 32% / 17% |
+| TimesFM 2.5, recorded peak | 6.16 / 24% / 67% | 28.74 / 7% / 93% |
+| TimesFM 2.5, running maximum | 5.97 / 29% / 62% | 28.71 / 11% / 89% |
+| TimesFM 3.0, recorded peak | 4.56 / 43% / 45% | 28.74 / 5% / 95% |
+| TimesFM 3.0, running maximum | 2.43 / 58% / 29% | 17.97 / 19% / 81% |
+
+TimesFM is not shipped. It expects a series to keep the shape it has had, and
+a bearing on its way to failure does not: its forecast of a growing fault
+levels off or falls back, so the crossing it implies comes far too late or
+never. Our model learned from bearings that did fail. TimesFM would suit a
+signal that repeats (a machine's daily load, a plant's energy use), not a
+fault on its way to failure.
 
 **MetroPT-3:** with the first month as normal, the unchanged watcher warned
 before 1 of 4 air leaks (22 hours ahead), came during 2 and missed 1, with
@@ -208,13 +263,19 @@ a time, is the test.
 uv pip install -e ".[forecast]"
 uv run python scripts/forecast.py table      # once; reads every snapshot (slow)
 uv run python scripts/forecast.py evaluate   # writes data/forecast/results.{json,md}
-uv run python scripts/forecast.py train      # writes data/forecast/model.pkl
+uv run python scripts/forecast.py calibrate  # writes data/forecast/results_calibrated.{json,md}
+uv run python scripts/forecast.py train --calibrated  # writes data/forecast/model.pkl
 ```
 
 `get_forecaster()` uses `data/forecast/model.pkl` when it exists and
 scikit-learn is installed; otherwise it uses `trend`. Everything runs locally.
-A cloud backend (for example a hosted time-series model) would plug in behind
-the same `Forecaster` protocol.
+
+TimesFM needs Google Cloud's login and the `timesfm` extra
+(`uv pip install -e ".[timesfm]"`); `scripts/forecast.py timesfm` runs it beside
+the others. The query runs in `asia-south1` (`BIGQUERY_LOCATION` overrides it);
+the series goes in as a query parameter, so no table is created, and on 13 Oct
+2026 BigQuery billed 0 bytes for it. It plugs in behind the same `Forecaster`
+protocol.
 
 ## Reading the results
 
@@ -250,6 +311,8 @@ A learned model is only worth shipping if it beats both `average-life` and
 | `ROLL_DAYS`, `GAP_H` (MetroPT-3) | 28 days, 24 h | chosen before the run; see `metropt.py` |
 | `BANDS_HZ` | 0–1, 1–3, 3–6, 6–10 kHz | chosen; 10 kHz is the IMS Nyquist limit |
 | GBM settings | 300 trees, rate 0.05, 15 leaves, 20 per leaf | chosen once, not tuned on held-out bearings |
+| `ALPHA` (calibration) | 0.1 at each end | the 10th and 90th percentiles every forecaster claims |
+| TimesFM `HORIZON`, `CONTEXT`, `CONFIDENCE` | 1,024 steps, 2,048 points, 0.8 | TimesFM 3.0's limits (BigQuery AI.FORECAST reference, read 13 Oct 2026), used for 2.5 too; 0.8 makes the band p10–p90 |
 
 ## Known limits
 

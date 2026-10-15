@@ -891,3 +891,85 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------ Scoreboard */
+
+.sb-lead h2 {
+  font-size: var(--fs-20);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.sb-lead p {
+  max-width: 68ch;
+  margin-top: var(--s-1);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.sb-data {
+  padding: 10px var(--s-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+}
+.sb-table th:first-child,
+.sb-table td:first-child {
+  width: 100%;
+}
+.sb-method {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px var(--s-2);
+}
+.sb-table tr.sb-ships td {
+  background: var(--ok-soft);
+}
+.sb-table tr.sb-after td {
+  color: var(--text-3);
+}
+.sb-aim-label {
+  color: var(--text-3);
+}
+.sb-aim {
+  display: inline-grid;
+  grid-template-columns: 3.2em 56px;
+  align-items: center;
+  gap: var(--s-2);
+}
+.sb-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+}
+.sb-verdict {
+  color: var(--text);
+}
+.sb-also {
+  color: var(--text-2);
+}
+.sb-run {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  color: var(--text-3);
+}
+.sb-run code {
+  overflow-x: auto;
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .sb-aim {
+    display: inline;
+  }
+  .sb-aim .meter,
+  .sb-aim-label {
+    display: none;
+  }
+}
