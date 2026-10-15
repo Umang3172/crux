@@ -6,10 +6,13 @@
     uv run python scripts/forecast.py train      # fit on all XJTU-SY -> data/forecast/model.pkl
     uv run python scripts/forecast.py replay     # what the maintenance screen shows -> replay.json
     uv run python scripts/forecast.py metro      # the watcher on MetroPT-3's air compressor
+    uv run python scripts/forecast.py timesfm    # Google's TimesFM in BigQuery, same test
+    uv run python scripts/forecast.py calibrate  # ranges widened on held-out bearings, same test
 
 Needs the run-to-failure data a human downloaded into data/xjtu/ and data/ims/
-(docs/FORECAST.md). Touches no network. Results land in data/forecast/, which
-git ignores: they are derived from data we do not redistribute.
+(docs/FORECAST.md). Only `timesfm` touches the network: it needs Google Cloud's
+login and the timesfm extra. Results land in data/forecast/, which git ignores:
+they are derived from data we do not redistribute.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import sys
 from datetime import UTC, datetime
 
 from hypothesis_engine.forecast import health, metropt, replay, runs
+from hypothesis_engine.forecast.calibrate import Calibrated
 from hypothesis_engine.forecast.evaluate import as_records, leave_one_out, summarise, transfer
 from hypothesis_engine.forecast.models import (
     DEFAULT_MODEL,
@@ -38,6 +42,7 @@ METHODS = {
     "trend": TrendExtrapolation,
     "gbm-direct": lambda: QuantileGBM("direct"),
     "gbm-residual": lambda: QuantileGBM("residual"),
+    "gbm-residual-calibrated": lambda: Calibrated(lambda: QuantileGBM("residual")),
 }
 
 
@@ -168,6 +173,8 @@ def cmd_train(args: argparse.Namespace) -> int:
         print("no XJTU-SY health table: run `table` first", file=sys.stderr)
         return 1
     model = QuantileGBM(args.target)
+    if args.calibrated:
+        model = Calibrated(lambda: QuantileGBM(args.target))
     model.fit(_load("xjtu"))
     model.save(DEFAULT_MODEL)
     print(f"wrote {DEFAULT_MODEL} ({model.name})")
@@ -180,6 +187,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         print("no health tables: run `table` first", file=sys.stderr)
         return 1
     machines = replay.build_all(found, replay.held_out(METHODS[args.method], found))
+    machines = replay.with_record(machines)
     replay.save(machines)
     print(
         f"wrote {replay.REPLAY_FILE}: {len(machines)} machines, {args.method}, each part held out"
@@ -232,6 +240,121 @@ def cmd_metro(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_timesfm(args: argparse.Namespace) -> int:
+    """TimesFM beside the trend and the shipped model, on the same held-out bearings.
+
+    TimesFM learns nothing from our bearings, so on IMS it is the same model as
+    on XJTU-SY; the learned model is trained on XJTU-SY and tested on IMS.
+    """
+    from hypothesis_engine.forecast.timesfm import TimesFMForecaster
+
+    if not TABLES["xjtu"].exists():
+        print("no xjtu health table: run `table --dataset xjtu` first", file=sys.stderr)
+        return 1
+    xjtu = [h for h in _load("xjtu") if h.failed]
+    ims = [h for h in _load("ims") if h.failed] if TABLES["ims"].exists() else []
+    methods: dict = {
+        "trend": TrendExtrapolation,
+        "gbm-residual": lambda: QuantileGBM("residual"),
+    }
+    for model in args.models:
+        for signal in args.signals:
+            methods[TimesFMForecaster(model, signal, query=lambda *a: {}).name] = (
+                lambda m=model, s=signal: TimesFMForecaster(m, s)
+            )
+    report: dict = {"generated": datetime.now(UTC).isoformat(timespec="seconds"), "methods": {}}
+    head = "| method | bearings scored | median error / life after alarm | inside p10-p90 (aim 80%) | p10 too late |"
+    rule = "|---|---|---|---|---|"
+    loo_lines = [f"Leave one bearing out on XJTU-SY ({len(xjtu)} failed bearings)", "", head, rule]
+    ims_lines = ["IMS: trained on XJTU-SY where there is training; TimesFM as is", "", head, rule]
+    per_run: dict[str, dict[str, float | None]] = {}
+    for name, make in methods.items():
+        print(f"{name}: XJTU-SY", flush=True)
+        loo = leave_one_out(xjtu, make)
+        s = summarise(loo)
+        entry = {"xjtu": {"summary": s.__dict__, "runs": as_records(loo)}}
+        loo_lines.append(
+            f"| {name} | {s.runs_scored} | {_fmt(s.norm_error)} | {_fmt(s.coverage, True)} | {_fmt(s.late, True)} |"
+        )
+        for r in loo:
+            per_run.setdefault(r.run_id, {})[name] = r.norm_error
+        if ims:
+            print(f"{name}: IMS", flush=True)
+            tr = transfer(xjtu, ims, make)
+            t = summarise(tr)
+            entry["ims"] = {"summary": t.__dict__, "runs": as_records(tr)}
+            ims_lines.append(
+                f"| {name} | {t.runs_scored} | {_fmt(t.norm_error)} | {_fmt(t.coverage, True)} | {_fmt(t.late, True)} |"
+            )
+        report["methods"][name] = entry
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / f"results_timesfm{args.tag}.json").write_text(json.dumps(report, indent=2))
+    names = list(methods)
+    run_lines = [
+        "Median error / life after alarm, per XJTU-SY bearing",
+        "",
+        "| bearing | " + " | ".join(names) + " |",
+        "|---|" + "---|" * len(names),
+    ]
+    for run_id in sorted(per_run):
+        run_lines.append(
+            f"| {run_id} | " + " | ".join(_fmt(per_run[run_id].get(n)) for n in names) + " |"
+        )
+    text = "\n".join([*loo_lines, "", *(ims_lines if ims else []), "", *run_lines])
+    (OUT / f"results_timesfm{args.tag}.md").write_text(text + "\n")
+    print(text)
+    print(f"\nwrote {OUT}/results_timesfm{args.tag}.{{json,md}}")
+    return 0
+
+
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    """Each forecaster beside its calibrated self, on the same held-out bearings.
+
+    Calibration is fitted inside each fold, on the training bearings only, so
+    the held-out bearing never sets its own correction.
+    """
+    if not TABLES["xjtu"].exists():
+        print("no xjtu health table: run `table --dataset xjtu` first", file=sys.stderr)
+        return 1
+    xjtu = [h for h in _load("xjtu") if h.failed]
+    ims = [h for h in _load("ims") if h.failed] if TABLES["ims"].exists() else []
+    trend_cache: dict = {}
+    methods: dict = {
+        "trend": TrendExtrapolation,
+        "trend-calibrated": lambda: Calibrated(TrendExtrapolation, learns=False, cache=trend_cache),
+        "gbm-residual": lambda: QuantileGBM("residual"),
+        "gbm-residual-calibrated": lambda: Calibrated(lambda: QuantileGBM("residual")),
+    }
+    head = "| method | split | bearings scored | median error / life after alarm | inside p10-p90 (aim 80%) | p10 too late |"
+    lines = [f"Calibrated ranges, XJTU-SY one bearing held out ({len(xjtu)} failed)", "", head]
+    lines.append("|---|---|---|---|---|---|")
+    report: dict = {"generated": datetime.now(UTC).isoformat(timespec="seconds"), "methods": {}}
+    for name, make in methods.items():
+        print(f"{name}: XJTU-SY", flush=True)
+        loo = leave_one_out(xjtu, make)
+        s = summarise(loo)
+        entry = {"xjtu": {"summary": s.__dict__, "runs": as_records(loo)}}
+        lines.append(
+            f"| {name} | XJTU-SY, one held out | {s.runs_scored} | {_fmt(s.norm_error)} | {_fmt(s.coverage, True)} | {_fmt(s.late, True)} |"
+        )
+        if ims:
+            print(f"{name}: IMS", flush=True)
+            tr = transfer(xjtu, ims, make)
+            t = summarise(tr)
+            entry["ims"] = {"summary": t.__dict__, "runs": as_records(tr)}
+            lines.append(
+                f"| {name} | trained on XJTU-SY, tested on IMS | {t.runs_scored} | {_fmt(t.norm_error)} | {_fmt(t.coverage, True)} | {_fmt(t.late, True)} |"
+            )
+        report["methods"][name] = entry
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "results_calibrated.json").write_text(json.dumps(report, indent=2))
+    text = "\n".join(lines)
+    (OUT / "results_calibrated.md").write_text(text + "\n")
+    print(text)
+    print(f"\nwrote {OUT}/results_calibrated.{{json,md}}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -245,12 +368,22 @@ def main(argv: list[str] | None = None) -> int:
     e.set_defaults(func=cmd_evaluate)
     tr = sub.add_parser("train", help="fit the shipped model on all of XJTU-SY")
     tr.add_argument("--target", choices=["direct", "residual"], default="residual")
+    tr.add_argument(
+        "--calibrated", action="store_true", help="widen its ranges on held-out bearings"
+    )
     tr.set_defaults(func=cmd_train)
     rp = sub.add_parser("replay", help="precompute the maintenance screen's replays")
-    rp.add_argument("--method", choices=list(METHODS), default="gbm-residual")
+    rp.add_argument("--method", choices=list(METHODS), default="gbm-residual-calibrated")
     rp.set_defaults(func=cmd_replay)
     mt = sub.add_parser("metro", help="the watcher on MetroPT-3's air compressor")
     mt.set_defaults(func=cmd_metro)
+    tf = sub.add_parser("timesfm", help="Google's TimesFM in BigQuery on the same held-out test")
+    tf.add_argument("--models", nargs="+", default=["TimesFM 2.5", "TimesFM 3.0"])
+    tf.add_argument("--signals", nargs="+", default=["peak", "ratchet"])
+    tf.add_argument("--tag", default="", help="suffix for the result files, to run settings apart")
+    tf.set_defaults(func=cmd_timesfm)
+    ca = sub.add_parser("calibrate", help="ranges widened on held-out bearings, same test")
+    ca.set_defaults(func=cmd_calibrate)
     args = ap.parse_args(argv)
     return args.func(args)
 
