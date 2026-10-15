@@ -58,10 +58,11 @@
   overflow: hidden;
 }
 /* The record screen also holds the demo clips, so its viewfinder gives up the
-   height they take. */
+   height they take, down to 320 x 180: on a shorter window the page scrolls
+   rather than the glass losing its shape. */
 .ll-record-screen .ll-phone {
-  max-height: calc(100vh - 540px);
-  max-width: min(860px, calc((100vh - 540px) * 16 / 9));
+  max-height: max(180px, calc(100vh - 540px));
+  max-width: max(320px, min(860px, calc((100vh - 540px) * 16 / 9)));
 }
 .ll-phone video { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; background: #000; }
 /* The live camera shows its whole frame: what is seen is what is recorded. */
