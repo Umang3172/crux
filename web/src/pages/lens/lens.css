@@ -57,8 +57,48 @@
     var(--shadow-2);
   overflow: hidden;
 }
-.ll-record-screen .ll-phone { max-width: min(860px, calc((100vh - 330px) * 16 / 9)); }
+/* The record screen also holds the demo clips, so its viewfinder gives up the
+   height they take. */
+.ll-record-screen .ll-phone {
+  max-height: calc(100vh - 540px);
+  max-width: min(860px, calc((100vh - 540px) * 16 / 9));
+}
 .ll-phone video { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; background: #000; }
+/* The live camera shows its whole frame: what is seen is what is recorded. */
+.ll-phone video.ll-live { object-fit: contain; }
+.ll-phone video[hidden] { display: none; }
+/* Before the camera opens: how to film, on the dark glass. */
+.ll-aim {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-3);
+  padding: var(--s-6);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+}
+.ll-aim p { margin: 0; max-width: 46ch; font-size: var(--fs-14); line-height: 1.55; color: rgba(255, 255, 255, 0.78); }
+@media (max-width: 560px) {
+  .ll-aim { padding: var(--s-6) var(--s-8); }
+  .ll-aim svg { display: none; }
+  .ll-aim p { font-size: var(--fs-12); line-height: 1.45; }
+}
+/* What the open camera delivers, read from its tracks. */
+.ll-cam-info {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+}
 .ll-guides {
   position: absolute;
   inset: 24px 30px;
@@ -97,7 +137,7 @@
 .ll-rec i { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: ll-blink 1s steps(2, start) infinite; }
 @keyframes ll-blink { to { visibility: hidden; } }
 
-.ll-record-row { display: flex; align-items: center; justify-content: center; gap: var(--s-4); }
+.ll-record-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s-3) var(--s-4); }
 .ll-record-label { font-size: var(--fs-16); }
 .ll-link { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: left; justify-self: start; }
 .ll-link:hover { text-decoration: underline; }
@@ -127,6 +167,38 @@
 .ll-record:active { transform: scale(0.96); }
 .ll-record:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .ll-record[data-on] span { inset: 21px; border-radius: 5px; }
+
+/* The demo clips: small cards under the camera, a still each, nothing playing. */
+.ll-demos { display: grid; gap: var(--s-3); padding-top: var(--s-4); box-shadow: inset 0 1px 0 var(--line); }
+.ll-demos-head { margin: 0; font-size: var(--fs-13); font-weight: 500; color: var(--text-3); }
+.ll-demo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-3); }
+.ll-demo {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-3);
+  padding: 8px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.ll-demo img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-1); display: block; background: #07090d; }
+.ll-demo-text { display: grid; gap: 2px; min-width: 0; }
+.ll-demo-text b { font-size: var(--fs-14); font-weight: 500; }
+.ll-demo:hover:not(:disabled) { background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
+.ll-demo:active:not(:disabled) { transform: translateY(1px); }
+.ll-demo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ll-demo:disabled { cursor: default; opacity: 0.55; }
+.ll-demo[aria-busy] { opacity: 1; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+@media (max-width: 820px) {
+  .ll-demo-grid { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Upload: the clip beside what to do with it. */
 .ll-upload-screen { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: center; }
@@ -289,4 +361,5 @@
 }
 .ll-box[data-tone="danger"] b { background: var(--danger-solid, var(--danger)); }
 .ll-box[data-inside] b { bottom: auto; top: 0; left: 0; border-radius: 0 0 3px 0; }
-.ll-art > .ll-still { max-width: 860px; margin: 0 auto; }
+/* A clip with no drawing shows its frame here, kept short enough that the lines under it stay on screen. */
+.ll-art > .ll-still { max-width: min(860px, calc((100vh - 420px) * 16 / 9)); margin: 0 auto; }
