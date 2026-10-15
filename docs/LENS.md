@@ -240,17 +240,20 @@ no longer waits for this scan's naming. A scan takes as long as its slowest
 branch. The page draws the steps as they arrive, then a
 drawing of the clip's machine with the part the scan points at in red: the part
 a damage finding names, or else the part where the cells over the shake map's
-bar sit, placed by where each part sits in the clip's frame. A clip with no
-drawing shows the frame the model looked at, with its boxes. Three clips are in
+bar sit, placed by where each part sits in the clip's frame. A video from
+the device has no drawing and shows the frame the model looked at, with its
+boxes. Three clips are in
 `web/public/demo/`, each with a still for its card:
 
-- `pump-clean.mp4`: a clean motor and pump running, the camera moving in
-  slowly, generated for the demo (Veo, in the Gemini app). No drawing: the skid
-  drawing places parts by where they sit in `motor-pump-shake.mp4`, and this
-  clip's motor is on the other side. One run on 15 Oct 2026 with
-  gemini-3-flash-preview named it "centrifugal pump and electric motor", found
-  none of the 7 checklist items, and the shake map found no part shaking clearly
-  more than the rest of the frame (whole-frame motion 9.5 px RMS, the camera's).
+- `pump-clean.mp4`: an end-suction pump and a finned motor running, the camera
+  moving in slowly, generated for the demo (Veo, in the Gemini app), drawn in
+  `web/src/figures/pumpset/` (the pump on the left, as the clip has it; parts
+  placed by where they sit in the clip's middle still). Two runs on 15 Oct 2026
+  with gemini-3-flash-preview: the first named it "centrifugal pump and electric
+  motor" and found none of the 7 checklist items; the second reported low
+  corrosion on the pump casing, kept by the second look. The shake map found no
+  part shaking clearly more than the rest of the frame in either (whole-frame
+  motion 9.5 px RMS, the camera's).
 - `motor-pump-shake.mp4`: a motor and pump shaking on a channel
   base, generated for the demo (Veo, in the Gemini app), drawn in
   `web/src/figures/skid/`. It is not a recording, so its motion is whatever the
