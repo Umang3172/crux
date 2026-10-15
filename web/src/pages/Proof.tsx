@@ -1,30 +1,20 @@
 // The measured results. Every figure comes from data/evaluation.ts, which
-// holds what the project's own evaluation run printed. Nothing is computed
+// holds what the project's own evaluation runs printed. The page opens on the
+// scoreboard: each job's method beside the ones it beat. Nothing is computed
 // here beyond adding its parts and the differences the page has always shown;
 // the small pictures draw those same counts, one square each.
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { CircleSlash, ExternalLink, FlaskConical, ScrollText, Terminal, TriangleAlert } from "lucide-react";
-import { ASKED, BEST, BY_FAULT, COMMAND, CRUX, CRUX_RIGHT, MEASURED, PER_FAULT, RECORDINGS, REPO, TOTAL, WHERE_BEST_WRONG } from "../data/evaluation";
+import { ASKED, BEST, BY_FAULT, COMMAND, CRUX, CRUX_RIGHT, PER_FAULT, RECORDINGS, REPO, TOTAL, WHERE_BEST_WRONG } from "../data/evaluation";
 import { CONCLUDE_AT, fault } from "../lib/plain";
 import { pct } from "../lib/format";
-import { Badge, Card, CountUp, Details, Hint, Meter, PageHead, SourceTag, Tabs, cx } from "../ui/kit";
-import { UnitChart, UnitRow, type UnitPart } from "./trust/UnitChart";
+import { Badge, Card, CountUp, Details, Hint, PageHead, SourceTag, Tabs } from "../ui/kit";
+import { Scoreboard } from "./trust/Scoreboard";
+import { UnitChart, type UnitPart } from "./trust/UnitChart";
 import { useSeenOnce } from "./trust/seen";
 import "./pages.css";
 import "../styles/trust.css";
-
-// The measured results are written as text ("14", "of 15", "42%", "aim 80%").
-// These read the counts back out so they can be drawn exactly as written.
-const whole = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : null);
-const outOf = (s: string) => {
-  const m = /^of (\d+)$/.exec(s.trim());
-  return m ? Number(m[1]) : null;
-};
-const share = (s: string) => {
-  const m = /(\d+(?:\.\d+)?)%/.exec(s);
-  return m ? Number(m[1]) / 100 : null;
-};
 
 function Result() {
   const [ref, on] = useSeenOnce<HTMLDivElement>(0.2);
@@ -152,82 +142,34 @@ function Result() {
   );
 }
 
-function Measured() {
-  return (
-    <section className="tr-section" aria-labelledby="tr-measured">
-      <div className="tr-section-head">
-        <h2 id="tr-measured">Other measured results</h2>
-      </div>
-      <div className="tr-results tr-in">
-        {MEASURED.map((m, i) => {
-          const verdict = "verdict" in m ? m.verdict : null;
-          const n = whole(m.figure);
-          const of = outOf(m.of);
-          const got = share(m.figure);
-          const aim = share(m.of);
-          return (
-            <article key={m.key} className={cx("tr-res", verdict && "miss")} style={{ "--i": i } as CSSProperties}>
-              <div className="tr-res-fig">
-                <b>{m.figure}</b>
-                <span>{m.of}</span>
-                {verdict && (
-                  <Badge tone="danger" dot>
-                    {verdict}
-                  </Badge>
-                )}
-              </div>
-              <p>
-                {m.label} <Hint>{m.what}</Hint>
-              </p>
-              {n !== null && of !== null && of >= n && (
-                <UnitRow
-                  label={m.label}
-                  parts={[
-                    { id: "yes", label: "yes", count: n, tone: "ok" },
-                    { id: "no", label: "missed", count: of - n, tone: "danger" },
-                  ]}
-                />
-              )}
-              {got !== null && aim !== null && <Meter value={got} mark={aim} tone="danger" />}
-              <div className="tr-res-foot">
-                <SourceTag source={m.source} />
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-type Tab = "tests" | "measured" | "real" | "limits";
+type Tab = "bench" | "tests" | "real" | "limits";
 
 export default function Proof() {
-  const [tab, setTab] = useState<Tab>("tests");
+  const [tab, setTab] = useState<Tab>("bench");
   return (
     <div className="page tr-page">
-      <PageHead title="Track record" sub="Crux against a rule that always answers, on the same hard cases." />
+      <PageHead title="Track record" sub="Every method Crux runs, beside the ones it was tested against." />
 
       <Tabs
         value={tab}
         onChange={setTab}
         label="Track record"
         tabs={[
+          { id: "bench", label: "Benchmarks" },
           { id: "tests", label: "Hard tests" },
-          { id: "measured", label: "Other results" },
           { id: "real", label: "Real recordings" },
           { id: "limits", label: "What it does not claim" },
         ]}
       />
 
-      {tab === "tests" && <Result />}
+      {tab === "bench" && <Scoreboard />}
 
-      {tab === "measured" && <Measured />}
+      {tab === "tests" && <Result />}
 
       <div className="narrow col" style={{ gap: "var(--s-5)" }}>
         {tab === "real" && (
           <Card title="Real recordings" icon={<ScrollText size={15} />} flush>
-            <p className="tr-lead">No accuracy figure on real recordings yet. None is shown.</p>
+            <p className="tr-lead">No figure yet for naming a fault on real recordings. Alarms and time left are on the Benchmarks tab.</p>
             <ul className="tr-sets">
               {RECORDINGS.map((r) => (
                 <li key={r.dataset}>

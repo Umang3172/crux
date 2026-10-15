@@ -237,3 +237,8 @@
   .tn-ask { flex-wrap: wrap; }
   .tn-ask .btn { width: 100%; }
 }
+
+/* How far to trust a screen: its model scored on every day of the record */
+.tn-lede { font-weight: 500; }
+.tn-trust { margin: var(--s-2) 0 0; color: var(--text-2); font-size: var(--fs-13); line-height: 1.45; max-width: 110ch; }
+.tn-trust a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }

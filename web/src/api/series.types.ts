@@ -163,3 +163,52 @@ export type AskStep =
   | { step: "tables" | "sql" | "query" | "answer" | "chart" | "cost" | "note"; state: "start" | "done" | "note"; detail: Record<string, unknown> }
   | { step: "result"; state: "done"; answer: Answer }
   | { step: "error"; state: "failed"; detail: { message?: string } };
+
+/** Every day of the record scored (`GET /series/{source}/bench`; docs/SERIES.md "Benchmark"). */
+export type BenchBy = "google" | "crux" | "baseline";
+
+export type BenchForecastRow = {
+  id: string;
+  method: string;
+  by: BenchBy;
+  /** Mean absolute error, in points of loaded share. */
+  mae: number | null;
+  /** Summed error over the bar's ("same time yesterday") on the same steps: below 1 beats it. */
+  vs_bar: number | null;
+  /** Share of steps whose real value fell inside the 80% band. */
+  inside: number | null;
+};
+
+export type BenchGroup = { days: number; steps: number; rows: BenchForecastRow[] };
+
+export type BenchLeakRow = {
+  id: string;
+  method: string;
+  by: BenchBy;
+  caught: number;
+  of: number;
+  before: number;
+  /** Per leak: hours from the alarm to the reported start; negative once it had begun; null if missed. */
+  leads_h: (number | null)[];
+  false: number;
+  months: number;
+  per_month: number | null;
+};
+
+export type BenchCheck = { origins: number; mean_absolute_error: number | null; mean_absolute_scaled_error: number | null; note: string };
+
+export type BenchView = {
+  source: string;
+  view: "bench";
+  engine: Engine | string;
+  signal: string;
+  forecast: {
+    horizon_steps: number;
+    cadence_min: number;
+    groups: Record<"normal" | "leak", BenchGroup>;
+    left_out: number;
+    check: Record<string, BenchCheck> | null;
+  };
+  leaks: BenchLeakRow[];
+  made: Made;
+};

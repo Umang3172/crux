@@ -5,6 +5,8 @@ import type { ChangesView } from "../../api/series.types";
 import { MadeLine } from "./Made";
 
 const pc = (x: number | null) => (x === null ? "–" : `${x.toFixed(1)}%`);
+/** Saved labels in today's words: a tower names a stretch of time, not a part (series/views.py). */
+const plain = (label: string) => label.replace(/dryer tower (\d)/g, "while drying tower $1 worked");
 const SHOWN = 4;
 
 export function Changes({ view }: { view: ChangesView }) {
@@ -28,7 +30,7 @@ export function Changes({ view }: { view: ChangesView }) {
             return (
               <li key={r.contributors.join("|")}>
                 <div className="tn-change-head">
-                  <b>{r.label}</b>
+                  <b>{plain(r.label)}</b>
                   <span className="mono small">
                     {pc(r.test)} <span className="muted">vs {pc(r.control)}</span>
                   </span>

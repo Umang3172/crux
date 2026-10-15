@@ -3,7 +3,7 @@
 // A server without `/series` answers 404; that reads as "not here", never an error.
 
 import { ApiError, BASE, get, qs } from "./client";
-import type { AnomaliesView, Answer, AskStep, Catalog, ChangesView, Examples, ForecastView, SummaryView } from "./series.types";
+import type { AnomaliesView, Answer, AskStep, BenchView, Catalog, ChangesView, Examples, ForecastView, SummaryView } from "./series.types";
 
 /** null when the server has no Trends routes at all. */
 export async function seriesCatalog(signal?: AbortSignal): Promise<Catalog | null> {
@@ -23,6 +23,16 @@ export const seriesForecast = (source: string, preset: string, span: string, sig
 export const seriesAnomalies = (source: string, preset: string, signal?: AbortSignal) => view<AnomaliesView>(source, "anomalies", { preset }, signal);
 export const seriesChanges = (source: string, preset: string, signal?: AbortSignal) => view<ChangesView>(source, "changes", { preset }, signal);
 export const seriesSummary = (source: string, preset: string, signal?: AbortSignal) => view<SummaryView>(source, "summary", { preset }, signal);
+
+/** Every day of the record scored; null when this server has no benchmark for the source. */
+export async function seriesBench(source: string, signal?: AbortSignal): Promise<BenchView | null> {
+  try {
+    return await get<BenchView>(`/series/${encodeURIComponent(source)}/bench`, signal);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
 
 export const askExamples = (signal?: AbortSignal) => get<Examples>("/series/ask/examples", signal);
 

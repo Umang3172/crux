@@ -2,12 +2,13 @@
 // changed against a normal week. For a bearing, where its time left lives.
 
 import { ArrowRight } from "lucide-react";
-import type { ChangesView, Preset, Source, SummaryView } from "../../api/series.types";
+import type { BenchView, ChangesView, Preset, Source, SummaryView } from "../../api/series.types";
 import type { Async } from "../../lib/hooks";
 import { LinkButton } from "../../ui/kit";
 import { Changes } from "./Changes";
 import { MadeLine, isGoogle } from "./Made";
 import { Slot } from "./slot";
+import { Trust } from "./Trust";
 
 function Words({ view, caveat }: { view: SummaryView; caveat?: string | null }) {
   const gemini = view.writer.startsWith("gemini");
@@ -15,7 +16,9 @@ function Words({ view, caveat }: { view: SummaryView; caveat?: string | null }) 
     <>
       <div className="tn-summary">
         {view.sentences.map((s, i) => (
-          <p key={i}>{s}</p>
+          <p key={i} className={i === 0 ? "tn-lede" : undefined}>
+            {s}
+          </p>
         ))}
       </div>
       {caveat && <p className="tn-note tn-caveat">{caveat}</p>}
@@ -38,9 +41,22 @@ function Words({ view, caveat }: { view: SummaryView; caveat?: string | null }) 
   );
 }
 
-export function Overview({ source, preset, summary, changes }: { source: Source; preset: Preset | undefined; summary: Async<SummaryView>; changes: Async<ChangesView> }) {
+export function Overview({
+  source,
+  preset,
+  summary,
+  changes,
+  bench,
+}: {
+  source: Source;
+  preset: Preset | undefined;
+  summary: Async<SummaryView>;
+  changes: Async<ChangesView>;
+  bench?: BenchView | null;
+}) {
   const bearing = source.kind === "bearing";
   return (
+    <>
     <div className="tn-overview">
       <section className="tn-panel tn-words" aria-labelledby="tn-words-h">
         <h2 id="tn-words-h" className="tn-h">
@@ -80,5 +96,7 @@ export function Overview({ source, preset, summary, changes }: { source: Source;
         )}
       </section>
     </div>
+    {!bearing && <Trust bench={bench} what="detector" />}
+    </>
   );
 }
