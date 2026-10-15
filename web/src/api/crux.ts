@@ -2,13 +2,16 @@ import { ApiError, BASE, get, post, qs } from "./client";
 import type {
   AgentAbout,
   AgentRun,
+  AgentStep,
   Capture,
+  CaseRecord,
   CatalogTest,
   FaultKind,
   FleetStatus,
   Health,
   Investigation,
   Lesson,
+  MachineModel,
   MachineReplay,
   MachineSummary,
   RecordingVerdict,
@@ -19,6 +22,7 @@ import type {
   Scan,
   ScanAnalysis,
   ScanRow,
+  ScanStep,
   Spectrum,
   StreamStatus,
   TestId,
@@ -81,6 +85,71 @@ export async function spectrum(
 export const agentReplay = (p: RunParams & { plant: string; note?: string }) => post<AgentRun>("/agent/replay", p, undefined, { quiet: true });
 export const agentAbout = () => get<AgentAbout>("/agent/about");
 
+export type StreamHandlers = {
+  /** The case exists; the agents are about to start. */
+  onOpen: (e: { case_id: string; history: CaseRecord[] }) => void;
+  /** Sent when a call is made (`answered` still null) and again when the tools answer it. */
+  onStep: (index: number, step: AgentStep) => void;
+};
+
+/**
+ * The same run as `agentReplay`, read while it happens. Resolves with the
+ * finished run. Rejects with status 404 or 405 on a server that has no stream
+ * route, so the caller can fall back to `agentReplay`.
+ */
+export async function agentStream(p: RunParams & { plant: string; note?: string }, h: StreamHandlers, signal?: AbortSignal): Promise<AgentRun> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/agent/stream`, { method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify(p) });
+  } catch {
+    throw new ApiError(0, "The engine could not be reached.", "/agent/stream");
+  }
+  if (!res.ok || !res.body) {
+    let detail = res.statusText;
+    try {
+      const j = await res.json();
+      detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail ?? j);
+    } catch {
+      /* keep statusText */
+    }
+    throw new ApiError(res.status, detail, "/agent/stream");
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let done: AgentRun | null = null;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      const name = /^event: (.*)$/m.exec(frame)?.[1] ?? "";
+      const data = /^data: (.*)$/m.exec(frame)?.[1];
+      if (!data) continue;
+      const body = JSON.parse(data);
+      if (name === "open") h.onOpen(body);
+      else if (name === "step") h.onStep(body.index, body.step);
+      else if (name === "done") done = body as AgentRun;
+      else if (name === "error") throw new ApiError(500, String(body.detail ?? "The run failed."), "/agent/stream");
+    }
+  }
+  if (!done) throw new ApiError(0, "The connection closed before the run finished.", "/agent/stream");
+  return done;
+}
+
+/** The pump model's parts and rates; null on a server without the route. */
+export async function machineModel(): Promise<MachineModel | null> {
+  try {
+    return await get<MachineModel>("/machine");
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 405)) return null;
+    throw e;
+  }
+}
+
 // Recorded run-to-failure machines
 
 export const machines = () => get<{ machines: MachineSummary[]; note: string; synthetic: boolean }>("/maintenance/machines");
@@ -138,6 +207,51 @@ export function uploadScan(file: Blob, machine: string, onProgress: (f: number) 
     xhr.onerror = () => reject(new ApiError(0, "The engine could not be reached.", "/lens/scans"));
     xhr.send(file);
   });
+}
+
+/**
+ * The same upload, answered as it runs: each step of the scan reaches `onStep`
+ * as the server reports it, and the promise resolves with the finished scan.
+ */
+export async function streamScan(file: Blob, machine: string, onStep: (s: ScanStep) => void, signal?: AbortSignal): Promise<Scan> {
+  const path = "/lens/scans/live";
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}?${qs({ machine, filename: "video.mp4", look: true })}`, { method: "POST", body: file, signal });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError(0, "The engine could not be reached.", path);
+  }
+  if (!res.ok || !res.body) {
+    let detail = res.statusText;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* keep statusText */
+    }
+    throw new ApiError(res.status, String(detail), path);
+  }
+  const reader = res.body.getReader();
+  const text = new TextDecoder();
+  let buffer = "";
+  let done: Scan | null = null;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += text.decode(chunk.value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, cut).trim();
+      buffer = buffer.slice(cut + 1);
+      if (!line) continue;
+      const step = JSON.parse(line) as ScanStep;
+      onStep(step);
+      if (step.step === "scan" && step.scan) done = step.scan;
+      if (step.step === "error") throw new ApiError(422, String(step.detail?.message ?? "The scan failed."), path);
+    }
+  }
+  if (!done) throw new ApiError(0, "The scan ended without a result.", path);
+  return done;
 }
 
 // Live sensor (only on the laptop server, while a sensor is sending)

@@ -366,7 +366,7 @@ export type CameraLook = {
   note: string;
   checklist: Finding[];
   retake: string;
-  quality: { width: number; height: number; sharpness: number; p1: number; p99: number; measured: boolean };
+  quality: { width: number; height: number; sharpness: number; p1: number; p99: number; measured: boolean; soft?: boolean };
   reference: string;
   dropped: number;
   zooms: number;
@@ -480,6 +480,14 @@ export type Scan = {
   analysis: ScanAnalysis | null;
 };
 
+/** One line of POST /lens/scans/live: a step of the scan as it starts or ends, or the scan itself. */
+export type ScanStep = {
+  step: "read" | "identify" | "gate" | "look" | "confirm" | "motion" | "sound" | "save" | "scan" | "error";
+  state: "start" | "done" | "off" | "skipped" | "waiting" | "failed";
+  detail?: Record<string, unknown>;
+  scan?: Scan;
+};
+
 export type ScanRow = { id: string; machine: string; created: string; normal: boolean; analysed: boolean; summary: string[] };
 
 /** The body /investigations, /replay, /capture and /agent/replay share. */
@@ -488,4 +496,20 @@ export type RunParams = {
   severity: number;
   seed: number;
   extra_noise: number;
+  /** Shaft speed. Left out, the model runs at its own nominal speed. */
+  rpm?: number;
 };
+
+/** The pump model's parts and how fast each moves for one turn of the shaft (`GET /machine`). */
+export type MachineModel = {
+  id: string;
+  name: string;
+  nominal_rpm: number;
+  sample_rate_hz: number;
+  blade_count: number;
+  bearing: { label: string; rolling_elements: number; ball_diameter_mm: number; pitch_diameter_mm: number; contact_angle_deg: number };
+  /** ftf: turns of the cage; bsf: spins of a ball; bpfo, bpfi: balls passing a point on the outer and inner ring. */
+  per_shaft_turn: { ftf: number; bpfo: number; bpfi: number; bsf: number };
+  auxiliary_pump: { belt_ratio: number; lobes: number; passes_per_shaft_turn: number };
+};
+

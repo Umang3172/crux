@@ -1,95 +1,148 @@
-/* Design tokens. Every colour, face, size, space and timing on screen comes
-   from here; components never hard-code them.
+/* Design tokens. Every colour, size and timing on screen comes from here.
 
-   The world is the inspection tag hung on plant machinery: concrete-grey
-   ground, tag-stock panels, ink, and tag classes that each carry one meaning.
-   Blue is the measurement Crux asks for (and the primary action), yellow
-   needs attention or is under test, green is normal or verified, and red is
-   kept for a hazard. Colour stays flat: no gradients, no shadows. */
+   Two themes with one idea: ink on paper, hairlines for structure. The light
+   one is black on warm white; the dark one turns it over, warm white on near
+   black. Colour is kept for the few things a reader must not miss, and used
+   small (a dot, a word):
+     accent          the primary action and the engine's voice: plain ink
+     model / sim     what a language model did, and what was simulated: greys,
+                     told apart by their labels rather than by hue
+     ok / warn / danger   an outcome, something waiting on a person, a hazard */
 
-:root {
+:root,
+:root[data-theme="light"] {
   color-scheme: light;
 
-  /* Grounds and text */
-  --bg: #e6e7e2;
-  --surface: #fbfaf6;
-  --surface-2: #f0f0eb;
-  --ink: #1d1d1b;
-  --ink-2: #464743;
-  --ink-3: #5f605b;
-  --line: #cdcec8;
-  --line-strong: #1d1d1b;
+  --bg: #fafaf9;
+  --bg-2: #f6f6f4;
+  --panel: #ffffff;
+  --panel-2: #f6f6f4;
+  --panel-3: #ededea;
+  --line: #e7e7e4;
+  --line-2: #d4d4cf;
+  --text: #0a0a0a;
+  --text-2: #3f3f3c;
+  --text-3: #74746e;
+  --text-4: #a3a39d;
 
-  /* Shell */
-  --shell: #1d1d1b;
-  --shell-ink: #fbfaf6;
-  --shell-ink-2: #b7b8b1;
+  --accent: #0a0a0a;
+  --accent-solid: #0a0a0a;
+  --accent-solid-hover: #2c2c2a;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(10, 10, 10, 0.045);
+  --accent-line: rgba(10, 10, 10, 0.26);
 
-  /* Tag classes: each colour has one job */
-  --accent: #0b5cad; /* NOTICE: the requested measurement, the primary action */
-  --accent-ink: #ffffff;
-  --accent-soft: #dbe7f4;
-  --attention: #f2c200; /* CAUTION: needs attention, under test (a fill; text on it is ink) */
-  --attention-ink: #1d1d1b;
-  --attention-soft: #faefc2;
-  --danger: #c62828; /* DANGER: a reported hazard only */
-  --danger-soft: #f7e0de;
-  --ok: #1f7a3a; /* SAFETY: normal, verified */
-  --ok-soft: #dcefe1;
-  --void: #66675f; /* ruled out: still on the rack, quiet, and still readable (4.5:1 on tag stock) */
-  --figure: #1d1d1b; /* measured numbers */
-  --model: #464743; /* a language model's words: told apart by their label, never by belief colours */
+  --model: #55554f;
+  --model-soft: rgba(85, 85, 79, 0.07);
+  --model-line: rgba(85, 85, 79, 0.28);
 
-  /* Machine scene */
-  --scene-ground: #e6e7e2;
-  --scene-body: #b9bab3;
-  --scene-metal: #8f9089;
-  --scene-base: #3c3d39;
-  --scene-ink: #1d1d1b;
-  --scene-hot: #f2c200;
-  --scene-marker: #0b5cad;
+  --sim: #8b8b84;
+  --sim-soft: rgba(139, 139, 132, 0.1);
+  --sim-line: rgba(139, 139, 132, 0.4);
 
-  /* Type: one family, two widths, one strict ladder */
-  --font-ui: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --step--2: 0.75rem; /* 12 */
-  --step--1: 0.875rem; /* 14 */
-  --step-0: 1rem; /* 16 */
-  --step-1: 1.25rem; /* 20 */
-  --step-2: 1.625rem; /* 26 */
-  --step-3: 2.125rem; /* 34 */
-  --step-4: 3rem; /* 48 */
-  --step-5: 6rem; /* 96: the deciding values, at specimen scale */
-  --leading: 1.5;
-  --leading-tight: 1.1;
-  --tracking-caps: 0.08em;
+  --ok: #2c7a4d;
+  --ok-soft: rgba(44, 122, 77, 0.07);
+  --ok-line: rgba(44, 122, 77, 0.3);
+  --warn: #a35f08;
+  --warn-soft: rgba(163, 95, 8, 0.07);
+  --warn-line: rgba(163, 95, 8, 0.32);
+  --danger: #c22a22;
+  --danger-soft: rgba(194, 42, 34, 0.06);
+  --danger-line: rgba(194, 42, 34, 0.32);
+  --danger-solid: #c22a22;
 
-  /* Space (4px module; tag fields sit on it) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
+  --focus: #0a0a0a;
+  --overlay: rgba(10, 10, 10, 0.24);
+  --shadow-1: none;
+  --shadow-2: 0 24px 60px rgba(10, 10, 10, 0.12), 0 0 0 1px rgba(10, 10, 10, 0.05);
+  --shadow-lift: 0 10px 30px rgba(10, 10, 10, 0.06);
 
-  /* Shape */
-  --radius-s: 2px;
-  --radius-m: 3px;
-  --hairline: 1px;
-  --tag-clip: 14px; /* the clipped top corners of a tag */
+  /* A toast is the page's ink turned over; its dot needs colours that read on that. */
+  --toast-ok: #7fd1a4;
+  --toast-warn: #f0b45c;
+  --toast-danger: #ff8a80;
 
-  /* Motion: tags drop and punch, numbers count; nothing loops for decoration */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-drop: cubic-bezier(0.16, 1, 0.3, 1); /* a tag or marker falling into place: fast, then a long settle, no bounce */
-  --dur-fast: 140ms;
-  --dur-med: 260ms;
-  --dur-slow: 480ms;
+  --font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Layout */
-  --page-max: 1440px;
-  --gutter: clamp(16px, 2.2vw, 32px);
+  --fs-10: 0.6875rem; /* 11 */
+  --fs-12: 0.75rem;
+  --fs-13: 0.84375rem; /* 13.5 */
+  --fs-14: 0.90625rem; /* 14.5 */
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-28: 1.75rem;
+
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 14px;
+  --r-pill: 999px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 140ms;
+  --t-med: 240ms;
+  --t-slow: 560ms;
+
+  --side: 0px;
+  --top: 60px;
+  --max: 1180px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0c0c0b;
+  --bg-2: #10100f;
+  --panel: #141413;
+  --panel-2: #191918;
+  --panel-3: #22221f;
+  --line: #262624;
+  --line-2: #363632;
+  --text: #f2f2ee;
+  --text-2: #c6c6c0;
+  --text-3: #8f8f88;
+  --text-4: #5f5f5a;
+
+  --accent: #f2f2ee;
+  --accent-solid: #f2f2ee;
+  --accent-solid-hover: #d8d8d3;
+  --on-accent: #0c0c0b;
+  --accent-soft: rgba(242, 242, 238, 0.06);
+  --accent-line: rgba(242, 242, 238, 0.3);
+
+  --model: #b5b5ae;
+  --model-soft: rgba(181, 181, 174, 0.09);
+  --model-line: rgba(181, 181, 174, 0.3);
+
+  --sim: #85857f;
+  --sim-soft: rgba(133, 133, 127, 0.12);
+  --sim-line: rgba(133, 133, 127, 0.4);
+
+  --ok: #5cc48a;
+  --ok-soft: rgba(92, 196, 138, 0.1);
+  --ok-line: rgba(92, 196, 138, 0.34);
+  --warn: #e3a547;
+  --warn-soft: rgba(227, 165, 71, 0.1);
+  --warn-line: rgba(227, 165, 71, 0.36);
+  --danger: #ff6d63;
+  --danger-soft: rgba(255, 109, 99, 0.1);
+  --danger-line: rgba(255, 109, 99, 0.38);
+  --danger-solid: #e2463d;
+
+  --focus: #f2f2ee;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  --toast-ok: #1f7a48;
+  --toast-warn: #a35f08;
+  --toast-danger: #c22a22;
 }

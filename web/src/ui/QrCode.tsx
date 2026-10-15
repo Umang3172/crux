@@ -1,5 +1,5 @@
-// A QR code drawn as one SVG path, so it stays sharp at any size and takes
-// the page's own ink colour.
+// A QR code drawn as one SVG path, so it stays sharp at any size. Always dark
+// on white, whatever the theme: a phone camera needs the contrast.
 
 import QR from "qrcode";
 import { useMemo } from "react";
@@ -26,14 +26,14 @@ export function QrCode({ value, size = 132, label }: { value: string; size?: num
       aria-label={label}
       shapeRendering="crispEdges"
     >
-      <rect x={-quiet} y={-quiet} width={n + quiet * 2} height={n + quiet * 2} fill="var(--surface)" />
-      <path d={path} fill="var(--ink)" />
+      <rect x={-quiet} y={-quiet} width={n + quiet * 2} height={n + quiet * 2} fill="#ffffff" />
+      <path d={path} fill="#0a0c11" />
     </svg>
   );
 }
 
 /** The link a phone opens for a case's check. The key carries the run settings the pump model answers from. */
-export function phoneCheckUrl(caseId: string, key: string): string {
+export function phoneCheckUrl(caseId: string, key: string, machine: string): string {
   const { origin, pathname } = window.location;
-  return `${origin}${pathname}#/phone/check/${encodeURIComponent(caseId)}?k=${key}`;
+  return `${origin}${pathname}#/phone/check/${encodeURIComponent(caseId)}?k=${key}&m=${encodeURIComponent(machine)}`;
 }

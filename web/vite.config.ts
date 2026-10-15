@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 // `VITE_API_BASE=""` behaves exactly like the deployed build while you work.
 const API_PATHS = [
   "/health",
+  "/series",
   "/tests",
   "/investigations",
   "/replay",
@@ -15,12 +16,15 @@ const API_PATHS = [
   "/fleet",
   "/lens",
   "/agent",
+  "/machine",
   "/ingest",
   "/openapi.json",
 ];
 
 export default defineConfig({
   plugins: [react()],
+  // Several dev servers can run side by side when each is given its own cache folder.
+  cacheDir: process.env.CRUX_VITE_CACHE || "node_modules/.vite",
   server: {
     port: 5173,
     proxy: Object.fromEntries(

@@ -1,0 +1,225 @@
+/* Figures drawn with the isometric kit. The kit's own rules (kit/iso.css) stay
+   as shipped; here its tokens are set from the console's, so a figure's paper is
+   the card it sits on and it follows the app's light and dark themes.
+   Colour keeps the console's meanings: danger for the damage a verdict names,
+   accent for where a reading comes from. Everything else is grey. */
+
+@import "./kit/iso.css";
+
+.iso.fx {
+  --anatomy-page: var(--bg);
+  --anatomy-card: var(--panel);
+  --anatomy-text: var(--text-2);
+  --anatomy-strong: var(--text);
+  --anatomy-muted: var(--text-3);
+  --anatomy-paper: var(--panel);
+  --anatomy-face: #1d1d1b;
+  --anatomy-top: #1c1c1a;
+  --anatomy-shade-0: #0e0e0d;
+  --anatomy-shade-1: #121211;
+  --anatomy-shade-2: #161615;
+  --anatomy-shade-3: #1a1a19;
+  --anatomy-lit-top: #2a2a27;
+  --anatomy-lit-shade: #20201e;
+  --anatomy-hi: #e2e2dd;
+  --anatomy-mid: #7a7a74;
+  --anatomy-lo: #46463f;
+  --anatomy-faint: #2a2a27;
+  --anatomy-lit: #ffffff;
+  --anatomy-halo: #050505;
+  --anatomy-halo-opacity: 0.9;
+  --anatomy-dot: #ececea;
+  --fx-pit: var(--danger);
+  --fx-pit-ink: #2a0d10;
+  --fx-pick: var(--accent);
+}
+
+:root[data-theme="light"] .iso.fx {
+  --anatomy-face: #ffffff;
+  --anatomy-top: #ffffff;
+  --anatomy-shade-0: #d9dde4;
+  --anatomy-shade-1: #e3e6ec;
+  --anatomy-shade-2: #ebeef2;
+  --anatomy-shade-3: #f3f5f8;
+  --anatomy-lit-top: #ffffff;
+  --anatomy-lit-shade: #eceef3;
+  --anatomy-hi: #1f2530;
+  --anatomy-mid: #8a93a3;
+  --anatomy-lo: #b3bac6;
+  --anatomy-faint: #d5dae2;
+  --anatomy-lit: #000000;
+  --anatomy-halo: #7c8494;
+  --anatomy-halo-opacity: 0.3;
+  --anatomy-dot: #343b48;
+  --fx-pit-ink: #ffd9d9;
+}
+
+/* The plate: the kit's card, sized to sit inside a console card. */
+.fx-plate {
+  position: relative;
+  padding: 40px 16px 40px;
+  background: var(--anatomy-card);
+  border-radius: var(--r-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  outline: none;
+  touch-action: pan-y;
+}
+.fx-plate:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--focus);
+}
+.fx-plate .iso-svg {
+  max-width: 760px;
+  margin: 0 auto;
+  user-select: none;
+}
+.fx-corner {
+  position: absolute;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.fx-corner[data-at="fig"] { top: 16px; left: 16px; color: var(--text-2); }
+.fx-corner[data-at="title"] { top: 16px; right: 16px; text-transform: uppercase; letter-spacing: 0.1em; }
+.fx-corner[data-at="hint"] { bottom: 16px; left: 16px; text-transform: uppercase; letter-spacing: 0.1em; }
+.fx-corner[data-at="readout"] { bottom: 16px; right: 16px; color: var(--text); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .fx-plate { padding: 36px 6px 58px; }
+  .fx-corner[data-at="hint"] { bottom: 34px; }
+}
+
+.fx-legend {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+.fx-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.fx-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.fx-swatch {
+  width: 14px;
+  height: 10px;
+  flex: none;
+  border-radius: 2px;
+}
+.fx-swatch[data-mark="lit"] { background: var(--text); }
+.fx-swatch[data-mark="pit"] { background: var(--danger); }
+.fx-swatch[data-mark="pick"] { background: var(--accent); }
+.fx-swatch[data-mark="mid"] { background: var(--text-3); }
+.fx-swatch[data-mark="line"] { height: 2px; background: var(--text-2); }
+.fx-caption { max-width: 78ch; }
+
+/* The damage: a pit, and its flash as a ball strikes it. */
+.fig-pit {
+  fill: var(--fx-pit);
+  stroke: var(--fx-pit);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  fill-rule: nonzero;
+}
+.fig-pit[data-side="back"] { display: none; }
+.fx-flash .fig-pit {
+  fill: var(--fx-pit);
+  stroke: var(--fx-pit);
+  stroke-width: 2.6;
+  filter: blur(1.4px);
+}
+
+/* The pickup: where the reading comes from. */
+.fig-pickup > .iso-edge,
+.fig-pickup > .iso-crease { stroke: var(--fx-pick); }
+.fx-pick-glow .iso-edge { stroke: var(--fx-pick); stroke-width: 2.4; filter: blur(1.2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-flash { display: none; }
+}
+
+/* Steel balls: the same four-tone shading on a lighter ramp, so they read as
+   polished parts against the rings. The tracked ball is a step brighter. */
+.fig-ball {
+  --anatomy-shade-0: #1e1e1c;
+  --anatomy-shade-1: #282826;
+  --anatomy-shade-2: #363633;
+  --anatomy-shade-3: #4a4a46;
+}
+.fig-ball.is-lit {
+  --anatomy-shade-0: #31312e;
+  --anatomy-shade-1: #43433f;
+  --anatomy-shade-2: #5b5b56;
+  --anatomy-shade-3: #85857f;
+}
+:root[data-theme="light"] .fig-ball {
+  --anatomy-shade-0: #b7bfcb;
+  --anatomy-shade-1: #ccd2db;
+  --anatomy-shade-2: #dfe3ea;
+  --anatomy-shade-3: #f3f5f8;
+}
+:root[data-theme="light"] .fig-ball.is-lit {
+  --anatomy-shade-0: #7d8798;
+  --anatomy-shade-1: #98a1b0;
+  --anatomy-shade-2: #b6bdc8;
+  --anatomy-shade-3: #dde1e8;
+}
+
+/* The second figure: the phone's glass, its progress ring, the infrared beam. */
+.fx-screen { fill: #0c0c0b; stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+.fx-ring { fill: none; stroke: var(--fx-pick); stroke-width: 1.6; stroke-linecap: round; }
+.fx-beam { fill: none; stroke: var(--fx-pick); stroke-width: 1; stroke-dasharray: 0.01 3.2; stroke-linecap: round; }
+.fx-spot { fill: var(--accent-soft); stroke: var(--fx-pick); stroke-width: 0.8; }
+.fx-lens { stroke: var(--fx-pick) !important; }
+.fx-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--text-3); font-size: var(--fs-13); }
+.fx-steps li { transition: color var(--t-med) var(--ease); }
+.fx-steps li[data-on] { color: var(--text); }
+.fx-steps li[data-done] { color: var(--text-2); }
+
+/* Lens: the pipework figure. The part the model pointed at keeps its shading
+   on a red ramp; rust the model saw is drawn in rust; water is pale. */
+.fig-fault {
+  --anatomy-paper: #4a1117;
+  --anatomy-shade-0: #34090e;
+  --anatomy-shade-1: #4f0f16;
+  --anatomy-shade-2: #6d161f;
+  --anatomy-shade-3: #92202a;
+  --anatomy-top: #b52d37;
+}
+.fig-fault > .iso-edge,
+.fig-fault > .iso-crease { stroke: var(--danger); }
+:root[data-theme="light"] .fig-fault {
+  --anatomy-paper: #fbd5d6;
+  --anatomy-shade-0: #c62f37;
+  --anatomy-shade-1: #db4b51;
+  --anatomy-shade-2: #ea7377;
+  --anatomy-shade-3: #f5a3a5;
+  --anatomy-top: #fbc9ca;
+}
+.fig-rust { --anatomy-lo: #c07033; --anatomy-weight: 1.2px; }
+:root[data-theme="light"] .fig-rust { --anatomy-lo: #a0521a; }
+.fig-drop { fill: #cfe6f3; stroke: #7fb1cc; stroke-width: 0.5; }
+:root[data-theme="light"] .fig-drop { fill: #d7ecf7; stroke: #4f8fb3; }
+.fig-wet { fill: rgba(120, 170, 200, 0.16); stroke: rgba(150, 195, 220, 0.35); stroke-width: 0.5; }
+:root[data-theme="light"] .fig-wet { fill: rgba(70, 130, 170, 0.12); stroke: rgba(70, 130, 170, 0.35); }
+.fig-splash { fill: none; stroke: #9cc8df; stroke-width: 0.7; }
+:root[data-theme="light"] .fig-splash { stroke: #4f8fb3; }
+.fx-swatch[data-mark="rust"] { height: 3px; background: #b8672a; }
+.fx-swatch[data-mark="water"] { background: #9cc8df; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; width: 9px; }
+
+/* The motor-and-pump figure: the gauge's face and needle, the oil sight glass. */
+.fx-dial { fill: var(--anatomy-paper); stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+.fx-needle { fill: none; stroke: var(--danger); stroke-width: 1.1; stroke-linecap: round; }
+.fx-glass { fill: var(--accent-soft); stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); }
+/* A handwheel's rim and a lifting eye: round bar seen edge-on, drawn as a heavy stroke. */
+.fx-wheel { fill: none; stroke: var(--anatomy-mid); stroke-width: 1.8; }
+.fx-eye { fill: none; stroke: var(--anatomy-mid); stroke-width: 1.6; }

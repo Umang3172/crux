@@ -10,8 +10,9 @@ camera finding does not move a belief.
 
 The look runs in four steps:
 
-1. **Quality gate** (`photo.quality`): a still that is too small, too dark, blown
-   out or blurred is turned back with the measured reason; no model sees it.
+1. **Quality gate** (`photo.quality`): a still that is too small, too dark or
+   blown out is turned back with the measured reason; no model sees it. A soft
+   one is looked at, with a note that a miss is likelier (ADR-0032).
 2. **First look**: the whole checklist, with the machine's normal photo alongside
    when there is one, labelled "reference (normal)" and "now".
 3. **Second look**: every item reported present is cropped around its box with
@@ -37,10 +38,11 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..agents.factory import gemini_model_id, gemini_route, not_live
 from ..forecast.runs import DATA_ROOT
@@ -146,6 +148,28 @@ class Second:
     visible: bool
     new_since_reference: str = "no_reference"
     evidence: str = ""
+
+
+#: Told each step of a look as it starts and ends: (step, state, detail). A page
+#: that streams a scan draws its pipeline from these, so they say what ran, not
+#: what was planned.
+Step = Callable[[str, str, dict[str, Any]], None]
+
+
+def _quiet(step: str, state: str, detail: dict[str, Any]) -> None:
+    return None
+
+
+def brief(f: Finding) -> dict[str, Any]:
+    """One finding as a page shows it while the look runs."""
+    return {
+        "item": f.item,
+        "label": LABELS.get(f.item, f.item),
+        "severity": f.severity,
+        "where": f.where,
+        "evidence": f.evidence,
+        "box": list(f.box) if f.box else None,
+    }
 
 
 class Inspector(Protocol):
@@ -511,6 +535,7 @@ def inspect(
     reference: Still | None = None,
     use_registry: bool = True,
     second_look: bool = True,
+    on_step: Step | None = None,
 ) -> CameraLook:
     """Gate, look with the checklist, then keep only what a cropped second look confirms.
 
@@ -520,7 +545,9 @@ def inspect(
     plainly visible. `reference` is the machine's normal photo; when none is given,
     the camera registry's `normal` still for this machine is used if there is one.
     `second_look=False` keeps the first look as it is, for scoring what the second adds.
+    `on_step` hears each step (gate, look, confirm) as it starts and ends.
     """
+    say = on_step or _quiet
     who = inspector or get_inspector()
     if reference is None and use_registry:
         reference = normal_still(still.machine)
@@ -532,26 +559,44 @@ def inspect(
         quality=gate.as_dict(),
         reference=reference.camera if reference is not None else "",
     )
+    say("gate", "done", {"usable": gate.usable, "reason": gate.reason, **gate.as_dict()})
     if who.name == NOBODY:
         look.note = "No model is on: nobody has looked at this still yet."
         if not gate.usable:
             look.retake = gate.reason
             look.note += f" It is also unusable as it is: {gate.reason}."
+        say("look", "off", {"by": who.name, "note": look.note})
         return look
     if not gate.usable:
         look.inspected_by, look.retake = NOBODY, gate.reason
         look.note = f"Not looked at: {gate.reason}. Take the photo again."
+        say("look", "skipped", {"by": who.name, "note": look.note})
         return look
     zooms = int(getattr(who, "zooms", 0))
+    say("look", "start", {"by": who.name, "items": list(ITEMS), "reference": look.reference})
     try:
         first = who.look(still, context, reference)
         look.checklist = first
         if first and len(first) == len(ITEMS) and all(f.status == "cannot_see" for f in first):
             look.retake = "the model could not see enough of the machine to answer any item"
             look.note = f"Take the photo again: {look.retake}."
+            say("look", "done", {"by": who.name, "present": [], "retake": look.retake})
             return look
         present = [f for f in first if f.status == "present"]
         confirm = getattr(who, "confirm", None)
+        say(
+            "look",
+            "done",
+            {
+                "by": who.name,
+                "present": [brief(f) for f in present],
+                "answered": len(first),
+                "zooms": int(getattr(who, "zooms", 0)) - zooms,
+            },
+        )
+        checking = bool(present) and confirm is not None and second_look
+        if checking:
+            say("confirm", "start", {"by": who.name, "count": len(present)})
         kept = []
         for f in present:
             if confirm is None or not second_look:
@@ -570,7 +615,22 @@ def inspect(
             look.note = (
                 f"{look.dropped} first-look finding(s) not confirmed on a second look, left out."
             )
+        if gate.soft:
+            soft = (
+                f"The photo is soft (sharpness {gate.sharpness:.0f}; the provisional bar is "
+                f"{photo.MIN_SHARPNESS:.0f}): it was looked at, but a miss is likelier."
+            )
+            look.note = f"{soft} {look.note}".strip()
+        if checking:
+            say(
+                "confirm",
+                "done",
+                {"by": who.name, "kept": [brief(f) for f in kept], "dropped": look.dropped},
+            )
+        else:
+            say("confirm", "skipped", {"by": who.name, "kept": [brief(f) for f in kept]})
     except Exception as e:  # a failed look must not lose the still
         look.findings = []
         look.note = f"The camera check failed ({type(e).__name__}); look at the still by eye."
+        say("look", "failed", {"by": who.name, "note": look.note})
     return look

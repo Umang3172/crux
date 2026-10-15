@@ -823,3 +823,55 @@ backed: the check decides. Every draft the check rejects stays listed.
 first; after the loop 10 sentences stood and 5 rejected drafts were listed.
 The limit of the check is unchanged (ADR-0021).
 
+## ADR-0031 · A run can be read while it happens, and the machine's parts come from its spec
+
+**Context.** `/agent/replay` returns an agent run when it has finished. With a
+live model that is a minute of nothing on screen; a screen could only replay a
+record. And a drawing of the machine had no source for its numbers: the
+bearing's geometry and the rates of its parts were in the code and in no
+response, so a screen would have had to carry its own copy.
+
+**Decision.** `investigate_async` takes an optional hook, called when a tool
+call is made and again when the tools answer it. `POST /agent/stream` runs the
+same case as `/agent/replay` and sends those steps as server-sent events, then
+the finished run. The words in a step are written by the same code either way
+(`agents/trace.py`). `GET /machine` returns the machine's spec and, per turn of
+the shaft, how far the cage turns, how often a ball spins and how often a ball
+passes a point on each ring, from `physics/frequencies.py`.
+
+**Consequence.** Nothing in the loop depends on the hook, and `/agent/replay`
+is unchanged. A screen can show the active agent, the tool and the answer as
+they occur, and a drawing in which each part turns at the engine's own ratio:
+a ball then meets a damaged spot at the rate the engine listens for, without
+that rate being typed anywhere. Streamed with the offline stand-ins only; not
+with Gemini.
+
+
+---
+
+## ADR-0032 · A soft photo is looked at with a warning, and a scan reports each step as it runs
+
+**Context.** The photo gate turned back any still under a sharpness of 100, a
+published rule of thumb that no calibration split has checked. It has turned
+back both real photos of a plainly visible fault it has met: a fractured
+bearing (10 Oct 2026) and a leaking welded pipe joint from a phone-style clip
+(14 Oct 2026, sharpness 9 over the whole still and 8 on the joint itself). A
+soft but legible photo is common: a phone focused close, a smooth painted
+surface. And a Lens scan answered only when it was done, so a page could show a
+spinner and nothing about what ran.
+
+**Decision.** `photo.quality` still turns back a still that is too small, too
+dark or blown out. Under the sharpness bar it marks the still `soft` and lets
+the look go ahead; the look's note says the photo was soft and that a miss is
+likelier. Every first-look finding must still survive the cropped second look.
+`camera.inspect` and `lens.scan.new_scan` take an optional `on_step` hook, told
+each step (read, identify, gate, look, confirm, motion, sound, save) as it
+starts and ends, with what it found. `POST /lens/scans/live` runs the same scan
+as `POST /lens/scans` and answers one JSON line per step, then the scan.
+
+**Consequence.** A blurrier photo now reaches the model. The second look is the
+guard against what a model makes up; a model that cannot see any item still
+asks for a retake. The bar stays provisional until `scripts/photo_eval.py
+--calibrate` has a calibration split. Camera findings still never move a
+belief (ADR-0007). Nothing in a scan depends on the hook, and `POST
+/lens/scans` is unchanged.

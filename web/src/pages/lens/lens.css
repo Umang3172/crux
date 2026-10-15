@@ -1,0 +1,292 @@
+/* Lens: record, the pipeline drawn as it runs, and the result. Colour keeps the
+   console's meanings: violet is a model's work, blue is code and physics, amber
+   waits for a person, red is the damage a finding names. */
+
+/* ── The four screens ────────────────────────────────────────────────── */
+/* One screen at a time, each sized to fit under the page title without
+   scrolling on a laptop. */
+.ll-page { padding-bottom: var(--s-4); }
+.ll-page .page-head { margin-bottom: var(--s-2); }
+.ll-wizard { display: grid; gap: var(--s-4); }
+.ll-screen {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
+  animation: ll-rise 0.35s var(--ease) both;
+}
+@keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .ll-screen { animation: none; } }
+.ll-title { margin: 0; font-size: var(--fs-20); font-weight: 500; letter-spacing: -0.01em; }
+
+/* The step bar. */
+.ll-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.ll-steps li { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--text-3); }
+.ll-step-dot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.ll-steps li[data-state="now"] { color: var(--text); font-weight: 500; }
+.ll-steps li[data-state="now"] .ll-step-dot { background: var(--accent-solid); color: var(--on-accent); box-shadow: none; }
+.ll-steps li[data-state="done"] { color: var(--text-2); }
+.ll-steps li[data-state="done"] .ll-step-dot { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+
+/* The phone held sideways, as the clip is. */
+.ll-phone {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-height: calc(100vh - 330px);
+  min-height: 180px;
+  margin: 0 auto;
+  border-radius: 24px;
+  padding: 10px 14px;
+  background: #07090d;
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    0 0 0 5px #0d1117,
+    0 0 0 6px var(--line),
+    var(--shadow-2);
+  overflow: hidden;
+}
+.ll-record-screen .ll-phone { max-width: min(860px, calc((100vh - 330px) * 16 / 9)); }
+.ll-phone video { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; background: #000; }
+.ll-guides {
+  position: absolute;
+  inset: 24px 30px;
+  pointer-events: none;
+  --c: rgba(255, 255, 255, 0.75);
+  background:
+    linear-gradient(var(--c), var(--c)) left top / 20px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) left top / 2px 20px no-repeat,
+    linear-gradient(var(--c), var(--c)) right top / 20px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) right top / 2px 20px no-repeat,
+    linear-gradient(var(--c), var(--c)) left bottom / 20px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) left bottom / 2px 20px no-repeat,
+    linear-gradient(var(--c), var(--c)) right bottom / 20px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) right bottom / 2px 20px no-repeat;
+  transition: inset var(--t-med) var(--ease);
+}
+.ll-phone.is-rec .ll-guides { inset: 34px 44px; --c: #fff; }
+.ll-phone.is-rec { box-shadow: 0 0 0 1px #ff3b30, 0 0 0 5px #0d1117, 0 0 0 6px var(--line), var(--shadow-2); }
+.ll-rec {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+.ll-rec i { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; animation: ll-blink 1s steps(2, start) infinite; }
+@keyframes ll-blink { to { visibility: hidden; } }
+
+.ll-record-row { display: flex; align-items: center; justify-content: center; gap: var(--s-4); }
+.ll-record-label { font-size: var(--fs-16); }
+.ll-link { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: left; justify-self: start; }
+.ll-link:hover { text-decoration: underline; }
+
+/* The record button: a ring round a red disc that squares while it records. */
+.ll-record {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  flex: none;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  box-shadow: inset 0 0 0 4px var(--text);
+  transition: transform var(--t-fast) var(--ease);
+}
+.ll-record span {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: #ff3b30;
+  transition: inset var(--t-med) var(--ease), border-radius var(--t-med) var(--ease);
+}
+.ll-record:hover { transform: scale(1.04); }
+.ll-record:active { transform: scale(0.96); }
+.ll-record:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.ll-record[data-on] span { inset: 21px; border-radius: 5px; }
+
+/* Upload: the clip beside what to do with it. */
+.ll-upload-screen { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: center; }
+.ll-upload-side { display: grid; gap: var(--s-3); align-content: center; }
+.ll-upload-side p { margin: 0; }
+@media (max-width: 820px) {
+  .ll-upload-screen { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Work: the pipeline, full width. */
+.ll-work-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 32px; }
+
+/* ── The pipeline ────────────────────────────────────────────────────── */
+
+.lf { container-type: inline-size; }
+.lf-stage { position: relative; width: 100%; }
+.lf-edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lf-edge {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1.4;
+  transition: stroke var(--t-med) var(--ease), opacity var(--t-med) var(--ease);
+}
+.lf-arrowhead { fill: var(--line-2); }
+.lf-edge[data-state="ready"],
+.lf-edge[data-state="done"] { stroke: var(--text-3); }
+.lf-edge[data-state="live"] { stroke-dasharray: 5 5; animation: lf-flow 0.6s linear infinite; }
+.lf-edge[data-state="live"][data-kind="model"] { stroke: var(--model); }
+.lf-edge[data-state="live"][data-kind="code"],
+.lf-edge[data-state="live"][data-kind="phone"] { stroke: var(--sim); }
+.lf-edge[data-state="later"] { stroke: var(--warn-line); stroke-dasharray: 2 5; }
+.lf-edge[data-state="never"] { stroke: var(--danger-line); stroke-dasharray: 3 4; }
+@keyframes lf-flow { to { stroke-dashoffset: -10; } }
+.lf-packet { stroke: var(--panel); stroke-width: 1.5; }
+.lf-packet[data-kind="model"] { fill: var(--model); }
+.lf-packet[data-kind="code"],
+.lf-packet[data-kind="phone"],
+.lf-packet[data-kind="engine"] { fill: var(--sim); }
+
+.lf-bar {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--danger);
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--danger-line);
+}
+
+.lf-nodes { list-style: none; margin: 0; padding: 0; }
+.lf-node {
+  --k: var(--sim);
+  --k-soft: var(--sim-soft);
+  --k-line: var(--sim-line);
+  position: absolute;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 2px;
+  padding: 0.7cqw 0.8cqw;
+  border-radius: 10px;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-3);
+  overflow: hidden;
+  transition: box-shadow var(--t-med) var(--ease), background var(--t-med) var(--ease), color var(--t-med) var(--ease);
+}
+.lf-node[data-kind="model"] { --k: var(--model); --k-soft: var(--model-soft); --k-line: var(--model-line); }
+.lf-node[data-kind="person"],
+.lf-node[data-status="waiting"] { --k: var(--warn); --k-soft: var(--warn-soft); --k-line: var(--warn-line); }
+.lf-node[data-kind="engine"] { --k: var(--text-3); --k-soft: transparent; --k-line: var(--line-2); }
+.lf-head { display: flex; align-items: center; gap: 0.45cqw; color: var(--text-2); min-width: 0; }
+.lf-head svg { flex: none; color: var(--k); width: clamp(10px, 1.25cqw, 14px); height: clamp(10px, 1.25cqw, 14px); }
+.lf-head b { font-size: clamp(10px, 1.2cqw, 13.5px); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lf-time { flex: none; white-space: nowrap; margin-left: auto; font-family: var(--mono); font-size: clamp(9px, 0.95cqw, 11px); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.lf-who { display: flex; gap: 6px; font-size: clamp(9px, 0.98cqw, 11.5px); color: var(--k); min-width: 0; }
+.lf-who > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lf-line { font-size: clamp(9.5px, 1.05cqw, 12px); line-height: 1.3; color: var(--text-3); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+
+.lf-node[data-status="running"] {
+  background: var(--k-soft);
+  box-shadow: inset 0 0 0 1.5px var(--k), 0 0 0 4px var(--k-soft);
+  color: var(--text);
+}
+.lf-node[data-status="running"] .lf-head { color: var(--text); }
+.lf-node[data-status="running"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, var(--k-soft) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: lf-sheen 1.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes lf-sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.lf-node[data-status="done"] { box-shadow: inset 0 0 0 1px var(--k-line); background: var(--panel); }
+.lf-node[data-status="done"] .lf-head { color: var(--text); }
+.lf-node[data-status="done"] .lf-line { color: var(--text-2); }
+.lf-node[data-status="waiting"] { box-shadow: inset 0 0 0 1px var(--k-line); background: var(--k-soft); }
+.lf-node[data-status="waiting"] .lf-line { color: var(--text-2); }
+.lf-node[data-status="off"] { box-shadow: inset 0 0 0 1px var(--line); background: transparent; }
+.lf-node[data-kind="engine"] { box-shadow: inset 0 0 0 1px var(--line-2); background: repeating-linear-gradient(135deg, transparent 0 6px, var(--panel-2) 6px 7px); }
+.lf-node[data-status="failed"] { box-shadow: inset 0 0 0 1.5px var(--danger); background: var(--danger-soft); }
+
+.lf-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: var(--s-3); }
+.lf-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lf-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--sim); }
+.lf-legend i[data-kind="model"] { background: var(--model); }
+.lf-legend i[data-kind="person"] { background: var(--warn); }
+.lf-legend svg { color: var(--danger); }
+
+/* On a narrow screen the drawing reads as a list of steps. */
+@container (max-width: 720px) {
+  .lf-stage { aspect-ratio: auto !important; }
+  .lf-edges, .lf-bar { display: none; }
+  .lf-nodes { display: grid; gap: 6px; }
+  .lf-node { position: relative; inset: auto !important; width: auto !important; height: auto !important; padding: 8px 10px; }
+  .lf-head svg { width: 13px; height: 13px; }
+  .lf-head b { font-size: 13px; }
+  .lf-time { font-size: 11px; }
+  .lf-who { font-size: 11.5px; }
+  .lf-line { font-size: 12.5px; -webkit-line-clamp: 4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-edge[data-state="live"], .lf-node[data-status="running"]::after, .ll-rec i { animation: none; }
+}
+
+/* ── Result: the drawing, and three lines beside the frame it came from ── */
+.ll-result { display: grid; gap: var(--s-4); }
+.ll-art .fx-plate { padding-top: 34px; padding-bottom: 34px; }
+.ll-art .fx-plate .iso-svg { max-width: none; max-height: calc(100vh - 420px); min-height: 220px; }
+.ll-about { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--s-5); align-items: start; }
+@media (max-width: 820px) {
+  .ll-about { grid-template-columns: minmax(0, 1fr); }
+}
+.ll-say { display: grid; gap: 6px; }
+.ll-line { margin: 0; font-size: var(--fs-14); line-height: 1.5; color: var(--text-2); max-width: 70ch; }
+.ll-actions { margin-top: 4px; align-items: center; }
+.ll-open { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+
+.ll-still { margin: 0; display: grid; gap: 4px; }
+.ll-still-frame { position: relative; border-radius: var(--r-2); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); line-height: 0; }
+.ll-still-frame img { width: 100%; display: block; }
+.ll-box { position: absolute; border: 2px solid var(--warn); border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.ll-box[data-tone="danger"] { border-color: var(--danger-solid, var(--danger)); }
+.ll-box b {
+  position: absolute;
+  left: -2px;
+  bottom: 100%;
+  padding: 0 4px;
+  border-radius: 3px 3px 0 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: #fff;
+  background: var(--warn);
+}
+.ll-box[data-tone="danger"] b { background: var(--danger-solid, var(--danger)); }
+.ll-box[data-inside] b { bottom: auto; top: 0; left: 0; border-radius: 0 0 3px 0; }
+.ll-art > .ll-still { max-width: 860px; margin: 0 auto; }

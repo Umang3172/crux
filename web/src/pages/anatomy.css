@@ -1,0 +1,60 @@
+/* The Anatomy page: two live figures, then the figures the kit could draw next. */
+
+.an-page .card-foot { padding-top: var(--s-3); }
+
+.an-h2 {
+  margin: 0;
+  font-size: var(--fs-16);
+  font-weight: 500;
+}
+
+.an-ideas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--s-4);
+}
+
+.an-idea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+.an-idea h3 {
+  margin: 0;
+  font-size: var(--fs-14);
+  font-weight: 500;
+}
+.an-idea p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+}
+.an-idea-ico {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+.an-idea dl {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 6px 10px;
+  margin: 0;
+  margin-top: auto;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+.an-idea dt { color: var(--text-3); }
+.an-idea dd { margin: 0; color: var(--text-2); }

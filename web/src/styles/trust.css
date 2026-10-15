@@ -1,0 +1,893 @@
+/* The pages a visitor opens to decide whether to believe Crux, and the pages
+   that support them: How Crux works, Track record, System, Lessons and updates,
+   Phone scans, Work orders and a watched life. Every class starts with "tr-"
+   so nothing here reaches another page. Colours mean what tokens.css says. */
+
+/* ---------------------------------------------------------------- shared */
+
+.tr-ico {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+.tr-ico.tone-sim {
+  color: var(--sim);
+  background: var(--sim-soft);
+  border-color: var(--sim-line);
+}
+.tr-ico.tone-accent {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.tr-ico.tone-model {
+  color: var(--model);
+  background: var(--model-soft);
+  border-color: var(--model-line);
+}
+.tr-ico.tone-ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: var(--ok-line);
+}
+.tr-ico.tone-warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn-line);
+}
+.tr-ico.tone-danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+}
+
+.tr-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.tr-section-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.tr-section-head h2 {
+  font-size: var(--fs-14);
+}
+.tr-section-head .push {
+  margin-left: auto;
+}
+
+/* A limit or a count, as a small chip: a number and what it counts. */
+.tr-limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tr-limit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 20px;
+  white-space: nowrap;
+}
+.tr-limit b {
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.tr-dot.live {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+
+/* A closed hint's note still takes up room, and near the right edge it widens
+   a narrow page; it leaves the layout until it opens. Near an edge it opens
+   towards the middle (pages/trust/hints.ts sets the side). */
+
+/* A heading that holds a hint mark: the mark sits on the text's middle. */
+.tr-with-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Detail on demand, stacked inside one card. */
+.tr-more {
+  display: flex;
+  flex-direction: column;
+}
+.tr-more > .more {
+  padding: 12px var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.tr-more > .more:last-child {
+  border-bottom: 0;
+}
+.tr-more > .more > summary {
+  font-size: var(--fs-13);
+  color: var(--text);
+}
+.tr-more > .more > summary .dim {
+  font-weight: 450;
+}
+.tr-more .more-body {
+  margin-top: 12px;
+}
+
+/* A card body that lists rows. */
+.tr-rows > li {
+  padding: 12px var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.tr-rows > li:last-child {
+  border-bottom: 0;
+}
+
+/* Things that arrive one after another, once. */
+.tr-in > * {
+  animation: tr-up 0.36s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+@keyframes tr-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.tr-enter {
+  animation: tr-up var(--t-med) var(--ease) both;
+}
+
+/* ---------------------------------------------------------------- How Crux works */
+
+.tr-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-5);
+}
+.tr-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: start;
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+.tr-step h3 {
+  font-size: var(--fs-14);
+  line-height: 1.3;
+}
+.tr-step p {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+.tr-step-n {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: var(--fs-10);
+  letter-spacing: 0.04em;
+}
+/* The join between two steps: an arrow in the gap. */
+.tr-join {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: calc(-1 * var(--s-5) / 2 - 12px);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-3);
+}
+
+/* The permission split: two investigators, the same two powers, crossed. */
+.tr-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: stretch;
+}
+.tr-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-4);
+  border: 1px solid var(--model-line);
+  border-radius: var(--r-3);
+  background: color-mix(in srgb, var(--model) 5%, var(--panel));
+}
+.tr-side-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-bottom: 2px;
+}
+.tr-side-head h3 {
+  font-size: var(--fs-16);
+  font-weight: 500;
+}
+.tr-side-head .push {
+  margin-left: auto;
+}
+.tr-power {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 4px var(--s-2);
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--panel);
+}
+.tr-power > svg {
+  margin-top: 1px;
+}
+.tr-power.can > svg {
+  color: var(--model);
+}
+.tr-power b {
+  font-weight: 500;
+}
+.tr-power.cannot {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-3);
+}
+.tr-power.cannot b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.tr-power .tools {
+  grid-column: 2;
+  margin-top: 2px;
+  gap: 4px;
+}
+.tr-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--s-3);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-3);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+.tr-gate b {
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+.tr-gate > svg {
+  color: var(--text-3);
+}
+.tr-split-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+.tr-split-foot > svg {
+  color: var(--ok);
+  flex: none;
+  margin-top: 2px;
+}
+
+/* The replay keeps its drawing to a readable size on a wide screen. */
+.tr-stage .stage > svg {
+  max-height: 300px;
+}
+
+/* What keeps the AI honest: four short rules. */
+.tr-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+.tr-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+}
+.tr-rule-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+.tr-rule-top b {
+  flex: 1;
+  min-width: 0;
+  padding-top: 6px;
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.tr-rule-top .hint {
+  margin-top: 5px;
+}
+.tr-rule p {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* The replay's colour key. */
+.tr-legend {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px var(--s-3);
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+.tr-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tr-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ---------------------------------------------------------------- Track record */
+
+.tr-caveat {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: 10px 12px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-2);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+.tr-caveat > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.tr-caveat .hint {
+  margin-top: 0;
+}
+
+.tr-duel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-6) var(--s-8);
+  margin-top: var(--s-5);
+}
+.tr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.tr-panel-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.tr-panel-head h3 {
+  font-size: var(--fs-16);
+  font-weight: 500;
+}
+.tr-big {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+.tr-big > b {
+  font-size: calc(var(--fs-28) * 2);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.tr-big > b .num {
+  font-variant-numeric: proportional-nums;
+  font-feature-settings: "cv11";
+}
+.tr-big > span {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.35;
+}
+.tr-big > span b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The unit chart */
+.tr-unit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0;
+}
+.tr-unit svg {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  overflow: visible;
+}
+.tr-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity var(--t-fast);
+}
+.tr-cell rect {
+  fill: var(--panel-3);
+  stroke: transparent;
+  stroke-width: 1.6;
+}
+.tr-cross {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  opacity: 0;
+}
+.tr-unit.on .tr-cell.t-ok rect {
+  fill: var(--ok);
+}
+.tr-unit.on .tr-cell.t-accent rect {
+  fill: var(--accent);
+}
+.tr-unit.on .tr-cell.t-declined rect {
+  fill: transparent;
+  stroke: var(--text-3);
+}
+.tr-unit.on .tr-cell.t-danger rect {
+  fill: var(--danger);
+}
+.tr-unit.on .tr-cross {
+  opacity: 1;
+}
+.tr-unit.on .tr-cell {
+  animation: tr-pop 0.32s var(--ease) both;
+  animation-delay: calc(var(--lag, 0ms) + var(--i) * 5ms);
+}
+.tr-unit.on .tr-cell rect,
+.tr-unit.on .tr-cross {
+  animation: tr-fill 0.32s var(--ease) both;
+  animation-delay: calc(var(--lag, 0ms) + var(--i) * 5ms);
+}
+@keyframes tr-pop {
+  from {
+    transform: scale(0.5);
+  }
+}
+@keyframes tr-fill {
+  from {
+    fill: var(--panel-3);
+    stroke: transparent;
+    opacity: 1;
+  }
+}
+.tr-unit.has-hot .tr-cell:not(.hot) {
+  opacity: 0.22;
+}
+
+.tr-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--s-4);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+.tr-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-1);
+  cursor: default;
+}
+.tr-key b {
+  color: var(--text);
+  font-weight: 500;
+}
+.tr-key.zero b {
+  color: var(--ok);
+}
+.tr-key.hot {
+  color: var(--text);
+}
+.tr-swatch {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--panel-3);
+}
+.tr-swatch.t-ok {
+  background: var(--ok);
+}
+.tr-swatch.t-accent {
+  background: var(--accent);
+}
+.tr-swatch.t-declined {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+}
+.tr-swatch.t-danger {
+  background:
+    linear-gradient(45deg, transparent 43%, var(--panel) 43% 57%, transparent 57%),
+    linear-gradient(-45deg, transparent 43%, var(--panel) 43% 57%, transparent 57%),
+    var(--danger);
+}
+.tr-unitrow {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 100%;
+}
+
+.tr-trade {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-3);
+  margin-top: var(--s-5);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+.tr-trade b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The other measured results */
+.tr-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+.tr-res {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+.tr-res.miss {
+  border-color: var(--danger-line);
+}
+.tr-res-fig {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tr-res-fig > b {
+  font-size: var(--fs-28);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.tr-res-fig > span {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+.tr-res-fig .badge {
+  margin-left: auto;
+}
+.tr-res p {
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.tr-res-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: auto;
+  padding-top: var(--s-1);
+}
+.tr-res .meter-fill.tone-danger {
+  background: var(--danger);
+}
+.tr-aim {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-claims > li,
+.tr-sets > li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 2px var(--s-2);
+  align-items: start;
+  padding: 10px var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.tr-claims > li:last-child,
+.tr-sets > li:last-child {
+  border-bottom: 0;
+}
+.tr-claims > li > svg {
+  margin-top: 2px;
+  color: var(--text-3);
+}
+.tr-claims span,
+.tr-sets span {
+  color: var(--text-3);
+}
+.tr-sets > li {
+  grid-template-columns: minmax(84px, max-content) minmax(0, 1fr);
+  gap: 2px var(--s-4);
+}
+.tr-lead {
+  padding: 10px var(--s-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tr-run {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.tr-run .code-block {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- System */
+
+.tr-jobs > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--s-3);
+  align-items: center;
+  padding: 10px var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.tr-jobs > li:last-child {
+  border-bottom: 0;
+}
+.tr-job-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-weight: 500;
+}
+.tr-job-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.tr-job-why {
+  grid-column: 1 / -1;
+  color: var(--warn);
+  font-size: var(--fs-12);
+}
+.tr-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* ---------------------------------------------------------------- A watched life */
+
+.tr-head {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--s-3) var(--s-4);
+}
+.tr-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+.tr-stop .input {
+  width: 64px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: var(--fs-12);
+}
+.tr-stat-meter {
+  margin-top: 8px;
+}
+.tr-chart-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.tr-chart-foot .tr-legend {
+  margin-right: auto;
+}
+.tr-actbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+.tr-actbar .grow {
+  min-width: 120px;
+}
+.tr-line-key {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+.tr-band-key {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* ---------------------------------------------------------------- Phone scans, work orders, lessons */
+
+.tr-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.tr-stills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+.tr-stills .still {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+.tr-lines > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.5;
+}
+.tr-lines > li:first-child {
+  padding-top: 0;
+}
+.tr-lines > li:last-child {
+  border-bottom: 0;
+}
+.tr-lines .chip {
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+.tr-defs {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px var(--s-4);
+  margin-top: 6px;
+  font-size: var(--fs-13);
+}
+.tr-defs dt {
+  color: var(--text-3);
+}
+.tr-defs dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- narrow screens */
+
+@media (max-width: 1180px) {
+  .tr-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .tr-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tr-gate {
+    flex-direction: row;
+    flex-wrap: wrap;
+    text-align: left;
+  }
+  .tr-results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .tr-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+  .tr-join {
+    top: calc(-1 * var(--s-4) / 2 - 12px);
+    left: 50%;
+    margin-top: 0;
+    margin-left: -12px;
+    transform: rotate(90deg);
+  }
+  .tr-duel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tr-rules {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tr-big > b {
+    font-size: calc(var(--fs-28) * 1.6);
+  }
+  .tr-sets > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-unit.on .tr-cell,
+  .tr-unit.on .tr-cell rect,
+  .tr-unit.on .tr-cross,
+  .tr-in > *,
+  .tr-enter {
+    animation: none;
+  }
+}

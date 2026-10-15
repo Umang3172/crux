@@ -1,15 +1,15 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
-import "@fontsource/barlow/400.css";
-import "@fontsource/barlow/500.css";
-import "@fontsource/barlow/600.css";
-import "@fontsource/barlow/700.css";
-import "@fontsource/barlow-condensed/600.css";
-import "@fontsource/barlow-condensed/700.css";
-import { router } from "./app/routes";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./styles/tokens.css";
 import "./styles/base.css";
+import "./styles/ui.css";
+import { router } from "./app/App";
+import { applyStoredTheme } from "./lib/hooks";
+
+applyStoredTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

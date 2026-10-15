@@ -64,6 +64,7 @@ src/hypothesis_engine/
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
   api/app.py                FastAPI, including /replay
+  series/                   the Trends tab: TimesFM 3.0, ARIMA_PLUS and contribution analysis in BigQuery on sensor history, served from snapshots (docs/SERIES.md)
 ```
 
 ## Common tasks
