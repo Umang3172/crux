@@ -1250,6 +1250,13 @@ a.owner:hover {
 }
 
 /* Narrow screens */
+/* With the sidebar open, the six steps beside the text get under 70px each below
+   about 1,200px and their labels ("Investigate", "Maintenance") run into each other. */
+@media (max-width: 1240px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: minmax(0, 1fr);

@@ -306,6 +306,9 @@ export type PartReplay = {
   level: number[];
   time_left: TimeLeft[];
   method: string;
+  /** Share of moments the same method's range held the truth on the other failed parts (never this one). */
+  held_elsewhere?: number | null;
+  held_parts?: number;
 };
 
 export type MachineSummary = {

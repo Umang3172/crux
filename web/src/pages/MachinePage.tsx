@@ -183,12 +183,25 @@ export default function MachinePage() {
         />
         <Stat
           label={
-            <>
+            <span className="tr-with-hint">
               <Hourglass size={13} /> Time left
-            </>
+              <Hint label="How far to trust the range">
+                {part.held_elsewhere != null
+                  ? `On the ${part.held_parts} other recorded parts, each forecast by a model that never saw it, the real time left fell inside ranges like this ${pct(part.held_elsewhere)} of the time. The aim is 80%.`
+                  : "Not yet checked against other recorded parts."}{" "}
+                A range for planning, not a promise.
+              </Hint>
+            </span>
           }
           value={<span style={{ fontSize: "var(--fs-20)" }}>{left ? `${hours(left.p10_h)} to ${hours(left.p90_h)}` : "–"}</span>}
-          sub={left ? left.note || `likely ${hours(left.p50_h)} · a range for planning` : "no range yet"}
+          sub={
+            left
+              ? left.note ||
+                (part.held_elsewhere != null
+                  ? `likely ${hours(left.p50_h)} · right ${pct(part.held_elsewhere)} of the time elsewhere`
+                  : `likely ${hours(left.p50_h)} · a range for planning`)
+              : "no range yet"
+          }
         />
         <div className="stat">
           <div className="stat-label">

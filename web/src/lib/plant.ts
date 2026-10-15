@@ -43,7 +43,8 @@ export type PlantMachine = {
 export const AREAS = [
   { id: "utilities", name: "Utilities", line: "Water, air and steam" },
   { id: "line2", name: "Line 2 · Packaging", line: "Filling to palletising" },
-  { id: "bench", name: "Workshop and test bench", line: "Trials and life tests" },
+  { id: "bench", name: "Workshop and test bench", line: "Trials on the bench" },
+  { id: "lives", name: "Recorded life tests", line: "University bearings run until they failed, replayed as if live" },
 ] as const;
 
 const FIXED: PlantMachine[] = [
@@ -63,7 +64,7 @@ export function plantMachines(lives: MachineSummary[] | null | undefined, synthe
     name: m.name,
     short: m.name,
     type: `${m.parts} part${m.parts === 1 ? "" : "s"} · ${Math.round(m.end_h)} h of life`,
-    area: "bench",
+    area: "lives",
     mode: "life",
     kind: "bearing",
     ref: m.machine,
@@ -80,7 +81,7 @@ export const machinePath = (m: PlantMachine) => (m.mode === "life" && m.ref ? `/
 
 export const MODE: Record<Mode, { label: string; source: string; care: string }> = {
   model: { label: "Investigated on demand", source: "engine's model · synthetic", care: "Crux tests every suspect on a model of the machine, and asks for a measurement only when it cannot tell." },
-  life: { label: "Watched over its life", source: "watched by trend", care: "Crux follows the part's health from new. An alarm fires when vibration stays above its own normal." },
+  life: { label: "Watched over its life", source: "recorded life", care: "Crux follows the part's health from new. An alarm fires when vibration stays above its own normal." },
   live: { label: "Live sensor", source: "live sensor", care: "A sensor streams here. A full capture gets the same investigation." },
   camera: { label: "Phone scan only", source: "no sensor", care: "Nothing is fitted. A ten-second phone video is read for motion and sound." },
 };
