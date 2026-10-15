@@ -212,12 +212,14 @@ export function uploadScan(file: Blob, machine: string, onProgress: (f: number) 
 /**
  * The same upload, answered as it runs: each step of the scan reaches `onStep`
  * as the server reports it, and the promise resolves with the finished scan.
+ * `filename` only carries the container's extension: the server keeps the
+ * video under it.
  */
-export async function streamScan(file: Blob, machine: string, onStep: (s: ScanStep) => void, signal?: AbortSignal): Promise<Scan> {
+export async function streamScan(file: Blob, machine: string, onStep: (s: ScanStep) => void, signal?: AbortSignal, filename = "video.mp4"): Promise<Scan> {
   const path = "/lens/scans/live";
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}?${qs({ machine, filename: "video.mp4", look: true })}`, { method: "POST", body: file, signal });
+    res = await fetch(`${BASE}${path}?${qs({ machine, filename, look: true })}`, { method: "POST", body: file, signal });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError(0, "The engine could not be reached.", path);

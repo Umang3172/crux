@@ -219,8 +219,19 @@ Open the **Lens** tab. On a phone, use the laptop's address that Vite prints
 under "Network". Record a clip of a desk fan, mark it as normal, tape a coin to
 one blade, record again: the second scan should read as out of balance.
 
-**Record** on the Phone scans page sends the demo clip named in
-`web/src/pages/lens/demo.ts` through `POST /lens/scans/live`, which answers one
+**Open the camera** on the Phone scans page films with the device's own
+camera (`getUserMedia`, then `MediaRecorder`: MP4 where the browser can, else
+WebM; up to 10 s at 8 Mbit/s) and shows the frame rate, size and sound rate the
+camera actually delivers. Browsers allow this only on https or localhost; on a
+phone at the laptop's plain http address the button opens the phone's own
+camera app instead. Nothing plays on that screen until the camera is open.
+Under it, three cards send the demo clips named in `web/src/pages/lens/demo.ts`;
+a card names what its clip shows, never what Crux will find. On 15 Oct 2026 a
+4 s MediaRecorder clip from a canvas (a square shaking at 5 Hz, 30 fps) read
+back at 30.4 fps as MP4 and 30.3 fps as WebM, and the shake map boxed the
+square with its line at 5.02 and 5.01 Hz. No phone camera has been through it.
+
+A clip goes through `POST /lens/scans/live`, which answers one
 JSON line per step as it runs (read, identify, gate, look, confirm, motion,
 sound, save), then the scan. Naming the machine, the checklist look (gate, look,
 confirm) and the motion run side by side, so their lines interleave: the look
@@ -229,10 +240,21 @@ no longer waits for this scan's naming. A scan takes as long as its slowest
 branch. The page draws the steps as they arrive, then a
 drawing of the clip's machine with the part the scan points at in red: the part
 a damage finding names, or else the part where the cells over the shake map's
-bar sit, placed by where each part sits in the clip's frame. Two clips are in
-`web/public/demo/`, each with its drawing:
+bar sit, placed by where each part sits in the clip's frame. A video from
+the device has no drawing and shows the frame the model looked at, with its
+boxes. Three clips are in
+`web/public/demo/`, each with a still for its card:
 
-- `motor-pump-shake.mp4`, the default: a motor and pump shaking on a channel
+- `pump-clean.mp4`: an end-suction pump and a finned motor running, the camera
+  moving in slowly, generated for the demo (Veo, in the Gemini app), drawn in
+  `web/src/figures/pumpset/` (the pump on the left, as the clip has it; parts
+  placed by where they sit in the clip's middle still). Two runs on 15 Oct 2026
+  with gemini-3-flash-preview: the first named it "centrifugal pump and electric
+  motor" and found none of the 7 checklist items; the second reported low
+  corrosion on the pump casing, kept by the second look. The shake map found no
+  part shaking clearly more than the rest of the frame in either (whole-frame
+  motion 9.5 px RMS, the camera's).
+- `motor-pump-shake.mp4`: a motor and pump shaking on a channel
   base, generated for the demo (Veo, in the Gemini app), drawn in
   `web/src/figures/skid/`. It is not a recording, so its motion is whatever the
   generator drew: its shake rate is never quoted as a machine's. Two runs on 14

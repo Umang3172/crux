@@ -12,6 +12,8 @@ import { PipeFigure } from "../../figures/pipe/PipeFigure";
 import { partAt, partName } from "../../figures/pipe/model";
 import { SkidFigure } from "../../figures/skid/SkidFigure";
 import { PART_NAME, partAtPoint, partOf } from "../../figures/skid/model";
+import { PumpsetFigure } from "../../figures/pumpset/PumpsetFigure";
+import * as pumpset from "../../figures/pumpset/model";
 import { Badge, Button } from "../../ui/kit";
 import type { DemoClip } from "./demo";
 import { modelName } from "./pipeline";
@@ -108,9 +110,19 @@ export function Result({ scan, clip, onAgain }: { scan: Scan; clip: DemoClip | n
   const shake = shakeOf(scan);
   const drawing = clip?.drawing ?? null;
   const shakePart = shake && drawing === "skid" ? partAtPoint(...shake.at) : null;
-  const shakeWhere = shakePart ? PART_NAME[shakePart] : "";
+  const setShakePart = shake && drawing === "pumpset" ? pumpset.partAtPoint(...shake.at) : null;
+  const shakeWhere = shakePart ? PART_NAME[shakePart] : setShakePart ? pumpset.PART_NAME[setShakePart] : "";
   const skidPart = drawing === "skid" ? (main ? partOf(main) : shakePart) : null;
-  const where = !main ? "" : drawing === "pipe" ? partName(partAt(main.box)) : skidPart ? PART_NAME[skidPart] : main.where;
+  const setPart = drawing === "pumpset" ? (main ? pumpset.partOf(main) : setShakePart) : null;
+  const where = !main
+    ? ""
+    : drawing === "pipe"
+      ? partName(partAt(main.box))
+      : skidPart
+        ? PART_NAME[skidPart]
+        : setPart
+          ? pumpset.PART_NAME[setPart]
+          : main.where;
   const others = findings.filter((f) => f !== main).map((f) => WORD[f.item].toLowerCase());
   const model = look ? modelName(look.inspected_by).replace(" · runs code", "") : "The model";
   const moves = shake ? `${shakeWhere ? cap(shakeWhere) : "One part"} moves ${times(shake.ratio)} more than the rest of the frame` : "";
@@ -125,6 +137,8 @@ export function Result({ scan, clip, onAgain }: { scan: Scan; clip: DemoClip | n
           <PipeFigure findings={findings} compact />
         ) : drawing === "skid" ? (
           <SkidFigure part={skidPart} shakes={shake !== null} readout={readout} />
+        ) : drawing === "pumpset" ? (
+          <PumpsetFigure part={setPart} shakes={shake !== null} readout={readout} />
         ) : (
           <StillWithBoxes scan={scan} findings={findings} />
         )}
