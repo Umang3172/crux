@@ -190,22 +190,29 @@ def score(
     Returns (verdicts, false alarms as (fired, cleared) times, months watched
     after the baseline month).
     """
-    episodes = alarms(h.signal, line)
+    return score_episodes(h.hour, alarms(h.signal, line))
+
+
+def score_episodes(
+    hour: np.ndarray, episodes: list[tuple[int, int]]
+) -> tuple[list[Verdict], list[tuple[str, str]], float]:
+    """`score`'s rules for any detector's alarms, as (fired, cleared) indexes into `hour`."""
+    hour = np.asarray(hour, dtype="datetime64[h]")
     reach = np.timedelta64(REACH_H, "h")
     windows = [(np.datetime64(a, "h"), np.datetime64(b, "h")) for a, b in FAILURES]
     verdicts = []
     for (a, b), raw in zip(windows, FAILURES, strict=True):
-        hits = [h.hour[f] for f, _ in episodes if a - reach <= h.hour[f] <= b]
+        hits = [hour[f] for f, _ in episodes if a - reach <= hour[f] <= b]
         if hits:
             lead = float((a - min(hits)) / np.timedelta64(1, "h"))
             verdicts.append(Verdict(raw, lead > 0, lead))
         else:
             verdicts.append(Verdict(raw, False, None))
     false = [
-        (str(h.hour[f]), str(h.hour[c]))
+        (str(hour[f]), str(hour[c]))
         for f, c in episodes
-        if h.hour[f] >= BASELINE_END
-        and not any(a - reach <= h.hour[f] <= b + reach for a, b in windows)
+        if hour[f] >= BASELINE_END
+        and not any(a - reach <= hour[f] <= b + reach for a, b in windows)
     ]
-    months = float((h.hour[-1] - BASELINE_END) / np.timedelta64(1, "h")) / (24 * 30.4)
+    months = float((hour[-1] - BASELINE_END) / np.timedelta64(1, "h")) / (24 * 30.4)
     return verdicts, false, months

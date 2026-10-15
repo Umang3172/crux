@@ -33,7 +33,8 @@ with is the Forecast screen's third span.
 | Readings outside the expected band | TimesFM 3.0 through `AI.DETECT_ANOMALIES` | One query, one series per moment, signal and day |
 | Next two weeks, and what a signal is made of | BigQuery ML `ARIMA_PLUS` with `ML.EXPLAIN_FORECAST` | Past TimesFM 3.0's 2,048-point context. Splits a series into trend, daily and weekly pattern, spikes and dips, step changes and residual |
 | What changed against a normal week | BigQuery ML contribution analysis with `ML.GET_INSIGHTS` | Ranks the segments of time behind a change |
-| A summary in plain words | Gemini on Vertex AI | Words only: a reply stating a number that is not among the facts is dropped. For a leak, each fact carries the normal week's number and says when the leak was reported |
+| A summary in plain words | Gemini on Vertex AI | Words only: a reply stating a number that is not among the facts is dropped. Three sentences: what is different, the evidence beside the normal week's number, and when a person could look (the part of the week that changed most), never a cause. For the normal week, that it is the week the others are compared with |
+| How far to trust each model | BigQuery `AI.EVALUATE` beside our own scoring | Scores the same TimesFM forecasts again, as a check on the benchmark below |
 | Ask the data | Conversational Analytics API (Gemini data agent over the BigQuery tables) | A question in plain words comes back as text, the SQL it wrote, the rows and a chart spec |
 | Storage | BigQuery dataset `crux_ts` in `asia-south1` | One home for the sensor history the models read |
 
@@ -149,6 +150,97 @@ to 2 hours after their reports and fires 4 times in February and March with no
 leak (14 Oct 2026, a check outside the code). What the tab can honestly offer
 is to notice a leak within hours, against a normal week, not to foresee it.
 
+## Benchmark: every day of the record, not five moments
+
+The five moments are pictures. The benchmark scores the same models on every
+day the record allows, so the tab can say how far to trust them
+(`series/bench.py`, `scripts/series.py bench`). Its rules were written here on
+15 Oct 2026, before any of it ran, and are not changed after seeing a result.
+
+**Next day.** The loaded share in fifteen-minute steps, as the Next day span
+forecasts it.
+
+- From 08:00 on every day that has 2,048 steps before it and its next 96 steps
+  in the record. A step whose clock was filled is not scored.
+- Methods:
+  1. TimesFM 3.0 as the tab runs it (`forecast_sql`: three targets, reservoir
+     pressure and the clock as helpers, context 2,048);
+  2. TimesFM 3.0 on the loaded share alone, context 2,048;
+  3. TimesFM 2.5 on the loaded share alone, with up to 15,360 steps (160 days)
+     behind it and the context BigQuery picks;
+  4. the same time yesterday, with a band from that rule's own errors over the
+     2,048 steps before (`offline.seasonal_band`, the stand-in the tab already
+     uses).
+- Scored as the tab draws them, within 0 to 100%:
+  - the typical miss: the mean absolute error, in points of loaded share;
+  - the miss against yesterday's: its summed absolute error over the summed
+    error of method 4 on the same steps, so below 1 beats it;
+  - how often the truth fell inside the 80% band.
+- Days whose next 24 hours overlap a reported leak are scored apart from the
+  rest. A day that any method could not forecast is left out for every method.
+- Google's own `AI.EVALUATE` scores methods 2 and 3 again on the same days, as
+  a check on ours.
+
+**Leaks.** Four detectors on the loaded share, from 1 Feb to 1 Sep 2020:
+
+1. Crux's watcher, its own last 28 days as normal (`forecast/metropt.py`,
+   unchanged);
+2. TimesFM 3.0's anomaly check as the tab runs it: each calendar day's 96 steps
+   held to the 2,048 steps before the day began, Google's default threshold;
+3. the offline band (median of the same time of day over 14 days, plus or minus
+   3 robust standard deviations), a day at a time the same way;
+4. a plain rule: an hour in which the motor ran at least half its minutes and
+   ran loaded for at least 80% of them.
+
+For detectors 2 and 3, a clock hour is flagged when any of its steps falls
+outside the band while the motor ran most of it, and an alarm fires on the
+third flagged hour in a row: the watcher's own onset rule (`onset.CONSECUTIVE`).
+Detector 4 fires on its second flagged hour in a row, as it was first checked on
+14 Oct 2026.
+
+Every detector is scored by the watcher's rules (`metropt.score`):
+
+- a leak is caught by an alarm that fires from 24 hours before its reported
+  start to its end;
+- the warning is the time from that alarm to the reported start;
+- a false alarm is one that fires after 1 Mar 2020 and not within 24 hours of
+  any leak, counted per month.
+
+### Results (BigQuery run of 15 Oct 2026)
+
+191 days, 22 Feb to 30 Aug 2020; no day was left out. Six jobs, $0.0004 by
+the ledger. `scripts/series.py bench` reproduces it; the board is served at
+`GET /series/metro/bench` and drawn on the Track record page.
+
+| Next day, loaded share | 184 ordinary days: typical miss / against yesterday / range held | 7 leak days: typical miss / range held |
+|---|---|---|
+| TimesFM 3.0 as the tab runs it, with helpers | 9.3 points / 0.61 / 75% | 31.5 / 55% |
+| TimesFM 3.0, loaded share alone | 9.7 / 0.64 / 72% | 31.7 / 60% |
+| TimesFM 2.5, up to 160 days behind it | 9.4 / 0.63 / 80% | 35.4 / 53% |
+| Same time yesterday | 15.1 / 1.00 / 80% | 46.1 / 44% |
+
+TimesFM 3.0 with its helpers misses 39% less than repeating yesterday; the
+helpers take a little off the miss (9.3 against 9.7 alone). Its 80% range is a
+little narrow (75%); TimesFM 2.5 with the longer memory holds 80%. On a day
+holding a leak every method misses by 31 to 46 points: none expects a leak.
+Google's `AI.EVALUATE` on all 191 days gave 10.5 points for TimesFM 3.0 alone
+and 10.9 for TimesFM 2.5; ours over the same days is 10.6 and 10.5. Ours draws
+the forecast within 0 to 100% and leaves filled steps out; `AI.EVALUATE` does
+neither, and averages per day.
+
+| Leaks | Caught | Each leak, alarm against the reported start | False alarms a month |
+|---|---|---|---|
+| Crux's watcher, its own last 28 days as normal | 4 of 4 | 6 h after, 5 h after, 6 h after, 5 h before | 2.6 |
+| TimesFM 3.0 anomaly check, a day at a time | 3 of 4 | 2 h after, missed, 1 h after, 7 h before | 5.6 |
+| Same time of day over 14 days, 3 spreads | 4 of 4 | 2 h after, 2 h after, 1 h before, 13 h before | 9.6 |
+| Loaded 80% of running time, two hours in a row | 4 of 4 | 1 h after each | 2.6 |
+
+The watcher's row matches its own run (`scripts/forecast.py metro`), which
+checks the shared scorer. TimesFM's check missed leak 2 and raised twice the
+false alarms of the watcher, so the tab shows its flags as readings to look
+at, not as alarms. No detector warns a day or more ahead, as the section above
+found.
+
 ## Offline stand-ins
 
 Without Google Cloud the same views come from simple rules, labelled "Offline
@@ -186,6 +278,7 @@ messages still close every phase, only later.
 | `GET /series/{source}/summary?preset` | Three sentences, and the facts they were written from |
 | `GET /series/ask/examples`, `POST /series/ask` | Saved answers; a live question when switched on |
 | `POST /series/ask/live` | The same live question as one JSON line per phase, then the answer |
+| `GET /series/{source}/bench` | Every day of the record scored (compressor only): the next-day forecasts and the leak detectors |
 
 ## Running it
 
@@ -198,6 +291,8 @@ uv run python scripts/series.py snapshot --engine bigquery             # the Goo
 uv run python scripts/series.py spent                                  # the ledger
 uv run python scripts/series.py recount                                # count saved views again, no network
 uv run python scripts/series.py early                                  # loaded share before each leak
+uv run python scripts/series.py bench --engine bigquery --dry-run      # what the benchmark may cost
+uv run python scripts/series.py bench --engine bigquery                # every day of the record scored
 ```
 
 The Google run reads `GOOGLE_CLOUD_PROJECT` and `BIGQUERY_LOCATION` (default

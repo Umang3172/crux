@@ -8,6 +8,8 @@
     uv run python scripts/series.py spent                      # what the Google run has cost so far
     uv run python scripts/series.py recount                    # count saved weeks' unusual readings again, no network
     uv run python scripts/series.py early                      # does the record show a leak before it is reported?
+    uv run python scripts/series.py bench --engine bigquery --dry-run      # what the benchmark may cost
+    uv run python scripts/series.py bench --engine bigquery                # every day of the record scored
 
 `prepare` needs MetroPT-3 in data/metropt/ (a human download; docs/SERIES.md).
 The Google run needs the `series` extra and Google Cloud's login (ADC), uses
@@ -111,6 +113,28 @@ def early(_: argparse.Namespace) -> int:
     return 0
 
 
+def bench_cmd(args: argparse.Namespace) -> int:
+    from hypothesis_engine.series import bench
+
+    if args.engine == "offline":
+        print(bench.save(bench.build_offline(), "offline"))
+        return 0
+    runner = bigquery.Runner(dry_only=args.dry_run, budget=args.budget)
+    print(
+        f"project {runner.where.project}, dataset {runner.where.dataset}, location {runner.location}"
+    )
+    try:
+        written = bench.run_bigquery(runner)
+    except bigquery.BudgetExceeded as exc:
+        print(f"stopped: {exc}", file=sys.stderr)
+        return 3
+    if written is None:
+        print(f"dry run: the benchmark would cost at most ${runner.planned:.4f}")
+    else:
+        print(f"{written}; spent in all ${runner.ledger.spent():.4f}")
+    return 0
+
+
 def spent(_: argparse.Namespace) -> int:
     ledger = bigquery.Ledger()
     for e in ledger.entries():
@@ -131,6 +155,11 @@ def main() -> int:
     s.add_argument("--steps", help=f"comma-separated, from {','.join(bigquery.STEPS)}")
     s.add_argument("--budget", type=float, default=settings.BUDGET_USD)
     s.set_defaults(fn=snap)
+    b = sub.add_parser("bench")
+    b.add_argument("--engine", choices=("offline", "bigquery"), default="offline")
+    b.add_argument("--dry-run", action="store_true", help="estimate each BigQuery job and run none")
+    b.add_argument("--budget", type=float, default=settings.BUDGET_USD)
+    b.set_defaults(fn=bench_cmd)
     sub.add_parser("spent").set_defaults(fn=spent)
     sub.add_parser("recount").set_defaults(fn=recount)
     sub.add_parser("early").set_defaults(fn=early)

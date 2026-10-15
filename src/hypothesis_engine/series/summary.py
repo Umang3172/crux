@@ -23,11 +23,18 @@ Get = Callable[[str], dict[str, Any] | None]
 
 PROMPT = """You write for a maintenance planner at a metro depot or a factory.
 Write exactly three short sentences, each under 25 words, from the facts below.
-Pick the facts that matter most to a planner and leave the rest out.
+First: what is different from the normal week, in plain words. Second: the
+evidence, its number beside the normal week's. Third: a suggestion for a person
+to decide on: when to look, taken from the stretch of time the facts say
+changed most.
+If no fact mentions the normal week, this is the normal week itself: say what
+the readings show, give the evidence, and say this is the week the others are
+compared with, so no check is suggested.
 Rules: use only these facts; copy every number exactly as written; add no other
 number; when a fact sets a number beside the normal week's, keep both in the
-same sentence; when a fact says a leak was reported, include it; say what the
-readings show, never why (no diagnosis); no jargon, no lists, no headings.
+same sentence and in the same order; when a fact says a leak was reported,
+include it; say what the readings show, never why (no diagnosis, no cause, no
+part to inspect); no jargon, no lists, no headings.
 
 Facts:
 """
@@ -145,9 +152,10 @@ def facts(source: str, get: Get, normal: Get | None = None) -> list[str]:
     if ch and ch["rows"]:
         top = ch["rows"][0]
         out.append(
-            f"Against the normal week, the loaded share while running changed most in "
-            f"{top['label']}: {_r(top['test'])}% against {_r(top['control'])}%; over the whole "
-            f"week {_r(ch['overall']['test'])}% against {_r(ch['overall']['control'])}%."
+            f"Against the normal week, the share of running time spent loaded changed most "
+            f"{_when(views.plain_segment(top['label']))}: {_r(top['test'])}% against "
+            f"{_r(top['control'])}%; over the whole week {_r(ch['overall']['test'])}% against "
+            f"{_r(ch['overall']['control'])}%."
         )
     bd = get("breakdown") if source == "metro" else None
     big = _largest_step(bd) if bd else None
@@ -162,6 +170,11 @@ def facts(source: str, get: Get, normal: Get | None = None) -> list[str]:
             line += f"; in the normal week, {_r(nbig)} points"
         later.append(line + ".")
     return out + later
+
+
+def _when(segment: str) -> str:
+    """Where in the week: a stretch already worded as a clause stands as it is."""
+    return segment if segment.startswith("while") else f"in this part of the week: {segment}"
 
 
 def _allowed(fact_lines: list[str]) -> set[str]:

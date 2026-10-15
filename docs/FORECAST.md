@@ -100,7 +100,7 @@ third of the time even the early end is too late.
 
 **Learned at one lab, used at another:** trained on XJTU-SY and tested on IMS
 with no refitting, gbm-residual scores 0.45 / 32% / 17% and gbm-direct 0.41 /
-22% / 2%; trained on three IMS bearings instead (development run), gbm-residual
+22% / 2% (average-life 0.45 / 8% / 9%, trend 1.76 / 20% / 74%); trained on three IMS bearings instead (development run), gbm-residual
 scored 1.59 / 43% / 28%. Four IMS bearings: a hint, not proof.
 
 **Calibrated ranges (13 Oct 2026, `calibrate.py`):** every range was too
@@ -118,6 +118,8 @@ done by bearing. p50 does not move, so the error does not change.
 | trend, calibrated | XJTU-SY, one held out | 0.69 | 79% | 11% |
 | gbm-residual | XJTU-SY, one held out | 0.60 | 42% | 33% |
 | **gbm-residual, calibrated (shipped)** | XJTU-SY, one held out | 0.60 | **80%** | **9%** |
+| trend | trained on XJTU-SY, tested on IMS | 1.76 | 20% | 74% |
+| trend, calibrated | trained on XJTU-SY, tested on IMS | 1.76 | 76% | 22% |
 | gbm-residual | trained on XJTU-SY, tested on IMS | 0.45 | 32% | 17% |
 | gbm-residual, calibrated | trained on XJTU-SY, tested on IMS | 0.45 | 65% | 8% |
 
