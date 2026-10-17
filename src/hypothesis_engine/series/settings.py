@@ -108,6 +108,13 @@ SPANS = (
     Span("2w", "Next 2 weeks", 60, 336, 504, "ARIMA_PLUS", "BigQuery ML ARIMA_PLUS"),
 )
 
+#: The spans the Trends tab offers. Two weeks is still computed, because its
+#: ARIMA_PLUS model also splits each signal into the parts the Gemini summary
+#: is written from, but it is not offered: it is the one forecast no benchmark
+#: has scored (docs/SERIES.md, "Benchmark"), and a leak shows within hours of
+#: its report, so a two-week horizon says nothing about one.
+OFFERED_SPANS = tuple(s for s in SPANS if s.id != "2w")
+
 #: TimesFM 3.0's largest context, used whenever that much history exists.
 CONTEXT = 2048
 
