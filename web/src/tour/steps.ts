@@ -29,7 +29,7 @@ const STEPS: TourStep[] = [
     route: "/plant",
     target: '[data-tour="plant-shift"]',
     title: "A plant, not one pump",
-    body: "Eight machines in three areas, each looked after in its own way. Nothing has been investigated yet.",
+    body: "Every machine on the site, in three areas, each looked after in its own way. Nothing has been investigated yet.",
   },
   {
     id: "shift",
