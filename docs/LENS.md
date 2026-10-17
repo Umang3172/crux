@@ -207,6 +207,31 @@ normal scan was taken). The gate's blur and exposure bars are provisional (below
 - Live video (Gemini Live API, ER 2 streaming at up to 1 fps) can say what and
   where, never how fast something shakes; not built.
 
+## A scan as the answer to a case's check
+
+A case waiting on a check can take its reading from a scan
+(`POST /investigations/{id}/evidence/phone`, `lens/answer.py`, ADR-0033). On
+the synthetic rig the check asked for is most often the envelope, then the
+temperature and the coast-down.
+
+| Check | From the scan | How |
+|---|---|---|
+| `envelope` | the sound | `env_contrast` read with `signals.features.extract` at the case's speed, on the case's bearing; uncertainty from the spread of 2 s segments |
+| `vib_10s`, `half_order` | the motion | the ratio of the 2x (or 0.5x) line to 1x, times k^2 to read as an accelerometer would; uncertainty from each line's noise floor and the shutter |
+| `temperature`, `coast_down` | refused | a phone cannot measure them |
+
+The scan's confirmed speed must sit within 5% of the case's. A camera line must
+be below half the frame rate and clear of other lines, and 1x must stand four
+times above its noise. A case scored against its machine's own normal refuses a
+phone reading. On the case page, **Use a phone scan** lists the machine's
+analysed scans or links here with the machine and the case filled in; a scan
+page opened from a case answers it in one click.
+
+Tested on synthetic sound and lines, and once end to end on a synthetic clip
+encoded with H.264 and AAC (17 Oct 2026): an outer-race sound read
+`env_contrast` 1.845 +/- 0.038 through the browser. Real phone recordings of a
+machine with a known fault have not been scored.
+
 ## Try it
 
 ```bash

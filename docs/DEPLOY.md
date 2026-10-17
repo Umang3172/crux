@@ -190,7 +190,7 @@ open "$URL"     # macOS; xdg-open on Linux
 ```
 
 `/health` is the honest answer to "is a model actually live?" — it names the
-implementation behind each role. Show it once in the demo video (DEMO_SCRIPT.md).
+implementation behind each role. Show it once in the demo video.
 
 ---
 

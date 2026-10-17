@@ -198,4 +198,4 @@ No CMMS integration, no machine onboarding from manuals, and no closed-loop
 control: Crux recommends, a person approves and acts. Lessons carried between
 sites and the time-left forecast, which an earlier version of this page listed
 as absent, are built (`docs/LEARNING.md`, `docs/FORECAST.md`). What is still
-open is in `docs/TASKS.md`.
+open is under "Known limits" in the README.

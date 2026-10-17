@@ -61,6 +61,7 @@ src/hypothesis_engine/
   agents/investigator.py    the investigator loop: Gemini drives the tools, code ends it
   agents/scripted.py        the offline stand-in the loop runs on without credentials
   agents/                   other optional model adapters + offline fallbacks
+  lens/answer.py            a phone scan as the reading a case asked for, with its own uncertainty
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
   api/app.py                FastAPI, including /replay
