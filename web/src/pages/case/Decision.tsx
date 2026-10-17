@@ -3,18 +3,34 @@
 // Every number is the engine's.
 
 import { useState } from "react";
-import { Cpu, Crosshair, Keyboard, Scale, Smartphone } from "lucide-react";
-import { submitEvidence } from "../../api/crux";
+import { Link } from "react-router";
+import { Cpu, Crosshair, Keyboard, Scale, ScanLine, Smartphone } from "lucide-react";
+import { answerWithScan, scans as fetchScans, submitEvidence } from "../../api/crux";
 import type { CatalogTest, Considered, FaultKind, RunParams, TestRequest } from "../../api/types";
 import type { CaseModel } from "../../lib/casemodel";
-import { clock, num, pct } from "../../lib/format";
+import { clock, num, pct, stamp } from "../../lib/format";
+import { useAsync } from "../../lib/hooks";
 import { answerWithInstrument, encodeKey } from "../../lib/instrument";
 import { check, fault, plainSentence } from "../../lib/plain";
+import { machineOfCase } from "../../lib/plant";
 import { isOnList } from "../../lib/scenarios";
 import { markAnswered, rememberInvestigation, type CaseEntry } from "../../lib/session";
 import { DecisionAxis } from "../../ui/charts";
 import { Badge, Button, Callout, Card, Details, Hint, cx, type Tone } from "../../ui/kit";
 import { QrCode, phoneCheckUrl } from "../../ui/QrCode";
+
+/**
+ * The checks a phone scan can stand in for, and which of its sensors does it
+ * (the server's lens/answer.py decides; this only words the offer).
+ */
+const PHONE_SENSOR: Partial<Record<string, string>> = {
+  envelope: "sound",
+  vib_10s: "motion",
+  half_order: "motion",
+};
+
+/** Where to record a scan for this case: the phone-scan page, told the machine and the case. */
+export const scanForCase = (machineName: string, caseId: string) => `/lens?machine=${encodeURIComponent(machineName)}&case=${encodeURIComponent(caseId)}`;
 
 const FATE: Record<Considered["fate"], { label: string; tone: Tone }> = {
   chosen: { label: "chosen", tone: "accent" },
@@ -32,9 +48,10 @@ export function TakeReading({ entry, req, className }: { entry: CaseEntry; req: 
   const [busy, setBusy] = useState<"instrument" | "person" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
-  const [open, setOpen] = useState<"phone" | "type" | null>(null);
+  const [open, setOpen] = useState<"phone" | "type" | "scan" | null>(null);
   const canInstrument = isOnList(entry.params.fault) && !entry.lost;
   const key = canInstrument ? encodeKey(entry.params as RunParams & { fault: FaultKind }) : null;
+  const sensor = PHONE_SENSOR[req.test_id];
 
   async function instrument() {
     setBusy("instrument");
@@ -79,6 +96,11 @@ export function TakeReading({ entry, req, className }: { entry: CaseEntry; req: 
         <Button icon={<Keyboard size={14} />} aria-expanded={open === "type"} disabled={!!entry.lost || busy !== null} onClick={() => setOpen((o) => (o === "type" ? null : "type"))}>
           Type a reading
         </Button>
+        <span data-tip={sensor ? undefined : "A phone cannot measure this check"}>
+          <Button icon={<ScanLine size={14} />} aria-expanded={open === "scan"} disabled={!sensor || !!entry.lost || busy !== null} onClick={() => setOpen((o) => (o === "scan" ? null : "scan"))}>
+            Use a phone scan
+          </Button>
+        </span>
       </div>
       {canInstrument && (
         <p className="take-note">
@@ -110,6 +132,66 @@ export function TakeReading({ entry, req, className }: { entry: CaseEntry; req: 
           <span>Scan with a phone. This page updates when the reading lands.</span>
         </div>
       )}
+      {open === "scan" && sensor && <ScanPicker entry={entry} req={req} sensor={sensor} />}
+      {error && <Callout tone="danger">{error}</Callout>}
+    </div>
+  );
+}
+
+/** Pick a phone scan of this machine to answer the check with, or go and record one. */
+function ScanPicker({ entry, req, sensor }: { entry: CaseEntry; req: TestRequest; sensor: string }) {
+  const machine = machineOfCase(entry);
+  const list = useAsync(() => fetchScans(), []);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const analysed = (list.data ?? []).filter((s) => s.analysed);
+  // This machine's scans first; any analysed scan can be offered, the server checks the speed.
+  const rows = [...analysed.filter((s) => s.machine === machine.name), ...analysed.filter((s) => s.machine !== machine.name)].slice(0, 6);
+
+  async function use(scanId: string) {
+    setBusy(scanId);
+    setError(null);
+    try {
+      const inv = await answerWithScan(entry.id, scanId);
+      rememberInvestigation(inv);
+      const got = inv.phone_answers?.filter((p) => p.test_id === req.test_id).pop();
+      if (got) markAnswered(entry.id, req.test_id, "phone scan", "here", got.value);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="take-panel take-scan">
+      <p className="take-note">
+        The scan's {sensor} stands in for this check, with an uncertainty worked out from the clip, so it counts for less than a sensor would. Use a clip of {machine.short} running at the case's speed.
+      </p>
+      {list.error ? (
+        <Callout tone="danger">{list.error.message}</Callout>
+      ) : !list.data ? (
+        <span className="dim small">Loading scans…</span>
+      ) : rows.length === 0 ? (
+        <span className="dim small">No analysed scan yet.</span>
+      ) : (
+        <ul className="take-scans">
+          {rows.map((s) => (
+            <li key={s.id}>
+              <span>
+                <b>{s.machine || "unnamed machine"}</b> <span className="dim mono tiny">{s.id}</span>
+                <span className="dim small"> · {stamp(s.created)}</span>
+              </span>
+              <Button size="sm" busy={busy === s.id} disabled={busy !== null} onClick={() => use(s.id)}>
+                Answer with this scan
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link className="small" to={scanForCase(machine.name, entry.id)}>
+        Record a new scan of {machine.short}
+      </Link>
       {error && <Callout tone="danger">{error}</Callout>}
     </div>
   );
@@ -150,6 +232,7 @@ export function DecisionCard({
   const chosen = req.considered.find((c) => c.fate === "chosen");
   const answered = model.checks.filter((c) => c.testId === req.test_id && c.status === "answered").pop();
   const mine = entry.answered[req.test_id];
+  const phone = entry.inv?.phone_answers?.filter((p) => p.test_id === req.test_id).pop();
   const minutes = cat?.effort_min ?? chosen?.minutes;
   const downtime = cat?.downtime ?? chosen?.downtime;
   const v: AxisView = view ?? { beliefs: beliefsOf(model), leader: model.leader?.kind ?? null, settled: model.status === "concluded", land: false };
@@ -208,6 +291,13 @@ export function DecisionCard({
             </>
           ) : mine?.by === "person" ? (
             <>Typed in by a technician at {clock(mine.at)}.</>
+          ) : phone ? (
+            <>
+              <Badge tone="accent" plain>
+                phone scan
+              </Badge>
+              Read from <Link to={`/lens/${phone.scan_id}`}>scan {phone.scan_id}</Link>, with the uncertainty of a phone clip.
+            </>
           ) : (
             <>Reading handed in.</>
           )}

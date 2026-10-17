@@ -7,10 +7,11 @@
 
 import type { ReactNode } from "react";
 import { ChartLine } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { askExamples, seriesAnomalies, seriesBench, seriesCatalog, seriesChanges, seriesForecast, seriesSummary } from "../../api/series";
 import type { AnomaliesView, ChangesView, ForecastView, Source, SummaryView } from "../../api/series.types";
 import { useAsync } from "../../lib/hooks";
+import { historyMachine, machinePath } from "../../lib/plant";
 import { Callout, Card, Empty, ErrorState, PageHead, Seg, SkeletonRows, Tabs } from "../../ui/kit";
 import { Ask } from "./Ask";
 import { Forecast } from "./Forecast";
@@ -88,6 +89,7 @@ export default function TrendsPage() {
   const bench = useAsync((sig) => (ready && metro ? seriesBench(sid, sig) : skip<null>()), [sid, metro]);
 
   const made = summary.data?.made ?? anomalies.data?.made;
+  const home = historyMachine(sid);
   const head = (
     <PageHead title="Trends" sub="What the sensors will do next, and what looks off now." actions={made ? <EngineBadge made={made} /> : undefined} />
   );
@@ -128,6 +130,12 @@ export default function TrendsPage() {
   return (
     <div className="page tn-page">
       {head}
+      {home && (
+        <p className="tn-scope small muted">
+          <Link to={machinePath(home)}>{home.name}</Link> · a replay of a public record ({source.dataset.split(":")[0]}). Crux's physics reads rotating-machine vibration and an air leak is outside it,
+          so an unusual reading here goes to a person, never to an investigation.
+        </p>
+      )}
       <Tabs value={screen} onChange={(v) => set("view", v)} tabs={screens} label="Trends screens" />
       {screen !== "ask" && <Picker sources={shown} source={source} preset={preset} set={set} />}
       {screen !== "ask" && !source.available && <Callout tone="warn">This server holds no recorded history for this machine, so only saved Google results can show.</Callout>}

@@ -44,5 +44,12 @@ export function sayStatus(m: PlantMachine, st: MachineStatus, model: CaseModel |
 
   if (m.mode === "life") return { short: st.owner ? st.label : "Health watched", mood: st.owner ? "act" : "calm", line: "Crux follows this part's health from new.", detail: "Open its history to see how the health fell and when Crux raised the alarm." };
   if (m.mode === "live") return { short: st.label, mood: "calm", line: "A sensor on this motor sends its vibration to Crux.", detail: "A full capture gets the same investigation as any other machine." };
+  if (m.mode === "history")
+    return {
+      short: "Sensor history",
+      mood: "calm",
+      line: "Google's forecasting models watch this compressor's recorded sensors.",
+      detail: "An air leak is outside Crux's vibration physics, so an unusual reading goes to a person, not to an investigation.",
+    };
   return { short: st.owner ? st.label : "No sensor fitted", mood: st.owner ? "act" : "calm", line: "Nothing is fitted to this machine.", detail: "A ten-second phone video is its only reading." };
 }

@@ -103,7 +103,7 @@ export function StillWithBoxes({ scan, findings }: { scan: Scan; findings: Findi
   );
 }
 
-export function Result({ scan, clip, onAgain }: { scan: Scan; clip: DemoClip | null; onAgain: () => void }) {
+export function Result({ scan, clip, onAgain, forCase }: { scan: Scan; clip: DemoClip | null; onAgain: () => void; forCase?: string }) {
   const look = "findings" in scan.look ? scan.look : null;
   const findings = look?.findings ?? [];
   const main = findings.find(damage) ?? findings[0];
@@ -167,8 +167,8 @@ export function Result({ scan, clip, onAgain }: { scan: Scan; clip: DemoClip | n
             <Button size="sm" icon={<RotateCcw size={13} />} onClick={onAgain}>
               Scan again
             </Button>
-            <Link className="ll-open small" to={`/lens/${scan.id}`}>
-              Details <ArrowRight size={12} aria-hidden />
+            <Link className="ll-open small" to={forCase ? `/lens/${scan.id}?case=${encodeURIComponent(forCase)}` : `/lens/${scan.id}`}>
+              {forCase ? "Confirm the speed and answer the investigation" : "Details"} <ArrowRight size={12} aria-hidden />
             </Link>
           </div>
         </div>

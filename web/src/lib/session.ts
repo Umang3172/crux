@@ -9,7 +9,7 @@ import { useSyncExternalStore } from "react";
 import type { AgentRun, Investigation, RepairResult, RunParams } from "../api/types";
 import type { Investigator } from "./scenarios";
 
-export type Answerer = "virtual instrument" | "person";
+export type Answerer = "virtual instrument" | "person" | "phone scan";
 
 export type CaseEntry = {
   id: string;

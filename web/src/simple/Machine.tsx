@@ -10,7 +10,7 @@ import { modelOf, type CaseModel } from "../lib/casemodel";
 import { clock, num, stamp } from "../lib/format";
 import { useCatalogue } from "../lib/hooks";
 import { fault } from "../lib/plain";
-import { machinePath, type PlantData, type PlantMachine } from "../lib/plant";
+import { machinePath, trendsPath, type PlantData, type PlantMachine } from "../lib/plant";
 import type { CaseEntry } from "../lib/session";
 import { usePlant } from "../lib/useplant";
 import { finding, rowsOf } from "../pages/parts";
@@ -138,6 +138,12 @@ function Actions({ m, entry, model, busy, run, measure, onSensor }: { m: PlantMa
     return (
       <Link to={`/lens?machine=${encodeURIComponent(m.name)}`} className="mn-btn">
         Scan it with a phone
+      </Link>
+    );
+  if (m.mode === "history")
+    return (
+      <Link to={trendsPath(m)} className="mn-btn">
+        Open its trends
       </Link>
     );
 
