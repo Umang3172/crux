@@ -10,9 +10,6 @@ investigation.
 
 from __future__ import annotations
 
-import asyncio
-import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -22,6 +19,7 @@ from pydantic import BaseModel, Field
 from ..series import ask as ask_data
 from ..series import bench as bench_board
 from ..series import snapshot
+from .streaming import stream_steps
 
 router = APIRouter(prefix="/series", tags=["time series"])
 
@@ -293,33 +291,15 @@ async def ask_live(q: Question) -> StreamingResponse:
         raise HTTPException(404, "live questions are off on this server")
     from ..series.bigquery import Ledger
 
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
-
-    def say(step: str, state: str, detail: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(
-            queue.put_nowait, {"step": step, "state": state, "detail": detail}
-        )
-
-    def failed(message: str) -> dict[str, Any]:
+    def failed(exc: Exception) -> dict[str, Any]:
+        if isinstance(exc, ask_data.AskLimited | ValueError):
+            message = str(exc)
+        else:
+            message = f"the data agent did not answer: {type(exc).__name__}: {exc}"
         return {"step": "error", "state": "failed", "detail": {"message": message[:300]}}
 
-    async def run() -> None:
-        try:
-            answer = await asyncio.to_thread(ask_data.ask, q.question, ledger=Ledger(), on_step=say)
-            queue.put_nowait({"step": "result", "state": "done", "answer": answer})
-        except (ask_data.AskLimited, ValueError) as exc:
-            queue.put_nowait(failed(str(exc)))
-        except Exception as exc:  # noqa: BLE001 - the stream has started: report it in the stream
-            queue.put_nowait(failed(f"the data agent did not answer: {type(exc).__name__}: {exc}"))
-        finally:
-            queue.put_nowait(None)
-
-    task = asyncio.create_task(run())
-
-    async def lines() -> AsyncIterator[str]:
-        while (item := await queue.get()) is not None:
-            yield json.dumps(item, default=str) + "\n"
-        await task
-
-    return StreamingResponse(lines(), media_type="application/x-ndjson")
+    return stream_steps(
+        lambda say: ask_data.ask(q.question, ledger=Ledger(), on_step=say),
+        lambda answer: {"step": "result", "state": "done", "answer": answer},
+        failed,
+    )

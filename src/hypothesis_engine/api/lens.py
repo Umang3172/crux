@@ -8,9 +8,6 @@ scan, so a page can draw the pipeline while it works instead of a spinner.
 
 from __future__ import annotations
 
-import asyncio
-import json
-from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any
 
@@ -20,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from ..lens import scan as scans
 from ..lens.motion import Box
+from .streaming import stream_steps
 
 router = APIRouter(prefix="/lens", tags=["lens"])
 
@@ -78,47 +76,19 @@ async def new_scan_live(
     import av
 
     data = await _upload(request)
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
-    def say(step: str, state: str, detail: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(
-            queue.put_nowait, {"step": step, "state": state, "detail": detail}
-        )
+    def failed(exc: Exception) -> dict[str, Any]:
+        if isinstance(exc, ValueError | av.FFmpegError):
+            message = f"could not read this video: {exc}"
+        else:
+            message = f"the scan failed ({type(exc).__name__})"
+        return {"step": "error", "state": "failed", "detail": {"message": message}}
 
-    async def run() -> None:
-        try:
-            scan = await asyncio.to_thread(
-                scans.new_scan, data, filename, machine, look=look, on_step=say
-            )
-            queue.put_nowait({"step": "scan", "state": "done", "scan": asdict(scan)})
-        except (ValueError, av.FFmpegError) as e:
-            queue.put_nowait(
-                {
-                    "step": "error",
-                    "state": "failed",
-                    "detail": {"message": f"could not read this video: {e}"},
-                }
-            )
-        except Exception as e:  # the stream has started: report it in the stream
-            queue.put_nowait(
-                {
-                    "step": "error",
-                    "state": "failed",
-                    "detail": {"message": f"the scan failed ({type(e).__name__})"},
-                }
-            )
-        finally:
-            queue.put_nowait(None)
-
-    task = asyncio.create_task(run())
-
-    async def lines() -> AsyncIterator[str]:
-        while (item := await queue.get()) is not None:
-            yield json.dumps(item, default=str) + "\n"
-        await task
-
-    return StreamingResponse(lines(), media_type="application/x-ndjson")
+    return stream_steps(
+        lambda say: scans.new_scan(data, filename, machine, look=look, on_step=say),
+        lambda scan: {"step": "scan", "state": "done", "scan": asdict(scan)},
+        failed,
+    )
 
 
 @router.get("/scans")
