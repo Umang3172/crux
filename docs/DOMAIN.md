@@ -325,6 +325,22 @@ inner-race capture `tests/test_menu.py` uses (severity 0.5, noise 0.45) the thir
 capture is chosen at 0.069 nats a minute with a 12% chance of settling, ahead
 of the temperature reading at 0.053 with 27%.
 
+## Phone readings (added 17 Oct 2026)
+
+A phone scan can stand in for three of the checks (`lens/answer.py`, ADR-0033).
+Its value carries an uncertainty worked out from the clip, which widens every
+prediction it is scored against (`Investigation.apply_outcome(uncertainty=)`).
+
+| Constant | Value | Where it comes from |
+|---|---|---|
+| Camera ratio conversion | order k against 1x multiplied by k^2 (2x: 4, 0.5x: 0.25) | Acceleration is (2 pi f)^2 times displacement for a sinusoid; the checks ask for an accelerometer and the camera measures displacement. Assumes the signature model is in the accelerometer's terms, as every capture the engine reads is; open until real recordings are scored |
+| `RAYLEIGH_MEDIAN` | sqrt(2 ln 2), about 1.177 | The median of a Rayleigh distribution with parameter sigma is sigma sqrt(2 ln 2); a noise-only spectrum bin's magnitude is Rayleigh, so the median floor over this is the noise's sigma |
+| Shutter softening | sinc(f / fps) | A box exposure of length T scales a line at f by sinc(f T); T = 1/fps is the longest a frame allows, so this is the worst case, used as one sigma |
+| `FLOOR_BAND_HZ` | 5 Hz each side of a line | A design choice: about fifty bins on a ten-second clip, local to the line, every other shaft line left out. Not calibrated |
+| `MIN_1X_PROMINENCE` | 4 times the floor | The bar a speed candidate clears (`lens/scan.CANDIDATE_PROMINENCE`), which is the one order tracking sets for a shaft peak; everything is divided by 1x, so it must stand out |
+| `SEGMENT_S`, `MIN_SEGMENTS` | 2 s, at least 3 | A design choice: 2 s resolve 0.5 Hz, finer than the bearing lines' slip window; three segments are the fewest that give a spread. The uncertainty is the segments' spread over sqrt(n) |
+| Speed agreement | within 5% of the case's speed | `SPEED_SEARCH_FRACTION`, the order-tracking window above |
+
 ## Faults we deliberately do not induce on the bench
 
 A real race spall cannot be faked on a desk rig without destroying a bearing and

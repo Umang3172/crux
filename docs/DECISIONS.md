@@ -875,3 +875,51 @@ asks for a retake. The bar stays provisional until `scripts/photo_eval.py
 --calibrate` has a calibration split. Camera findings still never move a
 belief (ADR-0007). Nothing in a scan depends on the hook, and `POST
 /lens/scans` is unchanged.
+
+---
+
+## ADR-0033 · A phone scan can answer a check, carrying an uncertainty worked out from the clip
+
+**Context.** The investigation asks a person for one measurement, and the phone
+scan (Lens) measures a running machine with two sensors, but the two never met:
+a scan could name the check that would settle what it saw, and could not hand
+an investigation the check it was waiting on. On the synthetic rig the check
+asked for is most often the envelope (bearing impacts in the 1.5 to 5 kHz
+band), then the temperature and the coast-down; the 10 s capture and the
+half-order screen are rarely worth asking for because the first capture already
+holds what they read.
+
+**Decision.** `POST /investigations/{id}/evidence/phone` takes a scan id and
+answers the case's open check, through `lens/answer.py`:
+
+- the **microphone** answers the envelope check: `env_contrast` read from the
+  scan's sound with the same `signals.features.extract`, at the case's speed and
+  on the case's bearing. Phone audio covers the band; the value is scale-free;
+- the **camera** answers `vib_10s` (`ratio_2x_1x`) and `half_order`
+  (`amp_half_x`), both ratios to 1x. It measures displacement, the checks ask
+  for an accelerometer, so the ratio of order k to 1x is multiplied by k^2;
+- temperature and the coast-down are refused, with the reason.
+
+The scan's confirmed speed must agree with the case's within the order-tracking
+window (`SPEED_SEARCH_FRACTION`, 5%). A camera line must sit below half the
+frame rate and clear of other orders, and 1x must stand out of its noise by the
+bar a speed candidate clears. A case scored against its machine's own normal
+refuses a phone reading: the reading cannot be restated on that scale.
+
+The reading goes through `Investigation.apply_outcome` with a new
+`uncertainty`, its standard deviation, which widens every prediction in
+quadrature, the same arithmetic as the wander of a machine's own normal. It is
+worked out from the clip, not chosen: for sound, the spread of 2 s segments
+over the square root of their number; for the camera, each line's noise floor
+(a Rayleigh median) propagated through the ratio, plus the shutter's softening
+of the faster line (sinc(f / fps) for an exposure of a whole frame). The ledger
+records what was read, how it was converted and how sure it is.
+
+**Consequence.** A phone can now be the deciding measurement, and an imprecise
+one moves the beliefs less than a sensor would. Nothing else changed in how
+beliefs move: `uncertainty` defaults to 0 and every other caller is untouched.
+Tested on synthetic sound and shaft lines only. Whether a real phone hears a
+bearing's impacts through the air, and whether the k^2 conversion matches the
+signature model's units (it assumes the model is in the accelerometer's terms,
+as every capture the engine reads is), are open until real phone recordings of
+a machine with a known fault are scored.

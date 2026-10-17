@@ -73,6 +73,13 @@ def seen_at(f_hz: float, fps: float) -> float:
     return fps - r if r > fps / 2 else r
 
 
+#: Each side of a line, the band its noise floor is read from. Wide enough to
+#: hold about fifty bins on a ten-second clip (0.1 Hz each), narrow enough that
+#: the floor is local to the line. A design choice, not a calibration
+#: (docs/DOMAIN.md, "Phone readings").
+FLOOR_BAND_HZ = 5.0
+
+
 @dataclass(frozen=True)
 class Line:
     order: float
@@ -80,6 +87,17 @@ class Line:
     seen_hz: float
     amp: float  # measured peak at seen_hz, pixels
     clear: bool  # above the drift filter and not on top of another order
+    #: Median spectrum magnitude around the line, other lines left out, pixels.
+    #: 0.0 on scans analysed before it was recorded.
+    floor: float = 0.0
+
+
+def _floor(f: np.ndarray, mag: np.ndarray, at_hz: float, tol: float, others: list[float]) -> float:
+    """The noise around a line: the median magnitude near it, every line excluded."""
+    near = (np.abs(f - at_hz) <= FLOOR_BAND_HZ) & (f > HIGHPASS_HZ)
+    for line_hz in [at_hz, *others]:
+        near &= np.abs(f - line_hz) > tol
+    return float(np.median(mag[near])) if np.any(near) else 0.0
 
 
 def lines(signal: np.ndarray, fps: float, rpm: float) -> list[Line]:
@@ -92,7 +110,8 @@ def lines(signal: np.ndarray, fps: float, rpm: float) -> list[Line]:
         s = seen[o]
         crowded = any(abs(s - seen[p]) < CAMERA_BIN_HZ for p in ORDERS if p != o)
         clear = s > HIGHPASS_HZ * 1.5 and not crowded
-        out.append(Line(o, o * fr, s, peak_near(f, mag, s, tol), clear))
+        floor = _floor(f, mag, s, tol, [seen[p] for p in ORDERS if p != o])
+        out.append(Line(o, o * fr, s, peak_near(f, mag, s, tol), clear, floor))
     return out
 
 

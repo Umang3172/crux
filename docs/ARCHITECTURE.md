@@ -24,10 +24,10 @@ physics cannot decide, it buys the cheapest measurement from a human.**
         └────────────┬───────────────┘   └──────────────┬───────────────┘
                      │ likelihood                       │ request
                      ▼                                  ▼
-             belief update                    agents.gate (Jev) +
-                     │                        Gemini Robotics-ER 2
-                     │                        coach a person through
-                     │                        the measurement
+             belief update                    a person takes it: a sensor,
+                     │                        a typed value, or a phone
+                     │                        scan (lens.answer), each with
+                     │                        its own uncertainty
                      ▼                                  │
              conclusion + ledger  ◀────────── measured value
                      │
@@ -72,8 +72,14 @@ The critic can look in the machine's documents (`knowledge/`, ADR-0028); both
 can ask how the machine's earlier cases ended (`investigation/history.py`,
 ADR-0027). Neither is evidence. Without credentials a scripted
 investigator runs the same loop over the same tools, so CI runs with no keys and
-a laptop with no network still demos. Jev gives typed verdicts while somebody
-takes a measurement, with a rule-based fallback.
+a laptop with no network still demos.
+
+**A phone scan can answer a check** (`lens/answer.py`, ADR-0033). The phone's
+microphone answers the envelope check and its camera the two checks that read a
+ratio of shaft lines; temperature and the coast-down are refused. The reading
+enters through the same door as any other (`Investigation.apply_outcome`) with
+an uncertainty worked out from the clip, which widens every prediction it is
+scored against, so it moves beliefs no further than it deserves.
 
 After a verdict and a repair, `investigation/repair.py` investigates a new
 capture as a case of its own, with the same suspects at even odds and the same
