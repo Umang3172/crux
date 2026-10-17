@@ -23,7 +23,7 @@ dashboard). One submission, Theme 3.
    A model reaches a case only through `tools/`, whose functions never take a
    probability, a score or a reading (ADR-0007).
 3. **The offline path must keep working.** No API keys in CI. If a model call
-   site or `get_gate()` falls back, every test still passes.
+   site falls back, every test still passes.
 4. **Every number has a source.** New constants go in `physics/signatures.py` or
    `investigation/catalog.py`, with a row in `docs/DOMAIN.md` explaining where
    they come from. Never tune a constant to make a demo pass — change the model

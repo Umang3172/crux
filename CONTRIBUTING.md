@@ -12,7 +12,7 @@ make test                # 30+ tests, no keys needed
 make demo                # the whole loop, end to end
 ```
 
-Optional model adapters: `uv pip install -e ".[llm,jev]"` plus a `.env` copied
+Optional model adapters: `uv pip install -e ".[llm]"` plus a `.env` copied
 from `.env.example`.
 
 ## Branches and commits

@@ -181,7 +181,7 @@ URL="$(gcloud run services describe hypothesis-engine --region "$REGION" --forma
 
 curl -s "$URL/health"
 # {"status":"ok","models":{"investigator":"gemini:... via Google Cloud login (...)",
-#   "gate":"offline-rules","report_writer":"gemini:...","ticket_writer":"gemini:...", ...}}
+#   "gate":"rules in code","report_writer":"gemini:...","ticket_writer":"gemini:...", ...}}
 
 curl -s "$URL/replay" -X POST -H 'content-type: application/json' \
   -d '{"fault":"looseness","severity":0.35}' | head -c 400
