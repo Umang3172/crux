@@ -23,7 +23,7 @@ dashboard). One submission, Theme 3.
    A model reaches a case only through `tools/`, whose functions never take a
    probability, a score or a reading (ADR-0007).
 3. **The offline path must keep working.** No API keys in CI. If a model call
-   site or `get_gate()` falls back, every test still passes.
+   site falls back, every test still passes.
 4. **Every number has a source.** New constants go in `physics/signatures.py` or
    `investigation/catalog.py`, with a row in `docs/DOMAIN.md` explaining where
    they come from. Never tune a constant to make a demo pass — change the model
@@ -61,6 +61,7 @@ src/hypothesis_engine/
   agents/investigator.py    the investigator loop: Gemini drives the tools, code ends it
   agents/scripted.py        the offline stand-in the loop runs on without credentials
   agents/                   other optional model adapters + offline fallbacks
+  lens/answer.py            a phone scan as the reading a case asked for, with its own uncertainty
   data/rig.py               synthetic bench-rig captures and the answering oracle
   data/cwru.py              real bearing recordings
   api/app.py                FastAPI, including /replay

@@ -80,6 +80,11 @@ not promise one. The times are unchanged.
 | Next day | 15 min | 2,048 steps (21 days) | 96 | TimesFM 3.0 |
 | Next 2 weeks | 1 h | all history | 336 | ARIMA_PLUS |
 
+The two-week span is computed, because its ARIMA_PLUS model also gives the
+parts the summary is written from, but since 17 Oct 2026 it is not offered on
+screen (`settings.OFFERED_SPANS`): no benchmark has scored it, and a leak
+shows within hours of its report.
+
 TimesFM 3.0 forecasts loaded share, motor current and oil temperature
 together. Reservoir pressure is a past helper (known only up to "as of"); the
 time of day, as a point on a circle, is a future helper. AI.FORECAST takes at

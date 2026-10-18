@@ -263,7 +263,7 @@ def catalog() -> dict[str, Any]:
                         "model": s.model,
                         "product": s.product,
                     }
-                    for s in settings.SPANS
+                    for s in settings.OFFERED_SPANS
                 ],
                 "views": list(VIEWS["metro"]),
                 "failures": [

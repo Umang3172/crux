@@ -119,6 +119,13 @@ def _clip(path: str) -> clips.Clip:
     return clips.read(path)
 
 
+def sound(scan_id: str, root: Path | None = None) -> tuple[np.ndarray | None, float]:
+    """The scan's sound track, mono, and its sample rate (None and 0 when silent)."""
+    scan = load(scan_id, root)
+    c = _clip(str(_folder(scan_id, root) / scan.file))
+    return c.audio, c.audio_fs
+
+
 def candidates(signal: np.ndarray, fps: float) -> list[dict[str, float]]:
     """The strongest motion lines, as speed suggestions a person can accept."""
     f, mag = magnitude_spectrum(signal, fps)

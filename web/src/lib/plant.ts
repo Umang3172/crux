@@ -1,12 +1,14 @@
 // The plant: a site, its areas and the machines in them. The layout and the
 // names are a demo and are labelled as one. What each machine can do is real:
-// it is looked after in one of four ways, each backed by routes the server has.
+// it is looked after in one of five ways, each backed by routes the server has.
 //
-//   model   the engine's rotating-machine model at this machine's speed; a
-//           fault is fed in and investigated (readings are synthetic)
-//   life    a part watched over its whole life, from the server's own list
-//   live    a sensor streaming to the server
-//   camera  no sensor; a phone video is the only reading
+//   model    the engine's rotating-machine model at this machine's speed; a
+//            fault is fed in and investigated (readings are synthetic)
+//   life     a part watched over its whole life, from the server's own list
+//   live     a sensor streaming to the server
+//   camera   no sensor; a phone video is the only reading
+//   history  a recorded sensor history, forecast and screened by Google's
+//            models (the Trends tab); never investigated, see MODE below
 //
 // The engine has one machine model: one shaft on one bearing with a bladed
 // rotor. The modelled machines here share it and differ in speed only, and
@@ -20,7 +22,7 @@ import type { CaseEntry } from "./session";
 
 export const SITE = { name: "Demo plant", note: "A made-up demo site. Readings from modelled machines are synthetic." };
 
-export type Mode = "model" | "life" | "live" | "camera";
+export type Mode = "model" | "life" | "live" | "camera" | "history";
 export type Kind = "pump" | "fan" | "motor" | "bearing" | "drive";
 
 export type PlantMachine = {
@@ -54,6 +56,10 @@ const FIXED: PlantMachine[] = [
   { id: "c1", name: "Conveyor drive C-1", short: "drive C-1", type: "Geared conveyor drive", area: "line2", mode: "camera", kind: "drive" },
   { id: "d7", name: "Palletiser drive D-7", short: "drive D-7", type: "Geared drive", area: "line2", mode: "camera", kind: "drive" },
   { id: "m1", name: "Bench motor M-1", short: "motor M-1", type: "Small induction motor", area: "bench", mode: "live", kind: "motor", ref: "rig-01" },
+  // The Trends tab's compressor: a public record (MetroPT-3, a metro train's air
+  // compressor) replayed as this site's compressed-air supply. `ref` is its
+  // source id on the server's /series routes.
+  { id: "a1", name: "Air compressor A-1", short: "compressor A-1", type: "Air compressor · replay of a public record", area: "utilities", mode: "history", kind: "motor", ref: "metro" },
 ];
 
 /** The fixed machines, then one for each life the server has on file. */
@@ -77,12 +83,21 @@ export const machineById = (id: string | undefined, all: PlantMachine[] = FIXED)
 /** The machine a case is on. Cases opened before machines had ids were all on pump P-2. */
 export const machineOfCase = (entry: Pick<CaseEntry, "machine"> | undefined) => machineById(entry?.machine) ?? FIXED[0];
 export const machinePath = (m: PlantMachine) => (m.mode === "life" && m.ref ? `/lives/${m.ref}` : `/m/${encodeURIComponent(m.id)}`);
+/** The plant machine whose recorded history a Trends source is, if one is on the site. */
+export const historyMachine = (source: string) => FIXED.find((m) => m.mode === "history" && m.ref === source);
+/** The Trends tab for a machine with a recorded history. */
+export const trendsPath = (m: PlantMachine) => `/trends?source=${encodeURIComponent(m.ref ?? "metro")}`;
 
 export const MODE: Record<Mode, { label: string; source: string; care: string }> = {
   model: { label: "Investigated on demand", source: "engine's model · synthetic", care: "Crux tests every suspect on a model of the machine, and asks for a measurement only when it cannot tell." },
   life: { label: "Watched over its life", source: "watched by trend", care: "Crux follows the part's health from new. An alarm fires when vibration stays above its own normal." },
   live: { label: "Live sensor", source: "live sensor", care: "A sensor streams here. A full capture gets the same investigation." },
   camera: { label: "Phone scan only", source: "no sensor", care: "Nothing is fitted. A ten-second phone video is read for motion and sound." },
+  history: {
+    label: "Sensor history",
+    source: "public record · forecast by Google",
+    care: "Its recorded sensors are forecast and screened in BigQuery. An air leak is outside Crux's vibration physics, so an unusual reading goes to a person, never to an investigation.",
+  },
 };
 
 /** What happens to a machine, in order, for each way of looking after it. */
@@ -91,6 +106,7 @@ export const WORKFLOW: Record<Mode, string[]> = {
   live: ["Stream", "Capture", "Investigate", "Approve", "Repair", "Verify"],
   life: ["Watch", "Alarm", "Forecast", "Work order", "Approve", "Outcome"],
   camera: ["Scan", "Confirm speed", "Screen", "Measure next"],
+  history: ["Record", "Forecast", "Flag", "Person checks"],
 };
 
 export type Owner = "crux" | "control" | "crew" | "manager" | null;
@@ -168,6 +184,9 @@ export function statusOf(machine: PlantMachine, data: PlantData): MachineStatus 
     // An approved work order is a technician's job until its outcome is recorded on the work order.
     if (done) return { label: "Work order approved", detail: `approved by ${done.approved_by}`, tone: "warn", step: 5, owner: "crew", rank: 5, next: { label: "Open work order", to: `/work-orders/${done.id}` } };
     return { label: "Watched", detail: "health followed from new", tone: "neutral", step: 0, owner: null, rank: 1 };
+  }
+  if (machine.mode === "history") {
+    return { label: "History on file", detail: "forecast and screened in Trends", tone: "neutral", step: 1, owner: null, rank: 0, next: { label: "Open its trends", to: trendsPath(machine) } };
   }
   if (machine.mode === "live") {
     const s = data.sensor;

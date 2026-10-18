@@ -1,5 +1,5 @@
 name: Task
-description: A piece of work from docs/TASKS.md
+description: A piece of work for the team
 labels: ["task"]
 body:
   - type: textarea

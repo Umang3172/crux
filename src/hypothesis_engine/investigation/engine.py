@@ -1258,12 +1258,26 @@ class Investigation:
         }
 
     # ------------------------------------------------------ incorporate evidence
-    def apply_outcome(self, test_id: str, value: float, collected_by: str = "technician") -> None:
+    def apply_outcome(
+        self,
+        test_id: str,
+        value: float,
+        collected_by: str = "technician",
+        uncertainty: float = 0.0,
+    ) -> None:
         """Take in a reading as a number. For a test answered by a capture, the
         capture is assumed to be as long as the test asks for, at the first
         capture's noise; hand over the capture itself (`apply_capture`) when it
-        is not."""
-        self._apply_reading(BY_ID[test_id], float(value), collected_by)
+        is not.
+
+        `uncertainty` is the reading's own standard deviation when it is known
+        to be less precise than the test's sensor, such as a ratio read off a
+        phone video (`lens.answer`). It widens every prediction the reading is
+        scored against, in quadrature, exactly as the wander of a machine's own
+        normal does, so an imprecise reading moves the beliefs less."""
+        if uncertainty < 0 or not math.isfinite(uncertainty):
+            raise ValueError(f"a reading's uncertainty must be finite and >= 0, not {uncertainty}")
+        self._apply_reading(BY_ID[test_id], float(value), collected_by, wander=uncertainty)
 
     def apply_capture(
         self, test_id: str, observation: Observation, collected_by: str = "sensor"

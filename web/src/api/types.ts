@@ -123,8 +123,12 @@ export type Investigation = {
     level_rise: number | null;
     largest_changes: { line: string; times_normal: number }[];
   } | null;
+  /** Checks answered from a phone scan. Older servers leave it out. */
+  phone_answers?: PhoneAnswer[];
   conclusion: Conclusion | null;
 };
+
+export type PhoneAnswer = { test_id: TestId; scan_id: string; value: number };
 
 export type CatalogTest = {
   id: TestId;

@@ -46,6 +46,14 @@ export const getCase = (id: string, signal?: AbortSignal) => get<Investigation>(
 export const submitEvidence = (id: string, test_id: TestId, value: number, collected_by: string) =>
   post<Investigation>(`/investigations/${enc(id)}/evidence`, { test_id, value, collected_by });
 
+/**
+ * Answer the check a case is waiting on with a phone scan of the machine. The
+ * server refuses (422) when a phone cannot measure that check, or this scan
+ * cannot stand in for it, and says why.
+ */
+export const answerWithScan = (id: string, scan_id: string) =>
+  post<Investigation>(`/investigations/${enc(id)}/evidence/phone`, { scan_id });
+
 export const addNote = (id: string, text: string, by: string) =>
   post<Investigation>(`/investigations/${enc(id)}/notes`, { text, by });
 

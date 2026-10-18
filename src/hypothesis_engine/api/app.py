@@ -46,6 +46,9 @@ from ..investigation.history import History, machine_key, record_of
 from ..investigation.notes import MAX_NOTE_CHARS
 from ..investigation.notes import flag as hazard_flag
 from ..investigation.repair import NothingToVerify, RepairCheck, check_repair
+from ..lens import scan as lens_scans
+from ..lens.answer import SOUND_TEST, CannotAnswer, camera_reading, sound_reading
+from ..lens.answer import refusal as phone_refusal
 from ..models import FaultKind, InvestigationState
 from ..physics.frequencies import bearing_multipliers
 from ..tools import CaseNotFound, InMemoryCaseStore, open_case, record_note
@@ -138,6 +141,8 @@ def serialise(state: InvestigationState) -> dict[str, Any]:
         "unresolved_reason": state.unresolved_reason,
         # Set when the case was scored against the machine's own healthy captures.
         "own_normal": state.extra.get("own_normal"),
+        # Checks answered from a phone scan, with the scan, so a page can link to it.
+        "phone_answers": state.extra.get("phone_answers", []),
         "conclusion": None
         if state.conclusion is None
         else {
@@ -292,6 +297,73 @@ def add_evidence(investigation_id: str, req: EvidenceRequest) -> dict[str, Any]:
     if inv.state.outcome != "open":
         raise HTTPException(409, f"the investigation is {inv.state.outcome}")
     inv.apply_outcome(req.test_id, req.value, collected_by=req.collected_by)
+    inv.advance()
+    inv.state.ledger = inv.ledger.items
+    _remember(inv)
+    return serialise(inv.state)
+
+
+class PhoneEvidenceRequest(BaseModel):
+    scan_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+def open_request(state: InvestigationState) -> str | None:
+    """The check the case is waiting on: requested more times than answered."""
+    request = state.extra.get("request") or {}
+    test_id = request.get("test_id")
+    if state.outcome != "open" or not test_id:
+        return None
+    asked = state.requested_tests.count(test_id)
+    answered = sum(1 for o in state.outcomes if o.test_id == test_id)
+    return test_id if answered < asked else None
+
+
+@app.post("/investigations/{investigation_id}/evidence/phone")
+def add_phone_evidence(investigation_id: str, req: PhoneEvidenceRequest) -> dict[str, Any]:
+    """Answer the check a case is waiting on with a phone scan of the machine.
+
+    The microphone answers the envelope check and the camera the two checks
+    that read a ratio of shaft lines, from a scan whose speed a person confirmed
+    and agrees with the case's (`lens/answer.py` says when, and why the others
+    are refused). The reading goes through the same door as any other, with the
+    uncertainty worked out from the clip, so it moves beliefs only as far as it
+    deserves to.
+    """
+    inv = _INVESTIGATIONS.get(investigation_id)
+    if inv is None:
+        raise HTTPException(404, "no such investigation")
+    test_id = open_request(inv.state)
+    if test_id is None:
+        raise HTTPException(409, "this investigation is not waiting on a measurement")
+    if (why := phone_refusal(test_id)) is not None:
+        raise HTTPException(422, why)
+    if inv.normal:
+        raise HTTPException(
+            409,
+            "this case is scored on the change from its machine's own normal, and a phone "
+            "reading cannot be put on that scale; take the capture with the sensor",
+        )
+    try:
+        scan = lens_scans.load(req.scan_id)
+    except KeyError:
+        raise HTTPException(404, f"no scan {req.scan_id}") from None
+    if not scan.analysis:
+        raise HTTPException(422, "confirm the scan's speed first, so it is analysed")
+    try:
+        if test_id == SOUND_TEST:
+            audio, fs = lens_scans.sound(scan.id)
+            reading = sound_reading(audio, fs, inv.machine, inv.rpm, scan.analysis["rpm"])
+        else:
+            reading = camera_reading(test_id, scan.analysis, inv.rpm)
+    except CannotAnswer as exc:
+        raise HTTPException(422, str(exc)) from None
+    inv.ledger.add(reading.statement(scan.id), round(reading.uncertainty, 4), " sigma", "physics")
+    inv.apply_outcome(
+        test_id, reading.value, collected_by="phone video", uncertainty=reading.uncertainty
+    )
+    inv.state.extra.setdefault("phone_answers", []).append(
+        {"test_id": test_id, "scan_id": scan.id, "value": round(reading.value, 4)}
+    )
     inv.advance()
     inv.state.ledger = inv.ledger.items
     _remember(inv)

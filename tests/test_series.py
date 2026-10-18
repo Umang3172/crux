@@ -389,6 +389,14 @@ def test_the_catalog_lists_both_sources_and_the_bearing_note(api) -> None:
     assert c["ask"]["live"] is False
 
 
+def test_the_tab_offers_only_the_forecasts_a_benchmark_has_scored(api) -> None:
+    metro = api.get("/series/catalog").json()["sources"][0]
+    offered = {s["id"]: s["model"] for s in metro["spans"]}
+    assert offered == {"hour": "TimesFM 3.0", "day": "TimesFM 3.0"}
+    # Still computed: the ARIMA_PLUS parts are what the summary is written from.
+    assert "forecast-2w" in metro["views"] and "breakdown" in metro["views"]
+
+
 def test_live_questions_are_off_unless_switched_on(api, tmp_path) -> None:
     assert api.post("/series/ask", json={"question": "How hot did the oil get?"}).status_code == 404
     ex = api.get("/series/ask/examples").json()

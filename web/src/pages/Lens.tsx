@@ -3,13 +3,15 @@
 // names the measurement to take next.
 
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { ChevronRight, History, ScanLine, Star } from "lucide-react";
-import { analyseScan, markNormalScan, scan as fetchScan, scanStillUrl, scans as fetchScans } from "../api/crux";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ChevronRight, Crosshair, History, ScanLine, Star } from "lucide-react";
+import { analyseScan, answerWithScan, getCase, markNormalScan, scan as fetchScan, scanStillUrl, scans as fetchScans } from "../api/crux";
 import type { Scan, ScanAnalysis } from "../api/types";
-import { num, stamp } from "../lib/format";
+import { num, shortId, stamp } from "../lib/format";
 import { useAsync } from "../lib/hooks";
-import { fault } from "../lib/plain";
+import { openRequest } from "../lib/instrument";
+import { check, fault } from "../lib/plain";
+import { markAnswered, rememberInvestigation } from "../lib/session";
 import { SpectrumChart } from "../ui/charts";
 import { Badge, Button, Callout, Card, Details, Dialog, Empty, ErrorState, Hint, PageHead, SkeletonRows, Stat, Tabs, toast } from "../ui/kit";
 import { LensLive } from "./lens/LensLive";
@@ -18,6 +20,9 @@ import "../styles/trust.css";
 
 export function Lens() {
   const navigate = useNavigate();
+  const [search] = useSearchParams();
+  const machine = search.get("machine") ?? "";
+  const forCase = search.get("case") ?? undefined;
   const list = useAsync(() => fetchScans(), []);
   const [history, setHistory] = useState(false);
 
@@ -25,6 +30,7 @@ export function Lens() {
     <div className="page tr-page ll-page">
       <PageHead
         title="Phone scans"
+        sub={machine ? `Scanning ${machine}${forCase ? ` for investigation ${shortId(forCase)}` : ""}` : undefined}
         actions={
           <Button size="sm" variant="ghost" icon={<History size={14} />} onClick={() => setHistory(true)}>
             Earlier scans{list.data?.length ? ` (${list.data.length})` : ""}
@@ -32,7 +38,7 @@ export function Lens() {
         }
       />
 
-      <LensLive onScanned={() => list.reload()} />
+      <LensLive onScanned={() => list.reload()} machine={machine} forCase={forCase} />
 
       <Dialog open={history} onClose={() => setHistory(false)} title="Earlier scans" sub="Shared by everyone using this server." wide>
         {list.error ? (
@@ -78,8 +84,68 @@ export function Lens() {
   );
 }
 
+/** An investigation waiting on a check this scan may answer: what it needs, and the button. */
+function ForCase({ caseId, scanId, analysed }: { caseId: string; scanId: string; analysed: boolean }) {
+  const navigate = useNavigate();
+  const got = useAsync(() => getCase(caseId), [caseId]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const req = got.data ? openRequest(got.data) : null;
+
+  async function answer() {
+    if (!req) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const inv = await answerWithScan(caseId, scanId);
+      rememberInvestigation(inv);
+      const done = inv.phone_answers?.filter((p) => p.test_id === req.test_id).pop();
+      if (done) markAnswered(caseId, req.test_id, "phone scan", "here", done.value);
+      toast("The scan answered the investigation's check");
+      navigate(`/cases/${caseId}?tab=work`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (got.error) return <Callout tone="warn">Investigation {shortId(caseId)} is not on this server any more.</Callout>;
+  if (!got.data) return null;
+  return (
+    <Card title={`For investigation ${shortId(caseId)}`} icon={<Crosshair size={15} />} tone={req ? "accent" : undefined}>
+      {req ? (
+        <>
+          <p className="muted">
+            It is waiting on <b>{check(req.test_id).name.toLowerCase()}</b>. {analysed ? "This scan can answer it if a phone can measure that check and the clip runs at the case's speed; the server checks both." : "Confirm the shaft speed first."}
+          </p>
+          <div className="row row-wrap" style={{ marginTop: 10 }}>
+            <Button variant="primary" busy={busy} disabled={!analysed} onClick={answer}>
+              Answer it with this scan
+            </Button>
+            <Link className="small" to={`/cases/${caseId}`}>
+              Open the investigation
+            </Link>
+          </div>
+        </>
+      ) : (
+        <p className="muted">
+          It is not waiting on a measurement now. <Link to={`/cases/${caseId}`}>Open it</Link>.
+        </p>
+      )}
+      {error && (
+        <div style={{ marginTop: 10 }}>
+          <Callout tone="danger">{error}</Callout>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function LensScan() {
   const { id = "" } = useParams();
+  const [search] = useSearchParams();
+  const forCase = search.get("case");
   const got = useAsync(() => fetchScan(id), [id]);
   const [analysis, setAnalysis] = useState<ScanAnalysis | null>(null);
   const [normal, setNormal] = useState<boolean | null>(null);
@@ -162,6 +228,8 @@ export function LensScan() {
       />
 
       {error && <Callout tone="danger">{error}</Callout>}
+
+      {forCase && <ForCase caseId={forCase} scanId={s.id} analysed={!!a} />}
 
       <Tabs
         value={shown}

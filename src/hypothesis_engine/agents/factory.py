@@ -4,7 +4,9 @@ Order of preference, per role:
 
     Investigator : Gemini (Google Cloud login, or an API key) -> scripted offline policy
     Report       : Gemini -> local model (OLLAMA_MODEL)        -> the engine's own lines
-    Gate         : Jev (TYPESAFE_API_KEY)                      -> rules
+
+The gate between the investigator's turns is plain code in every case
+(`agents/investigator.py`): no model ever decides when an investigation stops.
 
 Never raises because a credential is missing, and never hides why an adapter
 is not live: `describe()` says what is actually running and, when a live
@@ -19,9 +21,6 @@ from __future__ import annotations
 
 import os
 from typing import Any
-
-from .offline import RuleGate
-from .protocols import Gate
 
 #: The Gemini model used when `GEMINI_MODEL` is not set. Stable, supports function
 #: calling, structured output and thinking, with a free tier (ai.google.dev model
@@ -125,15 +124,9 @@ def investigator_model() -> tuple[Any, str]:
     return ScriptedInvestigator(), f"offline scripted investigator ({why})"
 
 
-def get_gate() -> Gate:
-    if os.getenv("TYPESAFE_API_KEY"):
-        try:
-            from .jev import JevGate
-
-            return JevGate()
-        except Exception as exc:  # the adapter is optional; record why it is not live
-            _FAILURES["gate"] = f"{type(exc).__name__}: {exc}"
-    return RuleGate()
+#: What `describe()` reports for the gate between the investigator's turns: it is
+#: plain code, never a model, so there is nothing to configure or fall back from.
+GATE = "rules in code"
 
 
 def _investigator_name() -> str:
@@ -146,7 +139,7 @@ def _investigator_name() -> str:
 def describe() -> dict[str, str]:
     out = {
         "investigator": _investigator_name(),
-        "gate": get_gate().name,
+        "gate": GATE,
     }
     out |= {role: provider(role) for role in OTHER_ROLES}
     for role, why in _FAILURES.items():

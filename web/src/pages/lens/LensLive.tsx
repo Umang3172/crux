@@ -75,7 +75,13 @@ function StepBar({ step }: { step: Step }) {
   );
 }
 
-export function LensLive({ onScanned }: { onScanned?: (scan: Scan) => void }) {
+/**
+ * `machine` names the plant machine the clip is of, so the scan is kept under it
+ * (its machine page lists it, and its normal scan is compared with it); empty
+ * lets the vision model name the machine. `forCase` is an investigation waiting
+ * on a check this scan may answer; the result links back to it.
+ */
+export function LensLive({ onScanned, machine = "", forCase }: { onScanned?: (scan: Scan) => void; machine?: string; forCase?: string }) {
   const [step, setStep] = useState<Step>("record");
   const [cam, setCam] = useState<Cam>("off");
   const [camInfo, setCamInfo] = useState("");
@@ -223,7 +229,7 @@ export function LensLive({ onScanned }: { onScanned?: (scan: Scan) => void }) {
     const t0 = performance.now();
     setRuns({ ...fresh(), clip: { status: "done", started: t0, ended: t0, line: `${(clip.blob.size / 1e6).toFixed(1)} MB sent`, who: clip.demo ? "demo clip" : "your clip" } });
     try {
-      const finished = await streamScan(clip.blob, "", (s) => setRuns((r) => advance(r, s, performance.now())), ctl.signal, clip.filename);
+      const finished = await streamScan(clip.blob, machine, (s) => setRuns((r) => advance(r, s, performance.now())), ctl.signal, clip.filename);
       setScan(finished);
       setDone(true);
       onScanned?.(finished);
@@ -383,7 +389,7 @@ export function LensLive({ onScanned }: { onScanned?: (scan: Scan) => void }) {
 
       {step === "result" && scan && (
         <div className="ll-screen">
-          <Result scan={scan} clip={clip?.demo ?? null} onAgain={again} />
+          <Result scan={scan} clip={clip?.demo ?? null} onAgain={again} forCase={forCase} />
         </div>
       )}
     </section>

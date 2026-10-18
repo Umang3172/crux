@@ -5,7 +5,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, Outlet, useLocation, useNavigation } from "react-router";
-import { Menu, Moon, Plus, Search, ShieldAlert, Sun, X } from "lucide-react";
+import { Compass, Menu, Moon, Plus, Search, ShieldAlert, Sun, X } from "lucide-react";
 import { onWaking } from "../api/client";
 import { brainOf } from "../lib/ai";
 import { useHealth, useTheme, type Theme } from "../lib/hooks";
@@ -16,6 +16,7 @@ import { CommandPalette } from "./CommandPalette";
 import { GoHint, MOD_KEY, ShortcutsDialog, useShortcuts } from "./keys";
 import { Launcher, openLauncher } from "./Launcher";
 import { Tour } from "../tour/Tour";
+import { beginTour } from "../tour/steps";
 import { LivePill } from "./LiveNow";
 import { SECTIONS, isHere, pageOf, sectionOf } from "./nav";
 import { preloadPages } from "./pages";
@@ -105,6 +106,11 @@ export function Shell() {
           </nav>
           <div className="mn-top-end">
             <LivePill />
+            {/* A visitor with a minute starts here: the guided tour walks a shift on the real app. */}
+            <button type="button" className="mn-btn sm ghost" onClick={beginTour} aria-label="Take the tour" title="Take the tour">
+              <Compass size={15} aria-hidden />
+              <span className="mn-hide-sm">Tour</span>
+            </button>
             <button type="button" className="mn-icon-btn mn-search" onClick={() => setPalette(true)} aria-label="Search and commands" title={`Search (${MOD_KEY}K)`}>
               <Search size={16} aria-hidden />
             </button>

@@ -5,6 +5,7 @@
 
 .tn-page { padding-bottom: var(--s-4); }
 .tn-page .page-head { margin-bottom: var(--s-1); }
+.tn-scope { margin: 0 0 var(--s-2); max-width: 72ch; }
 .tn-short { display: none; }
 
 /* ── Machine and moment ──────────────────────────────────────────────── */

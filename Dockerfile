@@ -34,7 +34,7 @@ WORKDIR /app
 # Every tab of the UI has to work from the deployed link, so the image carries
 # each optional group a tab needs: `llm` for the investigator, `lens` to read a
 # phone video, `forecast` for the learned time-left model.
-ARG EXTRAS="--extra llm --extra jev --extra lens --extra forecast"
+ARG EXTRAS="--extra llm --extra lens --extra forecast"
 
 # Dependencies first, so editing src/ does not re-resolve or re-download them.
 COPY pyproject.toml uv.lock ./

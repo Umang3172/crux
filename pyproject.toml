@@ -24,9 +24,6 @@ llm = [
     "google-genai>=1.0",
     "google-adk>=1.0",
 ]
-jev = [
-    "langchain-typesafe>=0.0.1a3",
-]
 # The when-to-fix forecaster's learned model. Without it the forecaster falls
 # back to trend extrapolation, which needs only numpy.
 forecast = [
